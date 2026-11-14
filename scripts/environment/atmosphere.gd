@@ -145,11 +145,15 @@ func _apply_hour(hour: float) -> void:
 	environment.volumetric_fog_albedo = Color(0.7, 0.72, 0.76).lerp(Color(0.35, 0.36, 0.4), t)
 	environment.volumetric_fog_emission = Color(0.02, 0.02, 0.025)
 	if GameState.blackout:
-		environment.ambient_light_color = Color(0.04, 0.05, 0.08)
-		environment.ambient_light_energy = 0.05
+		environment.ambient_light_color = Color(0.03, 0.04, 0.07)
+		environment.ambient_light_energy = 0.04
 		sun.light_energy = 0.0
-		environment.fog_density = 0.0035
-		environment.tonemap_exposure = 1.05
+		environment.fog_density = 0.0022
+		environment.tonemap_exposure = 0.62
+		environment.volumetric_fog_enabled = true
+		environment.volumetric_fog_density = 0.012
+		environment.volumetric_fog_albedo = Color(0.15, 0.18, 0.24)
+		environment.volumetric_fog_emission_energy = 0.0
 	if _city:
 		_city.set_night(night)
 	if _props:

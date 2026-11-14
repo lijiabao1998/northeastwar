@@ -44,6 +44,7 @@ func _process(delta: float) -> void:
 	_follow_ghost()
 	_cold(delta)
 	_militia_step(delta)
+	_push_barricades()
 	_sweep(delta)
 	if _phase == "night":
 		_clock(delta)
@@ -135,6 +136,9 @@ func pose_build() -> void:
 func pose_wave() -> void:
 	if _tooltip:
 		_tooltip.visible = false
+	for mark in _sos:
+		if is_instance_valid(mark):
+			mark.visible = false
 	if _phase != "night":
 		begin_build()
 		begin_night()
@@ -147,9 +151,17 @@ func pose_wave() -> void:
 		squads.pose_firefight(street + side * 2.2, street)
 	_searchlights()
 	for light in _lights:
-		light.rotation_degrees = Vector3(-28, 40, 0)
-		light.light_energy = 8.0
+		light.rotation_degrees = Vector3(-35, 40, 0)
+		light.light_energy = 2.4
 	GameState.show_subtitle("江面北側有部隊集結，去江邊那道牆。", "A unit is forming on the north side of the ice. Get to the wall by the river.")
+	var guns := get_tree().get_first_node_in_group("ordinance") as Ordinance
+	if guns:
+		guns.spawn_armour(street + FACING * 2.4, -FACING)
+	if not _barricades.is_empty():
+		var bar: Node3D = _barricades[0]
+		bar.rotation_degrees = Vector3(22, 35, 68)
+		bar.position += Vector3(0.6, 0.25, 0.5)
+		bar.set_meta("pushed", true)
 	_refresh_strip()
 
 func pose_drone() -> void:
@@ -157,7 +169,8 @@ func pose_drone() -> void:
 	GameState.hold_hour = 22.1
 	var street := SHOP + FACING * 5.0
 	var rig := Node3D.new()
-	rig.position = street + Vector3(-4, 7, -2)
+	rig.position = street + Vector3(-5.5, 8.5, 3.5)
+	rig.scale = Vector3(2.2, 2.2, 2.2)
 	var guns := get_tree().get_first_node_in_group("ordinance") as Ordinance
 	if guns and guns.has_method("show_drone"):
 		guns.show_drone(rig)
@@ -255,35 +268,32 @@ func _place(at: Vector3) -> void:
 	_put(_selected, at)
 
 func _put(kind: String, at: Vector3) -> void:
-	var body := MeshInstance3D.new()
-	var box := BoxMesh.new()
+	var body := Node3D.new()
+	body.position = at
 	match kind:
 		"sandbag":
-			box.size = Vector3(1.6, 0.7, 0.8)
-			body.material_override = _color(Color(0.45, 0.38, 0.28))
+			for row in 3:
+				for col in (3 - row):
+					_bit(body, Vector3((float(col) - float(2 - row) * 0.5) * 0.55, 0.22 + float(row) * 0.38, 0), Vector3(0.7, 0.32, 0.4), Color(0.42, 0.34, 0.24))
 		"gate":
-			box.size = Vector3(2.4, 1.6, 0.12)
-			body.material_override = _color(Color(0.2, 0.22, 0.24))
+			_bit(body, Vector3(-1.05, 0.9, 0), Vector3(0.1, 1.8, 0.1), Color(0.18, 0.19, 0.2))
+			_bit(body, Vector3(1.05, 0.9, 0), Vector3(0.1, 1.8, 0.1), Color(0.18, 0.19, 0.2))
+			for i in 4:
+				_bit(body, Vector3(0, 0.35 + float(i) * 0.4, 0), Vector3(2.0, 0.06, 0.06), Color(0.25, 0.27, 0.3))
 		"radiator":
-			box.size = Vector3(1.1, 0.7, 0.18)
-			body.material_override = _color(Color(0.55, 0.56, 0.58))
+			_bit(body, Vector3(0, 0.45, 0), Vector3(1.2, 0.7, 0.08), Color(0.55, 0.56, 0.58))
+			for i in 6:
+				_bit(body, Vector3(-0.45 + float(i) * 0.18, 0.45, 0.08), Vector3(0.06, 0.62, 0.12), Color(0.72, 0.74, 0.76))
 		"car":
-			box.size = Vector3(1.7, 1.3, 4.0)
-			body.material_override = _color(Color(0.75, 0.62, 0.15))
+			_bit(body, Vector3(0, 0.45, 0.15), Vector3(1.7, 0.55, 3.5), Color(0.78, 0.64, 0.12))
+			_bit(body, Vector3(0, 0.95, -0.35), Vector3(1.45, 0.5, 1.5), Color(0.85, 0.72, 0.2))
+			_bit(body, Vector3(0, 1.2, 0), Vector3(1.5, 0.12, 3.2), Color(0.75, 0.8, 0.84))
 		_:
-			box.size = Vector3(2.2, 0.9, 0.6)
-			body.material_override = _color(Color(0.55, 0.55, 0.52))
-	body.mesh = box
-	body.position = at + Vector3(0, box.size.y * 0.5, 0)
+			_bit(body, Vector3(0, 0.28, 0), Vector3(2.3, 0.45, 0.75), Color(0.5, 0.5, 0.48))
+			_bit(body, Vector3(0, 0.7, 0), Vector3(2.0, 0.4, 0.42), Color(0.58, 0.58, 0.55))
 	add_child(body)
-	var block := StaticBody3D.new()
-	var shape := CollisionShape3D.new()
-	var col := BoxShape3D.new()
-	col.size = box.size
-	shape.shape = col
-	block.add_child(shape)
-	body.add_child(block)
 	body.set_meta("kind", kind)
+	body.set_meta("pushed", false)
 	_barricades.append(body)
 
 func _seed_piles() -> void:
@@ -315,13 +325,14 @@ func _scavenge() -> void:
 
 func _seed_militia() -> void:
 	var names := ["老周", "小吴", "阿敏", "大刘"]
+	var coats := [Color(0.1, 0.1, 0.12), Color(0.16, 0.18, 0.22), Color(0.22, 0.12, 0.1), Color(0.12, 0.14, 0.18)]
 	var side := Vector3(FACING.z, 0, -FACING.x)
 	for i in names.size():
 		var man := Node3D.new()
 		man.position = SHOP + FACING * 2.5 + side * (float(i) - 1.5) * 1.4
 		man.set_meta("who", names[i])
 		man.set_meta("goal", man.position)
-		WinterFigure.attach(man, "civilian", Color(0.25, 0.28, 0.32))
+		WinterFigure.attach(man, "civilian", coats[i])
 		add_child(man)
 		_militia.append(man)
 
@@ -340,6 +351,24 @@ func _order_move(at: Vector3) -> void:
 	man.set_meta("goal", at)
 	_selected_man += 1
 
+func _push_barricades() -> void:
+	for node in get_tree().get_nodes_in_group("armour"):
+		if not node is Node3D:
+			continue
+		var hull := node as Node3D
+		for bar in _barricades:
+			if not is_instance_valid(bar) or bool(bar.get_meta("pushed", false)):
+				continue
+			if hull.global_position.distance_to(bar.global_position) < 4.2:
+				bar.set_meta("pushed", true)
+				var shove := Vector3(bar.global_position.x - hull.global_position.x, 0, bar.global_position.z - hull.global_position.z)
+				if shove.length() < 0.2:
+					shove = Vector3(1, 0, 0)
+				shove = shove.normalized()
+				var tween := create_tween()
+				tween.tween_property(bar, "global_position", bar.global_position + shove * 2.4 + Vector3(0, 0.2, 0), 0.6)
+				tween.parallel().tween_property(bar, "rotation_degrees", Vector3(18, 40, 70), 0.6)
+
 func _militia_step(delta: float) -> void:
 	for man in _militia:
 		if not is_instance_valid(man):
@@ -353,21 +382,33 @@ func _militia_step(delta: float) -> void:
 func _seed_sos() -> void:
 	if not _sos.is_empty():
 		return
-	_sos.append(_writing(SHOP + FACING * 2.4 + Vector3(0, 0.08, 0), "救命  樓裡還有5人"))
-	_sos.append(_writing(SHOP + Vector3(0, 9.5, 0), "救命  樓裡還有5人"))
+	_sos.append(_writing(SHOP + Vector3(0, 0.42, 0), "救命  樓裡還有5人"))
+	var roof := _writing(SHOP + Vector3(1.2, 9.2, 0.6), "救命  樓裡還有5人")
+	_sos.append(roof)
 
-func _writing(at: Vector3, text: String) -> Label3D:
+func _writing(at: Vector3, text: String) -> Node3D:
+	var root := Node3D.new()
+	root.position = at
+	add_child(root)
+	var plate := MeshInstance3D.new()
+	var slab := BoxMesh.new()
+	slab.size = Vector3(4.2, 0.04, 0.7)
+	plate.mesh = slab
+	var paint := StandardMaterial3D.new()
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	paint.albedo_color = Color(0.55, 0.06, 0.05)
+	plate.material_override = paint
+	root.add_child(plate)
 	var label := Label3D.new()
 	label.text = text
 	label.font = load("res://assets/fonts/NotoSansSC-VF.ttf")
-	label.font_size = 48
-	label.pixel_size = 0.028
-	label.modulate = Color(0.85, 0.15, 0.12)
-	label.outline_size = 8
-	label.position = at
-	label.rotation_degrees = Vector3(-70, 20, 0)
-	add_child(label)
-	return label
+	label.font_size = 36
+	label.pixel_size = 0.008
+	label.modulate = Color(0.85, 0.9, 0.85)
+	label.position = Vector3(0, 0.05, 0)
+	label.rotation_degrees = Vector3(-90, 0, 0)
+	root.add_child(label)
+	return root
 
 func _try_rescue() -> void:
 	var player := _player()
@@ -470,8 +511,24 @@ func _searchlights() -> void:
 		spot.light_energy = 7.0
 		spot.spot_range = 28.0
 		spot.spot_angle = 22.0
-		spot.shadow_enabled = false
+		spot.shadow_enabled = true
+		spot.light_volumetric_fog_energy = 8.0
 		add_child(spot)
+		var beam := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.12
+		cone.bottom_radius = 1.6
+		cone.height = 11.0
+		beam.mesh = cone
+		beam.position = Vector3(0, 0, -5.6)
+		beam.rotation_degrees = Vector3(-90, 0, 0)
+		var haze := StandardMaterial3D.new()
+		haze.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		haze.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		haze.cull_mode = BaseMaterial3D.CULL_DISABLED
+		haze.albedo_color = Color(0.7, 0.82, 1.0, 0.07)
+		beam.material_override = haze
+		spot.add_child(beam)
 		_lights.append(spot)
 
 func _flashlight() -> void:
@@ -519,31 +576,57 @@ func _ui() -> void:
 	card.add_theme_color_override("font_color", Color(0.95, 0.9, 0.8))
 	_title.add_child(card)
 	layer.add_child(_title)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(16, 16)
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	var box := VBoxContainer.new()
+	panel.add_child(box)
 	_strip = Label.new()
-	_strip.position = Vector2(24, 24)
 	_strip.add_theme_font_size_override("font_size", 18)
-	_strip.add_theme_color_override("font_color", Color(0.9, 0.92, 0.88))
-	layer.add_child(_strip)
+	_strip.add_theme_color_override("font_color", Color(0.93, 0.94, 0.9))
+	box.add_child(_strip)
 	_squad_label = Label.new()
-	_squad_label.position = Vector2(24, 120)
 	_squad_label.add_theme_font_size_override("font_size", 16)
-	_squad_label.add_theme_color_override("font_color", Color(0.8, 0.84, 0.78))
-	layer.add_child(_squad_label)
+	_squad_label.add_theme_color_override("font_color", Color(0.78, 0.84, 0.76))
+	box.add_child(_squad_label)
+	layer.add_child(panel)
 	_tooltip = Label.new()
 	_tooltip.visible = false
 	_tooltip.add_theme_font_size_override("font_size", 20)
 	_tooltip.add_theme_color_override("font_color", Color(1, 0.9, 0.55))
 	layer.add_child(_tooltip)
 	_ghost = MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(1.4, 0.6, 0.8)
-	_ghost.mesh = box
+	var ghost_mesh := BoxMesh.new()
+	ghost_mesh.size = Vector3(1.4, 0.6, 0.8)
+	_ghost.mesh = ghost_mesh
 	var mat := StandardMaterial3D.new()
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color = Color(0.9, 0.8, 0.3, 0.35)
 	_ghost.material_override = mat
 	_ghost.visible = false
 	add_child(_ghost)
+
+func _panel_style() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.02, 0.03, 0.05, 0.72)
+	box.content_margin_left = 14
+	box.content_margin_right = 14
+	box.content_margin_top = 10
+	box.content_margin_bottom = 10
+	box.corner_radius_top_left = 4
+	box.corner_radius_top_right = 4
+	box.corner_radius_bottom_left = 4
+	box.corner_radius_bottom_right = 4
+	return box
+
+func _bit(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mi.mesh = box
+	mi.position = pos
+	mi.material_override = _color(color)
+	parent.add_child(mi)
 
 func _show_title(on: bool) -> void:
 	if _title:
@@ -614,10 +697,24 @@ func _color(color: Color) -> StandardMaterial3D:
 func _plain_drone(parent: Node3D) -> void:
 	var body := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(1.4, 0.25, 1.4)
+	box.size = Vector3(1.6, 0.22, 1.6)
 	body.mesh = box
-	body.material_override = _color(Color(0.12, 0.12, 0.13))
+	body.material_override = _color(Color(0.1, 0.1, 0.12))
 	parent.add_child(body)
+	var nav := OmniLight3D.new()
+	nav.light_color = Color(1.0, 0.15, 0.1)
+	nav.light_energy = 4.0
+	nav.omni_range = 6.0
+	nav.position = Vector3(-0.7, 0.1, 0)
+	nav.shadow_enabled = false
+	parent.add_child(nav)
+	var starboard := OmniLight3D.new()
+	starboard.light_color = Color(0.2, 1.0, 0.35)
+	starboard.light_energy = 4.0
+	starboard.omni_range = 6.0
+	starboard.position = Vector3(0.7, 0.1, 0)
+	starboard.shadow_enabled = false
+	parent.add_child(starboard)
 
 func show_drone_fallback() -> void:
 	pass

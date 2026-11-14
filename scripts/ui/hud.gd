@@ -41,7 +41,11 @@ func _ready() -> void:
 		_title.visible = false
 
 func _process(_delta: float) -> void:
-	if GameState.started_play:
+	var hold := GameState.defend_night
+	_clock.visible = not hold
+	_temp.visible = not hold
+	_objective.visible = not hold
+	if GameState.started_play and not hold:
 		var hp := ""
 		if CombatHooks.enabled or GameState.under_fire:
 			hp = "  伤势 %.0f" % GameState.player_hp

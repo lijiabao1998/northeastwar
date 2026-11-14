@@ -216,7 +216,23 @@ func spawn_armour(along: Vector3, facing: Vector3) -> void:
 	mat.albedo_color = Color(0.22, 0.26, 0.18)
 	mat.roughness = 0.7
 	hull.material_override = mat
+	hull.add_to_group("armour")
 	add_child(hull)
+	var cabin := MeshInstance3D.new()
+	var cabin_mesh := BoxMesh.new()
+	cabin_mesh.size = Vector3(1.8, 0.7, 2.2)
+	cabin.mesh = cabin_mesh
+	cabin.position = Vector3(0, 1.35, -0.6)
+	cabin.material_override = mat
+	hull.add_child(cabin)
+	var nose := MeshInstance3D.new()
+	var nose_mesh := BoxMesh.new()
+	nose_mesh.size = Vector3(2.4, 0.5, 1.4)
+	nose.mesh = nose_mesh
+	nose.position = Vector3(0, 0.35, 2.6)
+	nose.rotation_degrees = Vector3(-18, 0, 0)
+	nose.material_override = mat
+	hull.add_child(nose)
 	var turret := OmniLight3D.new()
 	turret.light_color = Color(1, 0.6, 0.25)
 	turret.omni_range = 10.0
@@ -246,6 +262,20 @@ func _drone_mesh(parent: Node3D) -> void:
 	mat.albedo_color = Color(0.12, 0.12, 0.13)
 	body.material_override = mat
 	parent.add_child(body)
+	var nav := OmniLight3D.new()
+	nav.light_color = Color(1.0, 0.12, 0.08)
+	nav.light_energy = 5.0
+	nav.omni_range = 8.0
+	nav.position = Vector3(-0.8, 0.15, -0.2)
+	nav.shadow_enabled = false
+	parent.add_child(nav)
+	var starboard := OmniLight3D.new()
+	starboard.light_color = Color(0.15, 1.0, 0.3)
+	starboard.light_energy = 5.0
+	starboard.omni_range = 8.0
+	starboard.position = Vector3(0.8, 0.15, -0.2)
+	starboard.shadow_enabled = false
+	parent.add_child(starboard)
 	for x in [-1, 1]:
 		for z in [-1, 1]:
 			var arm := MeshInstance3D.new()
