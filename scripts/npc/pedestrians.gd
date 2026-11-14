@@ -3,11 +3,11 @@ class_name Pedestrians
 ## Ordinary people on the mapped sidewalks. Nobody here is a soldier.
 
 const COATS := [
-	Color(0.05, 0.05, 0.06),
-	Color(0.08, 0.1, 0.16),
-	Color(0.22, 0.12, 0.1),
-	Color(0.28, 0.08, 0.08),
-	Color(0.16, 0.16, 0.17),
+	Color(0.18, 0.19, 0.22),
+	Color(0.12, 0.16, 0.26),
+	Color(0.28, 0.16, 0.12),
+	Color(0.32, 0.1, 0.1),
+	Color(0.22, 0.22, 0.24),
 ]
 const BEFORE_ZH := [
 	"这风跟刀子似的。",

@@ -58,7 +58,7 @@ func set_paused(value: bool) -> void:
 		return
 	paused = value
 	paused_changed.emit(paused)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if paused or not started_play else Input.MOUSE_MODE_CAPTURED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func set_quality(level: String) -> void:
 	if level not in LEVELS or level == quality:

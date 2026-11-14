@@ -40,48 +40,59 @@ void fragment() {
 		vec3 ceramic = v_color * (0.90 + 0.10 * hashf(floor(tile.x) * 3.1 + floor(tile.y) * 9.7));
 		ceramic = mix(ceramic, ceramic * 0.55, grout);
 
+		// Northeast tile, not the raw vertex colour. Pinks in the source data
+		// are pulled toward beige, cream, grey and faded yellow.
+		vec3 northeast = v_color;
+		if (v_color.r > v_color.b + 0.12 && v_color.r > 0.45) {
+			northeast = mix(vec3(0.84, 0.78, 0.66), vec3(0.76, 0.66, 0.42), step(0.55, v_seed));
+		} else if (v_color.r > 0.7 && v_color.g > 0.65) {
+			northeast = mix(vec3(0.86, 0.84, 0.78), vec3(0.72, 0.73, 0.74), step(0.6, v_seed));
+		}
+		ceramic = mix(northeast, northeast * 0.62, grout);
+		ceramic *= 0.94 + 0.08 * hashf(floor(tile.x) * 3.1 + floor(tile.y) * 9.7);
+
 		float col = floor(u / bay);
 		float row = floor(max(v, 0.0) / floor_h);
 		vec2 cell = vec2(fract(u / bay), fract(max(v, 0.0) / floor_h));
 		bool shop_floor = v_shop > 0.5 && row < 0.5;
-
+		// A 3.15 m bay holds a ~1.5 m window: frame from 0.26 to 0.74 of the bay.
 		float frame = 0.0;
 		float glass = 0.0;
+		float recess = 0.0;
 		if (shop_floor) {
-			float gx = smoothstep(0.045, 0.08, cell.x) * smoothstep(0.955, 0.92, cell.x);
-			float gy = smoothstep(0.08, 0.14, cell.y) * smoothstep(0.94, 0.86, cell.y);
+			float gx = smoothstep(0.18, 0.24, cell.x) * smoothstep(0.82, 0.76, cell.x);
+			float gy = smoothstep(0.10, 0.16, cell.y) * smoothstep(0.62, 0.54, cell.y);
 			glass = gx * gy;
-			frame = smoothstep(0.015, 0.045, cell.x) * smoothstep(0.985, 0.955, cell.x);
-			frame *= smoothstep(0.03, 0.07, cell.y) * smoothstep(0.97, 0.93, cell.y);
+			frame = smoothstep(0.12, 0.18, cell.x) * smoothstep(0.88, 0.82, cell.x);
+			frame *= smoothstep(0.06, 0.10, cell.y) * smoothstep(0.70, 0.62, cell.y);
 			frame *= (1.0 - glass);
 		} else {
-			float outer = smoothstep(0.15, 0.19, cell.x) * smoothstep(0.85, 0.81, cell.x);
-			outer *= smoothstep(0.20, 0.26, cell.y) * smoothstep(0.80, 0.72, cell.y);
-			float inner = smoothstep(0.23, 0.275, cell.x) * smoothstep(0.77, 0.725, cell.x);
-			inner *= smoothstep(0.30, 0.36, cell.y) * smoothstep(0.72, 0.64, cell.y);
+			float outer = smoothstep(0.26, 0.30, cell.x) * smoothstep(0.74, 0.70, cell.x);
+			outer *= smoothstep(0.28, 0.34, cell.y) * smoothstep(0.84, 0.76, cell.y);
+			float inner = smoothstep(0.33, 0.37, cell.x) * smoothstep(0.67, 0.63, cell.x);
+			inner *= smoothstep(0.40, 0.46, cell.y) * smoothstep(0.76, 0.68, cell.y);
 			float mullion = step(0.485, cell.x) * step(cell.x, 0.515);
-			mullion += step(0.47, cell.y) * step(cell.y, 0.53);
 			mullion = clamp(mullion, 0.0, 1.0);
 			glass = inner * (1.0 - mullion);
 			frame = clamp(outer - glass, 0.0, 1.0);
+			recess = outer * 0.35;
 		}
 
-		vec3 upvc = vec3(0.94, 0.95, 0.93);
+		vec3 upvc = vec3(0.93, 0.94, 0.92);
 		float h = hashf(col * 17.17 + row * 9.13 + v_seed * 41.0);
-		float lit = step(0.42, h) * smoothstep(0.02, 0.5, night);
-		vec3 warm = vec3(1.0, 0.58, 0.24);
-		vec3 cool = vec3(0.62, 0.82, 1.0);
-		float cool_mix = shop_floor ? 0.45 : step(0.8, h);
-		vec3 interior = mix(warm, cool, cool_mix);
-		float shop_lit = shop_floor ? night * 0.85 : 0.0;
-		vec3 glass_col = mix(vec3(0.035, 0.045, 0.06), interior, max(lit, shop_lit));
-		glass_col = mix(glass_col, vec3(0.40, 0.48, 0.58), (1.0 - night) * (1.0 - lit) * 0.35);
-		albedo = mix(ceramic, upvc, frame);
+		float lit = step(0.55, h) * smoothstep(0.15, 0.7, night);
+		vec3 warm = vec3(1.0, 0.62, 0.28);
+		vec3 interior = warm;
+		float shop_lit = shop_floor ? night * 0.55 : 0.0;
+		vec3 glass_col = mix(vec3(0.08, 0.1, 0.12), interior, max(lit, shop_lit) * 0.85);
+		glass_col = mix(glass_col, vec3(0.55, 0.6, 0.66), (1.0 - night) * 0.25);
+		albedo = mix(ceramic, ceramic * 0.55, recess);
+		albedo = mix(albedo, upvc, frame);
 		albedo = mix(albedo, glass_col, glass);
-		rough = mix(0.86, 0.14, glass);
-		float emit = glass * lit * (1.5 + night * 1.3);
+		rough = mix(0.88, 0.22, glass);
+		float emit = glass * lit * (0.45 + night * 0.7);
 		if (shop_floor) {
-			emit = max(emit, glass * night * 0.9);
+			emit = max(emit, glass * night * 0.35);
 		}
 		emission = interior * emit;
 	}

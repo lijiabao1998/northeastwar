@@ -28,6 +28,9 @@ func _ready() -> void:
 	_build_title()
 	_build_pause()
 	_build_phone()
+	var stick: Control = load("res://scripts/ui/touch_stick.gd").new()
+	stick.name = "TouchStick"
+	add_child(stick)
 	GameState.subtitle_changed.connect(_on_subtitle)
 	GameState.objective_changed.connect(func(zh, en): _objective.text = zh + "\n" + en)
 	GameState.phone_message.connect(_on_phone)

@@ -9,6 +9,7 @@ var _font: Font
 
 func build(data: Dictionary) -> void:
 	_font = _load_font()
+	_air_conditioners(data.get("buildings", []))
 	_trees(data.get("trees", []))
 	_lamps(data.get("lamps", []))
 	_signs(data.get("signs", []))
@@ -93,13 +94,13 @@ func _lamps(rows: Array) -> void:
 		var arm := Vector3(-sin(yaw), 0.0, -cos(yaw))
 		light.position = Vector3(float(row["x"]), 6.7, float(row["z"])) + arm * 2.15
 		if light.name == "promenade":
-			light.light_color = Color(1.0, 0.82, 0.62)
-			light.light_energy = 1.05
-			light.omni_range = 16.0
-		else:
 			light.light_color = Color(1.0, 0.62, 0.28)
-			light.light_energy = 1.35
-			light.omni_range = 14.0
+			light.light_energy = 1.6
+			light.omni_range = 18.0
+		else:
+			light.light_color = Color(1.0, 0.45, 0.12)
+			light.light_energy = 2.4
+			light.omni_range = 16.0
 		light.shadow_enabled = false
 		light.light_indirect_energy = 0.4
 		add_child(light)
@@ -146,36 +147,72 @@ func _signs(rows: Array) -> void:
 		holder.position = Vector3(float(row["x"]), float(row["y"]), float(row["z"]))
 		holder.rotation.y = float(row["yaw"])
 		var width := float(row.get("width", 3.0))
-		var height := 2.15 if kind == "rooftop" else (0.95 if ru != "" and zh != "" else 0.7)
-		if kind == "street":
-			height = 0.48
-			width = max(width, 1.8)
+		var height := 2.4 if kind == "rooftop" else 1.15
+		var palette := int(row.get("palette", 0))
+		zh = _short_sign(zh)
+		if kind == "shop":
+			width = clampf(0.72 * maxf(float(zh.length()), 2.0), 2.6, 5.4)
+			palette = 0 if (int(abs(row.get("x", 0.0))) / 6) % 2 == 0 else 2
+			holder.position.y = 2.85
+		elif kind == "street":
+			height = 0.55
+			width = maxf(width, 2.2)
+			palette = 2
+		elif kind == "rooftop":
+			width = maxf(width, 6.0)
+			holder.position.y += 1.2
 		var board := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		box.size = Vector3(width, height, 0.07 if kind != "rooftop" else 0.12)
+		box.size = Vector3(width, height, 0.12 if kind != "rooftop" else 0.2)
 		board.mesh = box
-		board.material_override = _sign_material(int(row.get("palette", 0)), kind)
+		board.material_override = _sign_material(palette, kind)
 		holder.add_child(board)
-		# The holder's -Z points at the street. Label3D faces its own +Z,
-		# so turn it around and sit it on the street side of the board.
-		var light_board := int(row.get("palette", 0)) == 1 and kind == "shop"
+		# Holder -Z points at the street. Label3D's face is its own +Z.
 		var main := zh if zh != "" else ru
-		var label := _label(main, 0.02 if kind == "rooftop" else 0.012, 64 if kind == "rooftop" else 48)
-		label.position = Vector3(0, 0.16 if (zh != "" and ru != "" and kind == "shop") else 0.0, -0.07)
+		var chars := maxi(main.length(), 1)
+		var pixel := clampf(width * 0.78 / float(chars) / 52.0, 0.012, 0.026)
+		var label := _label(main, 0.034 if kind == "rooftop" else pixel, 64 if kind == "rooftop" else 52)
+		label.position = Vector3(0, 0.18 if (zh != "" and ru != "" and kind == "shop") else 0.0, -0.09)
 		label.rotation.y = PI
-		label.modulate = Color(0.12, 0.08, 0.08) if light_board else Color(1, 0.97, 0.92)
+		label.modulate = Color(1, 0.97, 0.94)
 		if kind == "rooftop":
-			label.modulate = Color(0.9, 0.08, 0.05)
-			label.outline_modulate = Color(0.2, 0.02, 0.02)
-			label.outline_size = 16
+			label.modulate = Color(0.92, 0.08, 0.05)
+			label.outline_size = 18
 		holder.add_child(label)
 		if zh != "" and ru != "" and kind == "shop":
-			var sub := _label(ru, 0.008, 32)
-			sub.position = Vector3(0, -0.24, -0.07)
+			var sub := _label(ru, pixel * 0.62, 36)
+			sub.position = Vector3(0, -0.32, -0.09)
 			sub.rotation.y = PI
-			sub.modulate = Color(1, 0.93, 0.8) if not light_board else Color(0.15, 0.1, 0.1)
+			sub.modulate = Color(1, 0.95, 0.85)
 			holder.add_child(sub)
 		add_child(holder)
+		if kind == "shop" and int(absf(holder.position.x)) % 24 < 8:
+			_parked_car(holder.global_position, holder.rotation.y)
+
+func _parked_car(sign_pos: Vector3, yaw: float) -> void:
+	# A few cars in the street in front of the shop boards. The mapped roads
+	# already have more; these fill the pedestrian frontage the photos show.
+	var facing := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var body := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(1.7, 1.45, 4.2)
+	body.mesh = mesh
+	body.position = sign_pos + facing * 7.5 + Vector3(0, -1.6, 0)
+	body.rotation.y = yaw
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.82, 0.84, 0.86) if int(absf(sign_pos.x)) % 2 == 0 else Color(0.12, 0.13, 0.15)
+	mat.roughness = 0.45
+	mat.metallic = 0.35
+	body.material_override = mat
+	add_child(body)
+
+func _short_sign(text: String) -> String:
+	var cut := text.find("（")
+	if cut < 0:
+		cut = text.find("(")
+	if cut > 1:
+		return text.substr(0, cut)
+	return text
 
 func _label(text: String, pixel: float, size: int) -> Label3D:
 	var label := Label3D.new()
@@ -202,23 +239,73 @@ func _sign_material(palette: int, kind: String) -> StandardMaterial3D:
 		Color(0.07, 0.22, 0.55),
 	]
 	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = colors[palette % colors.size()]
 	if kind == "rooftop":
-		mat.albedo_color = Color(0.12, 0.1, 0.1)
+		mat.albedo_color = Color(0.15, 0.05, 0.04)
 		mat.emission_enabled = true
-		mat.emission = Color(0.35, 0.02, 0.02)
-		mat.emission_energy_multiplier = 0.4
+		mat.emission = Color(0.7, 0.05, 0.04)
+		mat.emission_energy_multiplier = 0.6
 	elif kind == "street":
-		mat.albedo_color = colors[4]
-		mat.emission_enabled = true
-		mat.emission = Color(0.15, 0.35, 0.8)
-		mat.emission_energy_multiplier = 0.5
-	else:
-		mat.emission_enabled = true
-		mat.emission = mat.albedo_color
-		mat.emission_energy_multiplier = 0.55
-	mat.roughness = 0.45
+		mat.albedo_color = Color(0.05, 0.2, 0.62)
+	elif kind == "shop":
+		mat.albedo_color = Color(0.78, 0.05, 0.06) if palette == 0 else Color(0.04, 0.2, 0.7)
 	return mat
+
+func _air_conditioners(buildings: Array) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.72, 0.38, 0.32)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.82, 0.84, 0.86)
+	mat.roughness = 0.55
+	mesh.material = mat
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = mesh
+	var xforms: Array[Transform3D] = []
+	for building in buildings:
+		if str(building.get("side", "")) != "cn":
+			continue
+		if int(building.get("levels", 1)) < 4:
+			continue
+		var foot: Array = building.get("footprint", [])
+		if foot.size() < 3:
+			continue
+		var best_a := Vector2.ZERO
+		var best_b := Vector2.ZERO
+		var best_len := 0.0
+		for i in foot.size():
+			var a := Vector2(float(foot[i][0]), float(foot[i][1]))
+			var b := Vector2(float(foot[(i + 1) % foot.size()][0]), float(foot[(i + 1) % foot.size()][1]))
+			var length := a.distance_to(b)
+			if length > best_len:
+				best_len = length
+				best_a = a
+				best_b = b
+		if best_len < 8.0:
+			continue
+		var dir := (best_b - best_a) / best_len
+		var normal := Vector2(dir.y, -dir.x)
+		var floors := mini(int(building.get("levels", 4)) - 1, 6)
+		var count := mini(int(best_len / 6.0), 5)
+		for floor_i in floors:
+			if floor_i < 1 or floor_i % 2 == 0:
+				continue
+			for k in count:
+				var t := (float(k) + 0.5) / float(count)
+				var p := best_a.lerp(best_b, t) + normal * 0.35
+				var y := float(floor_i) * 3.0 + 1.6
+				var yaw := atan2(dir.x, dir.y)
+				xforms.append(Transform3D(Basis(Vector3.UP, yaw), Vector3(p.x, y, p.y)))
+	if xforms.is_empty():
+		return
+	multi.instance_count = xforms.size()
+	for i in xforms.size():
+		multi.set_instance_transform(i, xforms[i])
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = multi
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(inst)
 
 func _smoke(rows: Array) -> void:
 	for row in rows:

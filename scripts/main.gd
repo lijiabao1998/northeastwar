@@ -39,7 +39,6 @@ func _ready() -> void:
 	player.city = city
 	var spawn: Dictionary = city.spawn()
 	player.position = Vector3(float(spawn["x"]), 0.2, float(spawn["z"]))
-	player.yaw = float(spawn.get("yaw", PI))
 	add_child(player)
 
 	var cold := ColdMeter.new()
@@ -92,7 +91,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			pressed = true
 		if pressed:
 			GameState.begin()
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
 	if event.is_action_pressed("pause"):
 		GameState.set_paused(not GameState.paused)

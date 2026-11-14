@@ -16,6 +16,7 @@ boot_splash/bg_color=Color(0.04, 0.05, 0.07, 1)
 [autoload]
 
 GameState="*res://scripts/game/game_state.gd"
+CombatHooks="*res://scripts/combat/combat_hooks.gd"
 
 [display]
 

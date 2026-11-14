@@ -30,15 +30,15 @@ godot --path .
 
 The opening is about eight real minutes (16:00 to 18:00 in the game, at 15×). You are a shop worker who just got off 中央街. Walk north to the river. A phone alert tells you Russian troops are crossing the frozen Heilongjiang. There is no combat in this slice.
 
-The camera is third person, over the shoulder. The January street photographs of Heihe are full of people seen from behind in black hooded coats. Hiding that coat in a first-person view would throw away half of how a Northeast winter reads. The camera stays close so the tiled facades still fill the frame.
+The camera matches DefendTaipei: orthographic, fixed above and to the northeast (`40, 56, 40` metres), looking at your feet. The mouse wheel zooms between 0.5 and 2.2. W and S move along the screen's up axis, A and D along its right. A touch stick does the same thing. Clicking sets an aim point on the ground for later combat and does not capture the mouse. Combat itself is off; `CombatHooks` is the seam for drones, artillery, armour, civilians, scavenging and retaking blocks.
 
 ### Controls
 
 | Action | Keyboard and mouse | Gamepad |
 | --- | --- | --- |
 | Move | WASD or arrows | Left stick |
-| Look | Mouse | Right stick |
-| Run | Shift | RB or left-stick click |
+| Zoom | Mouse wheel | Pinch |
+| Run | Shift | Push the stick, or RB |
 | Talk to someone | E or F | A |
 | Pause, quality, credits | Esc | Start |
 
