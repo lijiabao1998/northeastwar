@@ -1,0 +1,17 @@
+# Godot 4
+.godot/
+*.translation
+
+# Local export output. CI uploads these as artifacts.
+/build/
+/exports/
+
+# Editor / OS
+.DS_Store
+*.tmp
+*~
+*.swp
+.vscode/
+.idea/
+__pycache__/
+*.pyc

@@ -1,0 +1,93 @@
+{
+  "osm_timestamp": "2026-11-14T12:02:56Z",
+  "counts": {
+    "buildings": 584,
+    "buildings_cn": 198,
+    "buildings_ru": 386,
+    "roads": 33,
+    "pois": 153,
+    "signs": 98,
+    "trees": 685,
+    "lamps": 332,
+    "cars": 306,
+    "chimneys": 3
+  },
+  "height_sources": {
+    "estimated_from_footprint": 536,
+    "osm_levels": 47,
+    "poi_plus_reference_photo": 1
+  },
+  "skipped": {
+    "tri": 0,
+    "water": 2,
+    "side": 1388
+  },
+  "spawn": {
+    "x": -219.65,
+    "z": -337.78,
+    "yaw": 2.0348
+  },
+  "mother": {
+    "x": 0.0,
+    "z": 0.0
+  },
+  "chimneys": [
+    {
+      "name": "烟囱",
+      "x": 4469.8,
+      "z": -85.78,
+      "height": 48,
+      "source": "osm",
+      "osm": 6155689588
+    },
+    {
+      "name": "烟囱",
+      "x": 1279.84,
+      "z": 2362.77,
+      "height": 48,
+      "source": "osm",
+      "osm": 11421661526
+    },
+    {
+      "name": "黑河市热电有限责任公司",
+      "x": -656.84,
+      "z": -2585.62,
+      "height": 70,
+      "source": "osm",
+      "osm": 229876678,
+      "note": "coal",
+      "output": "119 MW"
+    }
+  ],
+  "named_roads": [
+    "东兴路",
+    "中央街",
+    "公园路",
+    "兴安街",
+    "兴林街",
+    "官渡路",
+    "文化街",
+    "海兰街",
+    "王肃街",
+    "西兴路",
+    "迎恩路",
+    "邮政路"
+  ],
+  "mesh_bytes": 16126824,
+  "gltf_meshes": [
+    "Facade",
+    "European",
+    "Glass",
+    "Roof",
+    "Snow",
+    "Road",
+    "Sidewalk",
+    "Ice",
+    "Promenade",
+    "Ground",
+    "Car",
+    "CarGlass",
+    "Railing",
+    "Prop"
+  ]
+}

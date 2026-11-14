@@ -14,8 +14,61 @@ You are not a soldier. You are an ordinary person in Harbin: a delivery rider, a
 ## Notes
 
 - This is a work of fiction set in the near future. All characters and events are invented. Real places are used as settings.
-- Web first (TypeScript + Three.js + Vite), playable on desktop and mobile on the Jiabao Digital Cultural Centre (https://lijiabao.uk/games/) once the first slice is ready. It reuses the engine work from the author's other games, not their worlds.
+- Native Godot 4 game for PC and laptop. The owner chose Godot over a browser build so the game can ship as a real desktop executable, without a bundled browser, and so it can use Godot's lighting. Windows is the primary export. Linux, macOS and Web presets are in the repo. The story still begins in the Northeast and still aims, later, at Harbin.
 
-Status: Planned (籌備中).
+Status: Prototype (原型). The first playable slice is the evening of 17 January 2031 in central Heihe, on the blocks between 中央街 and the Heilongjiang promenade. Harbin is not in this build.
 
 © 2026 李家寶. All rights reserved.
+
+## Play the Heihe slice
+
+You need [Godot 4.7.2 stable](https://godotengine.org/download/archive/4.7.2-stable/). Open this folder as a project and press Play. Or, with the editor binary on your PATH:
+
+```bash
+godot --path .
+```
+
+The opening is about eight real minutes (16:00 to 18:00 in the game, at 15×). You are a shop worker who just got off 中央街. Walk north to the river. A phone alert tells you Russian troops are crossing the frozen Heilongjiang. There is no combat in this slice.
+
+The camera is third person, over the shoulder. The January street photographs of Heihe are full of people seen from behind in black hooded coats. Hiding that coat in a first-person view would throw away half of how a Northeast winter reads. The camera stays close so the tiled facades still fill the frame.
+
+### Controls
+
+| Action | Keyboard and mouse | Gamepad |
+| --- | --- | --- |
+| Move | WASD or arrows | Left stick |
+| Look | Mouse | Right stick |
+| Run | Shift | RB or left-stick click |
+| Talk to someone | E or F | A |
+| Pause, quality, credits | Esc | Start |
+
+Click the window, or press a key, to start. Quality is Low / Medium / High from the pause menu and is remembered. Low turns off volumetric fog, SDFGI, SSAO and most real lights so an integrated GPU can hold a frame rate. High turns those back on.
+
+Body temperature starts at 36.8°C. The street is about −24°C. Standing in a lit shop doorway warms you. The ice is colder, and running makes it worse.
+
+## Build
+
+Exports use the matching 4.7.2 templates. CI pins that version.
+
+```bash
+godot --headless --export-release "Windows Desktop" build/windows/Northeast.exe
+godot --headless --export-release "Linux" build/linux/Northeast.x86_64
+godot --headless --export-release "macOS" build/macos/Northeast.zip
+godot --headless --export-release "Web" build/web/index.html
+```
+
+GitHub Actions imports the project, runs the Python and Godot tests, and uploads Windows and Linux builds as artifacts on pull requests and on main.
+
+## Map data
+
+Streets, footprints, the river bank and the place names come from OpenStreetMap through the Overpass API. The importer is `tools/osm_import/import_osm.py`. It writes `data/heihe/city.json` plus a glTF mesh the game loads. The same tool is how later cities (Harbin, Changchun, Shenyang) should come in: add a region file, fetch, build.
+
+```bash
+python3 tools/osm_import/import_osm.py fetch
+python3 tools/osm_import/import_osm.py build
+python3 -m unittest tests/test_import.py
+```
+
+The committed extract is enough to build without calling Overpass again. Map data in `data/heihe/` is © OpenStreetMap contributors, ODbL. The game code is not. See `LICENSE`, `data/heihe/ODBL.txt` and `CREDITS.md`.
+
+The in-game corner credit is part of that attribution. Please leave it in.
