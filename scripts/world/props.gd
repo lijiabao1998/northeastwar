@@ -4,6 +4,7 @@ class_name CityProps
 ## import; the meshes are original.
 
 var _lights: Array[OmniLight3D] = []
+var _sign_slots: Array = []
 var _flash_lights: Array[OmniLight3D] = []
 var _font: Font
 
@@ -158,10 +159,14 @@ func _signs(rows: Array) -> void:
 		var palette := int(row.get("palette", 0))
 		zh = _short_sign(zh)
 		if kind == "shop":
-			width = clampf(0.95 * maxf(float(zh.length()), 2.0), 3.2, 6.4)
-			height = 1.55
+			width = clampf(0.55 * maxf(float(zh.length()), 2.0), 2.2, 4.2)
+			height = 1.15
 			palette = 0 if (int(abs(row.get("x", 0.0))) / 6) % 2 == 0 else 2
-			holder.position.y = 3.05
+			holder.position.y = 2.7
+			var yaw := holder.rotation.y
+			var facing := Vector3(-sin(yaw), 0.0, -cos(yaw))
+			holder.position -= facing * 0.18
+			holder.position = _separate_sign(holder.position, facing, width)
 		elif kind == "street":
 			height = 0.55
 			width = maxf(width, 2.2)
@@ -178,9 +183,10 @@ func _signs(rows: Array) -> void:
 		# Holder -Z points at the street. Label3D's face is its own +Z.
 		var main := zh if zh != "" else ru
 		var chars := maxi(main.length(), 1)
-		var pixel := clampf(width * 0.86 / float(chars) / 48.0, 0.02, 0.042)
-		var label := _label(main, 0.04 if kind == "rooftop" else pixel, 72 if kind == "rooftop" else 64)
-		label.position = Vector3(0, 0.28 if (zh != "" and ru != "" and kind == "shop") else 0.0, -0.1)
+		var pixel := width * 0.82 / (float(chars) * 58.0)
+		pixel = clampf(pixel, 0.012, 0.028)
+		var label := _label(main, 0.04 if kind == "rooftop" else pixel, 64 if kind == "rooftop" else 56)
+		label.position = Vector3(0, 0.16 if (zh != "" and ru != "" and kind == "shop") else 0.0, -0.08)
 		label.rotation.y = PI
 		label.modulate = Color(1.0, 0.93, 0.45) if kind == "shop" else Color(1, 0.97, 0.94)
 		if kind == "rooftop":
@@ -188,16 +194,18 @@ func _signs(rows: Array) -> void:
 			label.outline_size = 18
 		holder.add_child(label)
 		if zh != "" and ru != "" and kind == "shop":
-			var sub := _label(ru, pixel * 0.72, 42)
-			sub.position = Vector3(0, -0.38, -0.1)
+			var shown := ru.substr(0, 14)
+			var ru_px := width * 0.82 / (float(maxi(shown.length(), 1)) * 32.0)
+			var sub := _label(shown, clampf(ru_px, 0.008, 0.016), 28)
+			sub.position = Vector3(0, -0.28, -0.08)
 			sub.rotation.y = PI
-			sub.modulate = Color(0.9, 0.95, 1.0)
+			sub.modulate = Color(0.92, 0.95, 1.0)
 			holder.add_child(sub)
 			var spill := OmniLight3D.new()
-			spill.position = Vector3(0, 0, -0.8)
-			spill.light_color = Color(1.0, 0.45, 0.18) if palette == 0 else Color(0.45, 0.65, 1.0)
-			spill.light_energy = 3.2
-			spill.omni_range = 7.0
+			spill.position = Vector3(0, -0.4, -1.1)
+			spill.light_color = Color(1.0, 0.55, 0.25) if palette == 0 else Color(0.55, 0.7, 1.0)
+			spill.light_energy = 0.55
+			spill.omni_range = 4.5
 			spill.shadow_enabled = false
 			holder.add_child(spill)
 		if kind == "shop":
@@ -210,29 +218,26 @@ func _parked_car(sign_pos: Vector3, yaw: float) -> void:
 	# A few cars in the street in front of the shop boards. The mapped roads
 	# already have more; these fill the pedestrian frontage the photos show.
 	var facing := Vector3(-sin(yaw), 0.0, -cos(yaw))
-	var body := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(1.7, 1.45, 4.2)
-	body.mesh = mesh
-	body.position = sign_pos + facing * 7.5 + Vector3(0, -1.4, 0)
-	body.rotation.y = yaw
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.72, 0.74, 0.76) if int(absf(sign_pos.x)) % 2 == 0 else Color(0.1, 0.11, 0.12)
-	mat.roughness = 0.55
-	mat.metallic = 0.25
-	body.material_override = mat
-	add_child(body)
-	var snow := MeshInstance3D.new()
-	var cap := BoxMesh.new()
-	cap.size = Vector3(1.55, 0.22, 4.0)
-	snow.mesh = cap
-	snow.position = body.position + Vector3(0, 0.8, 0)
-	snow.rotation.y = yaw
-	var white := StandardMaterial3D.new()
-	white.albedo_color = Color(0.93, 0.94, 0.95)
-	white.roughness = 0.9
-	snow.material_override = white
-	add_child(snow)
+	var root := Node3D.new()
+	root.position = sign_pos + facing * 6.2
+	root.rotation.y = yaw
+	add_child(root)
+	var paint := Color(0.78, 0.64, 0.12) if int(absf(sign_pos.x)) % 2 == 0 else Color(0.12, 0.13, 0.15)
+	_car_box(root, Vector3(0, 0.45, 0.2), Vector3(1.7, 0.55, 3.6), paint)
+	_car_box(root, Vector3(0, 0.95, -0.35), Vector3(1.45, 0.55, 1.6), paint.lightened(0.08))
+	_car_box(root, Vector3(0, 1.15, -0.2), Vector3(1.5, 0.12, 3.4), Color(0.78, 0.82, 0.86))
+	for z in [-1.2, 1.15]:
+		for x in [-0.75, 0.75]:
+			var wheel := MeshInstance3D.new()
+			var cyl := CylinderMesh.new()
+			cyl.top_radius = 0.28
+			cyl.bottom_radius = 0.28
+			cyl.height = 0.18
+			wheel.mesh = cyl
+			wheel.position = Vector3(x, 0.28, z)
+			wheel.rotation.z = PI * 0.5
+			wheel.material_override = _flat_mat(Color(0.08, 0.08, 0.09))
+			root.add_child(wheel)
 
 func _snowbanks(rows: Array) -> void:
 	var mesh := BoxMesh.new()
@@ -312,6 +317,40 @@ func _far_bank(buildings: Array) -> void:
 		add_child(light)
 		placed += 1
 
+func _separate_sign(pos: Vector3, facing: Vector3, width: float) -> Vector3:
+	var tangent := Vector3(facing.z, 0.0, -facing.x)
+	var guard := 0
+	while guard < 8:
+		guard += 1
+		var hit := false
+		for prev in _sign_slots:
+			var other: Vector3 = prev["p"]
+			var gap: float = (width + float(prev["w"])) * 0.5 + 0.4
+			var delta := pos - other
+			if absf(delta.dot(tangent)) < gap and delta.length() < gap + 1.5:
+				var dir := 1.0 if delta.dot(tangent) >= 0.0 else -1.0
+				pos += tangent * dir * (gap - absf(delta.dot(tangent)) + 0.15)
+				hit = true
+		if not hit:
+			break
+	_sign_slots.append({"p": pos, "w": width})
+	return pos
+
+func _car_box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mi.mesh = box
+	mi.position = pos
+	mi.material_override = _flat_mat(color)
+	parent.add_child(mi)
+
+func _flat_mat(color: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.7
+	return mat
+
 func _short_sign(text: String) -> String:
 	var cut := text.find("（")
 	if cut < 0:
@@ -356,10 +395,7 @@ func _sign_material(palette: int, kind: String) -> StandardMaterial3D:
 	elif kind == "street":
 		mat.albedo_color = Color(0.05, 0.2, 0.62)
 	elif kind == "shop":
-		mat.albedo_color = Color(0.95, 0.08, 0.07) if palette == 0 else Color(0.12, 0.38, 0.95)
-		mat.emission_enabled = true
-		mat.emission = mat.albedo_color
-		mat.emission_energy_multiplier = 0.8
+		mat.albedo_color = Color(0.82, 0.08, 0.07) if palette == 0 else Color(0.1, 0.28, 0.78)
 	return mat
 
 func _air_conditioners(buildings: Array) -> void:

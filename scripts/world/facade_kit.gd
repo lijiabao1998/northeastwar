@@ -320,8 +320,8 @@ func _storefront(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, gl
 		var spill := OmniLight3D.new()
 		spill.position = at + out * 1.4
 		spill.light_color = Color(1.0, 0.62, 0.28)
-		spill.light_energy = 2.6
-		spill.omni_range = 6.5
+		spill.light_energy = 0.7
+		spill.omni_range = 4.2
 		spill.shadow_enabled = false
 		parent.add_child(spill)
 	if index % 3 == 0:

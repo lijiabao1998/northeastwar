@@ -1,12 +1,11 @@
 extends RefCounted
 class_name WinterFigure
-## Low-poly on purpose. The readable part is the silhouette: a long quilted
-## coat and a fur hat for civilians, white winter camouflage, a helmet and a
-## rifle for infantry. Polygon count is not the point.
+## Low-poly, but the parts read: long coat, fur hat or helmet, boots, and a
+## rifle on infantry. Russians in the street are white winter camouflage.
+## Militia and civilians wear dark coats.
 
 static func attach(parent: Node3D, kind: String, cloth: Color) -> void:
 	var root := Node3D.new()
-	root.scale = Vector3(1.2, 1.2, 1.2)
 	parent.add_child(root)
 	if kind == "soldier":
 		_soldier(root)
@@ -14,31 +13,39 @@ static func attach(parent: Node3D, kind: String, cloth: Color) -> void:
 		_civilian(root, cloth)
 
 static func _civilian(root: Node3D, cloth: Color) -> void:
-	_box(root, Vector3(0, 0.95, 0), Vector3(0.62, 1.05, 0.38), cloth)
-	_box(root, Vector3(0, 0.55, 0.02), Vector3(0.66, 0.28, 0.42), cloth.lightened(0.08))
-	_box(root, Vector3(-0.28, 1.05, 0), Vector3(0.16, 0.55, 0.22), cloth)
-	_box(root, Vector3(0.28, 1.05, 0), Vector3(0.16, 0.55, 0.22), cloth)
-	_box(root, Vector3(-0.12, 0.32, 0), Vector3(0.16, 0.5, 0.2), cloth.darkened(0.25))
-	_box(root, Vector3(0.12, 0.32, 0), Vector3(0.16, 0.5, 0.2), cloth.darkened(0.25))
-	_box(root, Vector3(-0.12, 0.08, 0.05), Vector3(0.18, 0.1, 0.28), Color(0.1, 0.09, 0.08))
-	_box(root, Vector3(0.12, 0.08, 0.05), Vector3(0.18, 0.1, 0.28), Color(0.1, 0.09, 0.08))
-	_box(root, Vector3(0, 1.64, 0), Vector3(0.36, 0.2, 0.36), Color(0.42, 0.32, 0.2))
-	_box(root, Vector3(-0.16, 1.52, 0), Vector3(0.1, 0.16, 0.08), Color(0.35, 0.28, 0.2))
-	_box(root, Vector3(0.16, 1.52, 0), Vector3(0.1, 0.16, 0.08), Color(0.35, 0.28, 0.2))
-	_box(root, Vector3(0, 1.48, 0.02), Vector3(0.12, 0.12, 0.12), Color(0.55, 0.42, 0.34))
-	_box(root, Vector3(0, 1.22, 0.16), Vector3(0.22, 0.1, 0.06), Color(0.55, 0.08, 0.08))
+	_leg(root, -0.11, cloth.darkened(0.35))
+	_leg(root, 0.11, cloth.darkened(0.35))
+	_coat(root, cloth)
+	_arm(root, -0.34, cloth)
+	_arm(root, 0.34, cloth)
+	_sphere(root, Vector3(0, 1.52, 0.02), 0.11, Color(0.55, 0.42, 0.34))
+	_box(root, Vector3(0, 1.66, 0), Vector3(0.3, 0.12, 0.3), Color(0.4, 0.3, 0.18))
+	_box(root, Vector3(-0.14, 1.56, 0.02), Vector3(0.08, 0.16, 0.06), Color(0.4, 0.3, 0.18))
+	_box(root, Vector3(0.14, 1.56, 0.02), Vector3(0.08, 0.16, 0.06), Color(0.4, 0.3, 0.18))
+	_box(root, Vector3(0, 1.28, 0.16), Vector3(0.2, 0.08, 0.05), Color(0.55, 0.08, 0.08))
 
 static func _soldier(root: Node3D) -> void:
-	var white := Color(0.82, 0.84, 0.8)
-	var grey := Color(0.62, 0.66, 0.64)
-	_box(root, Vector3(0, 0.98, 0), Vector3(0.52, 0.85, 0.32), white)
-	_box(root, Vector3(0, 1.15, 0.12), Vector3(0.46, 0.4, 0.12), grey)
-	_box(root, Vector3(-0.24, 1.05, 0), Vector3(0.12, 0.45, 0.16), white)
-	_box(root, Vector3(0.24, 1.05, 0), Vector3(0.12, 0.45, 0.16), white)
-	_box(root, Vector3(-0.11, 0.32, 0), Vector3(0.14, 0.52, 0.16), grey)
-	_box(root, Vector3(0.11, 0.32, 0), Vector3(0.14, 0.52, 0.16), grey)
-	_box(root, Vector3(0, 1.62, 0), Vector3(0.24, 0.16, 0.26), Color(0.55, 0.58, 0.54))
-	_box(root, Vector3(0.16, 1.15, -0.28), Vector3(0.05, 0.05, 0.7), Color(0.08, 0.08, 0.09))
+	var white := Color(0.86, 0.88, 0.84)
+	var grey := Color(0.62, 0.66, 0.62)
+	_leg(root, -0.1, grey)
+	_leg(root, 0.1, grey)
+	_coat(root, white)
+	_arm(root, -0.32, white)
+	_arm(root, 0.32, white)
+	_box(root, Vector3(0, 1.2, 0.14), Vector3(0.42, 0.32, 0.08), grey)
+	_sphere(root, Vector3(0, 1.58, 0.02), 0.12, Color(0.7, 0.74, 0.7))
+	_cyl(root, Vector3(0.22, 1.2, 0.05), Vector3(0.28, 1.15, -0.55), 0.025, Color(0.08, 0.08, 0.09))
+
+static func _coat(root: Node3D, cloth: Color) -> void:
+	_box(root, Vector3(0, 1.05, 0), Vector3(0.46, 0.55, 0.28), cloth)
+	_box(root, Vector3(0, 0.62, 0.02), Vector3(0.58, 0.42, 0.34), cloth.darkened(0.06))
+
+static func _leg(root: Node3D, x: float, color: Color) -> void:
+	_box(root, Vector3(x, 0.28, 0), Vector3(0.12, 0.42, 0.14), color)
+	_box(root, Vector3(x, 0.06, 0.04), Vector3(0.14, 0.08, 0.24), Color(0.08, 0.07, 0.06))
+
+static func _arm(root: Node3D, x: float, cloth: Color) -> void:
+	_box(root, Vector3(x, 1.02, 0.02), Vector3(0.1, 0.42, 0.12), cloth.darkened(0.08))
 
 static func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
 	var mi := MeshInstance3D.new()
@@ -46,8 +53,34 @@ static func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> v
 	mesh.size = size
 	mi.mesh = mesh
 	mi.position = pos
+	mi.material_override = _paint(color)
+	parent.add_child(mi)
+
+static func _sphere(parent: Node3D, pos: Vector3, radius: float, color: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	mi.mesh = mesh
+	mi.position = pos
+	mi.material_override = _paint(color)
+	parent.add_child(mi)
+
+static func _cyl(parent: Node3D, a: Vector3, b: Vector3, radius: float, color: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = a.distance_to(b)
+	mi.mesh = mesh
+	mi.position = (a + b) * 0.5
+	mi.look_at(b, Vector3.UP)
+	mi.rotate_object_local(Vector3.RIGHT, PI * 0.5)
+	mi.material_override = _paint(color)
+	parent.add_child(mi)
+
+static func _paint(color: Color) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
-	mat.roughness = 0.8
-	mi.material_override = mat
-	parent.add_child(mi)
+	mat.roughness = 0.78
+	return mat

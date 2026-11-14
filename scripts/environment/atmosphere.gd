@@ -29,9 +29,9 @@ func _ready() -> void:
 	environment.ssao_power = 1.4
 	environment.ssil_radius = 3.0
 	environment.ssil_intensity = 0.8
-	environment.glow_intensity = 0.35
-	environment.glow_strength = 0.55
-	environment.glow_bloom = 0.04
+	environment.glow_intensity = 0.18
+	environment.glow_strength = 0.4
+	environment.glow_bloom = 0.015
 	environment.glow_hdr_threshold = 1.05
 	environment.glow_hdr_scale = 1.1
 	environment.fog_mode = Environment.FOG_MODE_EXPONENTIAL
@@ -136,7 +136,7 @@ func _apply_hour(hour: float) -> void:
 	sun.light_color = Color(1.0, 0.78, 0.58).lerp(Color(0.55, 0.62, 0.72), sunset)
 	environment.ambient_light_color = Color(0.62, 0.7, 0.82).lerp(Color(0.28, 0.32, 0.42), t)
 	environment.ambient_light_energy = lerpf(0.72, 0.38, t)
-	environment.tonemap_exposure = 1.2
+	environment.tonemap_exposure = 0.86
 	environment.fog_light_color = Color(0.62, 0.66, 0.70).lerp(Color(0.08, 0.08, 0.09), t)
 	var haze := lerpf(0.0012, 0.0024, t)
 	if GameState.quality == "low":
