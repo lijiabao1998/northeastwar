@@ -25,7 +25,7 @@ void vertex() {
 }
 
 void fragment() {
-	if (carved(v_world)) {
+	if (carved(v_world) || kit_hidden(v_world)) {
 		discard;
 	}
 	vec3 albedo = v_color;

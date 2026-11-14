@@ -166,6 +166,9 @@ func _hurt_section(id: int, section: int, amount: float) -> void:
 	hp[section] = 0.0
 	_mark_crack(Vector3(at.x, y1 + 1.5, at.z), 0.7)
 	_carve(building, y0, y1)
+	var kit := get_tree().get_first_node_in_group("facade_kit")
+	if kit and kit.has_method("drop_between"):
+		kit.drop_between(id, y0, y1)
 	var hint := _last_point
 	if hint == Vector3.ZERO:
 		hint = Vector3(float(building.x), 0.0, float(building.z))
@@ -361,20 +364,34 @@ func _take_rubble() -> MeshInstance3D:
 	return mesh
 
 func _fire(at: Vector3) -> void:
-	var flame := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(3.2, 2.4, 1.6)
-	flame.mesh = box
-	flame.position = at
+	var puff := GPUParticles3D.new()
+	puff.position = at
+	puff.amount = 18
+	puff.lifetime = 2.2
+	puff.one_shot = true
+	puff.explosiveness = 0.6
+	puff.preprocess = 0.4
+	var proc := ParticleProcessMaterial.new()
+	proc.direction = Vector3(0, 1, 0)
+	proc.spread = 22.0
+	proc.initial_velocity_min = 1.0
+	proc.initial_velocity_max = 3.0
+	proc.gravity = Vector3(0, 0.3, 0)
+	proc.scale_min = 0.8
+	proc.scale_max = 2.0
+	proc.color = Color(0.35, 0.32, 0.28, 0.5)
+	puff.process_material = proc
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.6, 1.6)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.32, 0.05)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.28, 0.02)
-	mat.emission_energy_multiplier = 3.0
-	flame.material_override = mat
-	add_child(flame)
-	_chunks.append(flame)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.albedo_color = Color(0.4, 0.36, 0.3, 0.45)
+	quad.material = mat
+	puff.draw_pass_1 = quad
+	add_child(puff)
+	puff.restart()
 
 func _smoke(at: Vector3) -> void:
 	var puff := GPUParticles3D.new()

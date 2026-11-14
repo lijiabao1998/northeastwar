@@ -87,22 +87,22 @@ func _fidelity_shots() -> void:
 	GameState.hour = 15.95
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(0.95)
+	player.set_zoom(0.8)
 	await _frame()
 	await _save("10_afternoon")
 	GameState.hour = 16.55
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(1.05)
+	player.set_zoom(0.8)
 	await _frame()
 	await _save("11_dusk")
 	GameState.hour = 17.7
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(1.05)
+	player.set_zoom(0.8)
 	await _frame()
 	await _save("12_night")
-	player.set_zoom(2.15)
+	player.set_zoom(1.55)
 	_stand(shop + facing * 7.2)
 	await _frame()
 	await _save("13_storefront")
@@ -110,21 +110,26 @@ func _fidelity_shots() -> void:
 	GameState.hour = 16.55
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(1.05)
+	player.set_zoom(0.8)
 	await _frame()
 	await _save("18_low")
 	GameState.set_quality("high")
-	GameState.hour = 16.9
-	var prom := Vector3(mother.x + 18.0, 0.05, bank - 6.0)
+	GameState.hour = 17.05
+	# Same isometric pitch, turned to look north across the ice. The gameplay
+	# camera always looks southwest, so the Russian bank would stay behind it.
+	player.face_river = true
+	var prom := Vector3(mother.x, 0.05, bank + 4.0)
 	_stand(prom)
-	player.set_zoom(1.35)
+	player.set_zoom(0.42)
 	await _frame()
 	await _save("14_river")
+	player.face_river = false
+	player.set_zoom(1.0)
 	GameState.hour = 17.2
 	GameState.under_fire = true
 	CombatHooks.enabled = true
 	_stand(street)
-	player.set_zoom(1.15)
+	player.set_zoom(0.85)
 	var squads := get_tree().get_first_node_in_group("squads") as Squads
 	if squads:
 		squads.pose_firefight(street - facing * 8.0, street)

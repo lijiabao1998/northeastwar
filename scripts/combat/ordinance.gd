@@ -38,20 +38,26 @@ func burst(at: Vector3, hold: bool = false) -> void:
 	flash.light_energy = 28.0
 	flash.omni_range = 26.0
 	add_child(flash)
-	var ball := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.1
-	sphere.height = 2.2
-	ball.mesh = sphere
-	ball.position = at + Vector3(0, 1.4, 0)
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.albedo_color = Color(1.0, 0.55, 0.12)
+	glow.albedo_color = Color(1.0, 0.5, 0.1)
 	glow.emission_enabled = true
-	glow.emission = Color(1.0, 0.4, 0.05)
-	glow.emission_energy_multiplier = 4.0
-	ball.material_override = glow
-	add_child(ball)
+	glow.emission = Color(1.0, 0.35, 0.05)
+	glow.emission_energy_multiplier = 3.0
+	var balls: Array[MeshInstance3D] = []
+	for i in 6:
+		var ball := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		var radius := 0.45 + float(i % 3) * 0.22
+		sphere.radius = radius
+		sphere.height = radius * 2.0
+		ball.mesh = sphere
+		var ang := float(i) * 1.05
+		ball.position = at + Vector3(cos(ang) * 0.7, 1.1 + float(i) * 0.28, sin(ang) * 0.7)
+		ball.material_override = glow
+		add_child(ball)
+		balls.append(ball)
+	_fire_particles(at)
 	var scorch := MeshInstance3D.new()
 	var disc := CylinderMesh.new()
 	disc.top_radius = 3.2
@@ -86,16 +92,71 @@ func burst(at: Vector3, hold: bool = false) -> void:
 			tween.tween_property(chip, "position", land, 0.35)
 	_column(at)
 	if hold:
-		ball.scale = Vector3(2.4, 2.4, 2.4)
-		flash.light_energy = 12.0
+		flash.light_energy = 14.0
 	else:
 		var tween := create_tween()
-		tween.tween_property(ball, "scale", Vector3(3.2, 3.2, 3.2), 0.35)
-		tween.parallel().tween_property(flash, "light_energy", 0.0, 0.45)
+		tween.tween_property(flash, "light_energy", 0.0, 0.45)
 		tween.tween_callback(func():
-			ball.queue_free()
 			flash.queue_free()
+			for ball in balls:
+				if is_instance_valid(ball):
+					ball.queue_free()
 		)
+
+func _fire_particles(at: Vector3) -> void:
+	var fire := GPUParticles3D.new()
+	fire.position = at + Vector3(0, 0.6, 0)
+	fire.amount = 48
+	fire.lifetime = 1.4
+	fire.one_shot = true
+	fire.explosiveness = 0.85
+	fire.preprocess = 0.2
+	var proc := ParticleProcessMaterial.new()
+	proc.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	proc.emission_sphere_radius = 0.4
+	proc.direction = Vector3(0, 1, 0)
+	proc.spread = 40.0
+	proc.initial_velocity_min = 2.0
+	proc.initial_velocity_max = 6.0
+	proc.gravity = Vector3(0, 1.5, 0)
+	proc.scale_min = 0.4
+	proc.scale_max = 1.3
+	proc.color = Color(1.0, 0.45, 0.08, 0.9)
+	fire.process_material = proc
+	fire.draw_pass_1 = _puff(0.9, Color(1.0, 0.4, 0.05, 0.85))
+	add_child(fire)
+	fire.restart()
+	var sparks := GPUParticles3D.new()
+	sparks.position = at + Vector3(0, 1.0, 0)
+	sparks.amount = 30
+	sparks.lifetime = 0.8
+	sparks.one_shot = true
+	sparks.explosiveness = 1.0
+	sparks.preprocess = 0.15
+	var spark_proc := ParticleProcessMaterial.new()
+	spark_proc.direction = Vector3(0, 1, 0)
+	spark_proc.spread = 70.0
+	spark_proc.initial_velocity_min = 6.0
+	spark_proc.initial_velocity_max = 12.0
+	spark_proc.gravity = Vector3(0, -8, 0)
+	spark_proc.scale_min = 0.05
+	spark_proc.scale_max = 0.15
+	spark_proc.color = Color(1, 0.85, 0.4, 1)
+	sparks.process_material = spark_proc
+	sparks.draw_pass_1 = _puff(0.15, Color(1, 0.9, 0.5, 1))
+	add_child(sparks)
+	sparks.restart()
+
+func _puff(size: float, color: Color) -> QuadMesh:
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(size, size)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.albedo_color = color
+	mesh.material = mat
+	return mesh
 
 func _column(at: Vector3) -> void:
 	var puff := GPUParticles3D.new()
@@ -104,6 +165,7 @@ func _column(at: Vector3) -> void:
 	puff.lifetime = 3.2
 	puff.one_shot = true
 	puff.explosiveness = 0.35
+	puff.preprocess = 0.8
 	var proc := ParticleProcessMaterial.new()
 	proc.direction = Vector3(0, 1, 0)
 	proc.spread = 12.0

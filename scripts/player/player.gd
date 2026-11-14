@@ -2,7 +2,8 @@ extends CharacterBody3D
 class_name Player
 ## Same rig as DefendTaipei: a fixed isometric camera, not a mouse-look.
 ## The camera sits 40 m east, 56 m up and 40 m north of you and looks at your
-## feet. Orthographic height is 44 m at zoom 1. The wheel (and a pinch) zooms
+## feet. Orthographic height is 32 m at zoom 1, closer than the original 44 m
+## so a person and a shopfront can be read. The offset, and so the angle, is unchanged. The wheel (and a pinch) zooms
 ## between 0.5 and 2.2. W/S run along the screen's up axis, A/D along its right,
 ## which is the diagonal (-1, 0, -1) / (1, 0, -1) used there. Walk 3.4 m/s,
 ## run 6 m/s. Clicking sets an aim point for the combat hook and does not
@@ -18,8 +19,10 @@ var _step_time: float = 0.0
 var _notice_time: float = 0.0
 var _pinch: float = -1.0
 var city: CityData
+var face_river: bool = false
 
 const CAM_OFF := Vector3(40, 56, 40)
+const CAM_RIVER := Vector3(26, 38, -26)
 const SCREEN_UP := Vector3(-0.70710678, 0, -0.70710678)
 const SCREEN_RIGHT := Vector3(0.70710678, 0, -0.70710678)
 const WALK := 3.4
@@ -60,9 +63,9 @@ func set_zoom(value: float) -> void:
 	var vp := get_viewport()
 	if vp and vp.size.y > 0.0:
 		aspect = vp.size.x / vp.size.y
-	var half := 22.0
+	var half := 16.0
 	if aspect < 1.0:
-		half = maxf(22.0, 16.0 / aspect) * 0.62
+		half = maxf(16.0, 12.0 / aspect) * 0.62
 	_cam.size = (half * 2.0) / zoom
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -125,8 +128,12 @@ func _physics_process(delta: float) -> void:
 			stepped.emit()
 
 func _rig() -> void:
-	_cam.global_position = global_position + CAM_OFF
-	_cam.look_at(global_position, Vector3.UP)
+	if face_river:
+		_cam.global_position = global_position + CAM_RIVER
+		_cam.look_at(global_position + Vector3(0, 2.0, 22.0), Vector3.UP)
+	else:
+		_cam.global_position = global_position + CAM_OFF
+		_cam.look_at(global_position, Vector3.UP)
 
 func _aim_at_screen(screen: Vector2) -> void:
 	var origin := _cam.project_ray_origin(screen)

@@ -52,6 +52,11 @@ func _ready() -> void:
 	add_child(people)
 	people.build(city.data)
 
+	var kit := FacadeKit.new()
+	kit.name = "FacadeKit"
+	add_child(kit)
+	kit.build(city)
+
 	var destruction := Destruction.new()
 	destruction.name = "Destruction"
 	add_child(destruction)

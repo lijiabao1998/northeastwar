@@ -17,15 +17,33 @@ func _ready() -> void:
 	city.name = "ImportedCity"
 	add_child(city)
 	add_to_group("city_view")
+	var snow_alb := load("res://assets/textures/polyhaven/snow_02_diff.jpg")
+	var snow_nrm := load("res://assets/textures/polyhaven/snow_02_nor.jpg")
+	var dirty_alb := load("res://assets/textures/polyhaven/snow_04_diff.jpg")
+	var asphalt_alb := load("res://assets/textures/polyhaven/asphalt_02_diff.jpg")
+	var asphalt_nrm := load("res://assets/textures/polyhaven/asphalt_02_nor.jpg")
+	var brick_alb := load("res://assets/textures/polyhaven/red_brick_diff.jpg")
+	var brick_nrm := load("res://assets/textures/polyhaven/red_brick_nor.jpg")
+	var stone_alb := load("res://assets/textures/polyhaven/granite_diff.jpg")
+	var stone_nrm := load("res://assets/textures/polyhaven/granite_nor.jpg")
 	var facade := _shader("res://shaders/facade.gdshader", {"floor_h": 3.0, "bay": 3.15})
 	var euro := _shader("res://shaders/european.gdshader", {"floor_h": 4.05, "bay": 3.7})
 	var glass := _shader("res://shaders/glass.gdshader", {})
-	var road := _shader("res://shaders/road.gdshader", {})
-	var walk := _shader("res://shaders/sidewalk.gdshader", {})
-	var ice := _shader("res://shaders/ice.gdshader", {})
-	var snow := _shader("res://shaders/snow.gdshader", {})
-	var ground := _shader("res://shaders/ground.gdshader", {})
-	var prom := _shader("res://shaders/promenade.gdshader", {})
+	var road := _shader("res://shaders/road.gdshader", {
+		"snow_alb": snow_alb, "snow_nrm": snow_nrm, "dirty_alb": dirty_alb,
+		"asphalt_alb": asphalt_alb, "asphalt_nrm": asphalt_nrm,
+	})
+	var walk := _shader("res://shaders/sidewalk.gdshader", {
+		"brick_alb": brick_alb, "brick_nrm": brick_nrm, "snow_alb": snow_alb, "snow_nrm": snow_nrm,
+	})
+	var ice := _shader("res://shaders/ice.gdshader", {
+		"snow_alb": snow_alb, "snow_nrm": snow_nrm, "dirty_alb": dirty_alb,
+	})
+	var snow := _shader("res://shaders/snow.gdshader", {"snow_alb": snow_alb, "snow_nrm": snow_nrm})
+	var ground := _shader("res://shaders/ground.gdshader", {"snow_alb": snow_alb, "snow_nrm": snow_nrm})
+	var prom := _shader("res://shaders/promenade.gdshader", {
+		"stone_alb": stone_alb, "stone_nrm": stone_nrm, "brick_alb": brick_alb, "snow_alb": snow_alb,
+	})
 	var car := _paint(0.45, 0.55, 0.15)
 	var car_glass := _paint(0.12, 0.35, 0.0)
 	car_glass.albedo_color = Color(0.02, 0.03, 0.04)
@@ -40,7 +58,7 @@ func _ready() -> void:
 		"Sidewalk": walk,
 		"Ice": ice,
 		"Snow": snow,
-		"Roof": _paint(0.85, 0.0, 0.0),
+		"Roof": snow,
 		"Ground": ground,
 		"Promenade": prom,
 		"Car": car,

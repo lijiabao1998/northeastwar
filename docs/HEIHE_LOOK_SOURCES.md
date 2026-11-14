@@ -16,6 +16,10 @@ This pass only dresses the blocks already in the slice: 中央街 down to the He
 
 Shop names on the signs are still the OpenStreetMap names from the importer (ODbL). They are not invented brands.
 
+## CC0 files actually in the build
+
+Poly Haven CC0 textures (`snow_02`, `snow_04`, `asphalt_02`, `yellow_plaster`, `white_plaster_02`, `rectangular_facade_tiles`, `red_brick_03`, `granite_tile`, `concrete_wall_001`) and three Quaternius CC0 characters (casual male, casual female, worker male). Full credit is in `CREDITS.md`. No winter-coat or infantry-uniform CC0 mesh was in the packs that could be downloaded, and no CC0 car was wired in; the parked van is still a generated box with a snow cap.
+
 ## What was drawn, not copied
 
 - Every material is a shader. No photo is used as a texture. Tile, snow, ice and window normals are computed in the shader.

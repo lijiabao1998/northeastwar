@@ -21,11 +21,28 @@ uniform vec3 a7 = vec3(0.0);
 uniform vec3 b7 = vec3(0.0);
 uniform vec3 crack_at = vec3(0.0, 8.0, 0.0);
 uniform float crack = 0.0;
+uniform float hide_n = 0.0;
+uniform vec3 ha0 = vec3(0.0);
+uniform vec3 hb0 = vec3(0.0);
+uniform vec3 ha1 = vec3(0.0);
+uniform vec3 hb1 = vec3(0.0);
+uniform vec3 ha2 = vec3(0.0);
+uniform vec3 hb2 = vec3(0.0);
+uniform vec3 ha3 = vec3(0.0);
+uniform vec3 hb3 = vec3(0.0);
 
 varying vec3 v_world;
 
 bool inside_box(vec3 p, vec3 mn, vec3 mx) {
 	return p.x >= mn.x && p.x <= mx.x && p.y >= mn.y && p.y <= mx.y && p.z >= mn.z && p.z <= mx.z;
+}
+
+bool kit_hidden(vec3 p) {
+	if (hide_n > 0.5 && inside_box(p, ha0, hb0)) return true;
+	if (hide_n > 1.5 && inside_box(p, ha1, hb1)) return true;
+	if (hide_n > 2.5 && inside_box(p, ha2, hb2)) return true;
+	if (hide_n > 3.5 && inside_box(p, ha3, hb3)) return true;
+	return false;
 }
 
 bool carved(vec3 p) {

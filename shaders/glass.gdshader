@@ -17,7 +17,7 @@ void vertex() {
 }
 
 void fragment() {
-	if (carved(v_world)) {
+	if (carved(v_world) || kit_hidden(v_world)) {
 		discard;
 	}
 	float pane_x = floor(UV.x / 1.15);

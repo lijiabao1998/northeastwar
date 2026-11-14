@@ -38,10 +38,10 @@ func _ready() -> void:
 	environment.fog_density = 0.0011
 	environment.fog_aerial_perspective = 0.55
 	environment.fog_sky_affect = 0.4
-	environment.volumetric_fog_density = 0.0022
-	environment.volumetric_fog_albedo = Color(0.62, 0.66, 0.74)
-	environment.volumetric_fog_emission = Color(0.03, 0.02, 0.015)
-	environment.volumetric_fog_emission_energy = 0.4
+	environment.volumetric_fog_density = 0.0006
+	environment.volumetric_fog_albedo = Color(0.72, 0.74, 0.78)
+	environment.volumetric_fog_emission = Color(0.02, 0.022, 0.028)
+	environment.volumetric_fog_emission_energy = 0.12
 	environment.volumetric_fog_length = 180.0
 	environment.volumetric_fog_detail_spread = 2.0
 	environment.volumetric_fog_ambient_inject = 0.35
@@ -142,8 +142,8 @@ func _apply_hour(hour: float) -> void:
 	if GameState.quality == "low":
 		haze = lerpf(0.0014, 0.0022, t)
 	environment.fog_density = haze
-	environment.volumetric_fog_albedo = Color(0.55, 0.58, 0.62).lerp(Color(0.25, 0.24, 0.22), t)
-	environment.volumetric_fog_emission = Color(0.08, 0.05, 0.03)
+	environment.volumetric_fog_albedo = Color(0.7, 0.72, 0.76).lerp(Color(0.35, 0.36, 0.4), t)
+	environment.volumetric_fog_emission = Color(0.02, 0.02, 0.025)
 	if _city:
 		_city.set_night(night)
 	if _props:

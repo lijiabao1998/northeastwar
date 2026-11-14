@@ -65,6 +65,13 @@ Sunset time used for the sky (17 January, about 15:58 CST, sun around 238°) is 
 
 Wind, snow crunch, the phone tone and the distant booms are synthesized in `tools/audio/gen_audio.py`. They are original. No recordings are included.
 
+## CC0 textures and characters
+
+These files are in the repo and are not covered by the proprietary code licence.
+
+- Textures from [Poly Haven](https://polyhaven.com) (CC0): `snow_02`, `snow_04`, `asphalt_02`, `rectangular_facade_tiles`, `yellow_plaster`, `white_plaster_02`, `red_brick_03`, `granite_tile`, `concrete_wall_001`. 1K JPG, diffuse and normal (and roughness for snow and asphalt). Files live in `assets/textures/polyhaven/`.
+- Characters from [Quaternius](https://quaternius.com) (CC0): Casual Male, Casual Female and Worker Male, from the Universal / casual character packs. The glb files in `assets/models/quaternius/` are those meshes. They are casual and work clothes, not a surveyed Northeast winter coat and not a current Russian infantry uniform. A rifle box on the worker is original.
+
 ## Engine
 
 [Godot Engine 4.7.2 stable](https://godotengine.org/download/archive/4.7.2-stable/) (commit `ed1daf0bf`, 18 August 2026), MIT License. This project is not affiliated with Godot.
