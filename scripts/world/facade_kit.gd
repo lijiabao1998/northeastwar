@@ -316,6 +316,14 @@ func _storefront(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, gl
 	var at := origin + out * 0.34 + Vector3(0, -0.35, 0)
 	_put(parent, glass, glass_mat, Transform3D(basis, at))
 	_put(parent, frame, frame_mat, Transform3D(basis, at + out * 0.04))
+	if index % 2 == 0:
+		var spill := OmniLight3D.new()
+		spill.position = at + out * 1.4
+		spill.light_color = Color(1.0, 0.62, 0.28)
+		spill.light_energy = 2.6
+		spill.omni_range = 6.5
+		spill.shadow_enabled = false
+		parent.add_child(spill)
 	if index % 3 == 0:
 		for s in 6:
 			var y := 0.55 - float(s) * 0.16

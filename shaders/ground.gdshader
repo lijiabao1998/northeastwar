@@ -3,17 +3,13 @@ render_mode diffuse_burley, cull_disabled;
 
 varying vec3 v_world;
 
-uniform sampler2D snow_alb : source_color, repeat_enable;
-uniform sampler2D snow_nrm : hint_normal, repeat_enable;
-
 void vertex() {
 	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
-	vec2 uv = v_world.xz * 0.08;
-	ALBEDO = texture(snow_alb, uv).rgb * vec3(0.62, 0.68, 0.76);
-	NORMAL_MAP = texture(snow_nrm, uv).rgb;
-	ROUGHNESS = 0.88;
+	float n = fract(sin(dot(floor(v_world.xz * 0.15), vec2(3.0, 7.0))) * 90.0);
+	ALBEDO = vec3(0.74, 0.78, 0.82) * (0.94 + 0.08 * n);
+	ROUGHNESS = 0.9;
 	METALLIC = 0.0;
 }

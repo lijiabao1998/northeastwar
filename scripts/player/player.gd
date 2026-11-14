@@ -22,7 +22,7 @@ var _pinch: float = -1.0
 var city: CityData
 var face_river: bool = false
 
-const CAM_OFF := Vector3(14, 36, 14)
+const CAM_OFF := Vector3(8, 18, 8)
 const CAM_RIVER := Vector3(16, 34, -16)
 const SCREEN_UP := Vector3(-0.70710678, 0, -0.70710678)
 const SCREEN_RIGHT := Vector3(0.70710678, 0, -0.70710678)
@@ -70,9 +70,10 @@ func set_zoom(value: float) -> void:
 	var vp := get_viewport()
 	if vp and vp.size.y > 0.0:
 		aspect = vp.size.x / vp.size.y
-	var half := 15.0
+	# 12 m tall at zoom 1: a 3 m shopfront is about a quarter to a third of the frame.
+	var half := 6.0
 	if aspect < 1.0:
-		half = maxf(15.0, 11.0 / aspect) * 0.62
+		half = maxf(6.0, 4.5 / aspect) * 0.7
 	_cam.size = (half * 2.0) / zoom
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -140,7 +141,7 @@ func _rig() -> void:
 		_cam.look_at(global_position + Vector3(0, 2.0, 22.0), Vector3.UP)
 	else:
 		_cam.global_position = global_position + CAM_OFF
-		_cam.look_at(global_position, Vector3.UP)
+		_cam.look_at(global_position + Vector3(0, 2.2, 0), Vector3.UP)
 
 func _aim_at_screen(screen: Vector2) -> void:
 	var origin := _cam.project_ray_origin(screen)

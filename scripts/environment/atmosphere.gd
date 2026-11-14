@@ -124,8 +124,8 @@ func _apply_hour(hour: float) -> void:
 	var t := clampf((hour - 16.0) / 2.0, 0.0, 1.0)
 	var sunset := clampf((hour - 16.0) / 1.2, 0.0, 1.0)
 	var night := smoothstep(15.85, 17.5, hour)
-	_sky.sky_top_color = Color(0.20, 0.26, 0.34).lerp(Color(0.015, 0.02, 0.03), t)
-	_sky.sky_horizon_color = Color(0.72, 0.48, 0.34).lerp(Color(0.07, 0.07, 0.08), t)
+	_sky.sky_top_color = Color(0.22, 0.36, 0.55).lerp(Color(0.02, 0.03, 0.06), t)
+	_sky.sky_horizon_color = Color(0.55, 0.64, 0.74).lerp(Color(0.08, 0.09, 0.12), t)
 	_sky.ground_horizon_color = Color(0.58, 0.60, 0.64).lerp(Color(0.05, 0.05, 0.06), t)
 	_sky.ground_bottom_color = Color(0.42, 0.44, 0.48).lerp(Color(0.03, 0.03, 0.035), t)
 	# Sunset on 17 January is about 238° from north (WSW). The light shines
@@ -134,13 +134,13 @@ func _apply_hour(hour: float) -> void:
 	sun.rotation_degrees = Vector3(-elev, 238.0 + 180.0, 0.0)
 	sun.light_energy = lerpf(0.42, 0.03, sunset)
 	sun.light_color = Color(1.0, 0.78, 0.58).lerp(Color(0.55, 0.62, 0.72), sunset)
-	environment.ambient_light_color = Color(0.45, 0.52, 0.64).lerp(Color(0.12, 0.14, 0.2), t)
-	environment.ambient_light_energy = lerpf(0.28, 0.07, t)
-	environment.tonemap_exposure = 0.92
+	environment.ambient_light_color = Color(0.62, 0.7, 0.82).lerp(Color(0.28, 0.32, 0.42), t)
+	environment.ambient_light_energy = lerpf(0.72, 0.38, t)
+	environment.tonemap_exposure = 1.2
 	environment.fog_light_color = Color(0.62, 0.66, 0.70).lerp(Color(0.08, 0.08, 0.09), t)
-	var haze := lerpf(0.004, 0.009, t)
+	var haze := lerpf(0.0012, 0.0024, t)
 	if GameState.quality == "low":
-		haze = lerpf(0.003, 0.006, t)
+		haze = lerpf(0.001, 0.0018, t)
 	environment.fog_density = haze
 	environment.volumetric_fog_albedo = Color(0.7, 0.72, 0.76).lerp(Color(0.35, 0.36, 0.4), t)
 	environment.volumetric_fog_emission = Color(0.02, 0.02, 0.025)

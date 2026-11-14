@@ -76,7 +76,7 @@ func _tree_mesh() -> ArrayMesh:
 	for i in 7:
 		var ang := float(i) / 7.0 * TAU
 		var dir := Vector3(sin(ang) * 0.55, 0.85, cos(ang) * 0.55).normalized()
-		_cylinder_along(st, crown, crown + dir * 0.55, 0.028, Color(0.24, 0.2, 0.16))
+		_cylinder_along(st, crown, crown + dir * 0.55, 0.045, Color(0.82, 0.86, 0.9))
 	st.generate_normals()
 	return st.commit()
 
@@ -158,9 +158,10 @@ func _signs(rows: Array) -> void:
 		var palette := int(row.get("palette", 0))
 		zh = _short_sign(zh)
 		if kind == "shop":
-			width = clampf(0.72 * maxf(float(zh.length()), 2.0), 2.6, 5.4)
+			width = clampf(0.95 * maxf(float(zh.length()), 2.0), 3.2, 6.4)
+			height = 1.55
 			palette = 0 if (int(abs(row.get("x", 0.0))) / 6) % 2 == 0 else 2
-			holder.position.y = 2.85
+			holder.position.y = 3.05
 		elif kind == "street":
 			height = 0.55
 			width = maxf(width, 2.2)
@@ -177,21 +178,28 @@ func _signs(rows: Array) -> void:
 		# Holder -Z points at the street. Label3D's face is its own +Z.
 		var main := zh if zh != "" else ru
 		var chars := maxi(main.length(), 1)
-		var pixel := clampf(width * 0.78 / float(chars) / 52.0, 0.012, 0.026)
-		var label := _label(main, 0.034 if kind == "rooftop" else pixel, 64 if kind == "rooftop" else 52)
-		label.position = Vector3(0, 0.18 if (zh != "" and ru != "" and kind == "shop") else 0.0, -0.09)
+		var pixel := clampf(width * 0.86 / float(chars) / 48.0, 0.02, 0.042)
+		var label := _label(main, 0.04 if kind == "rooftop" else pixel, 72 if kind == "rooftop" else 64)
+		label.position = Vector3(0, 0.28 if (zh != "" and ru != "" and kind == "shop") else 0.0, -0.1)
 		label.rotation.y = PI
-		label.modulate = Color(1, 0.97, 0.94)
+		label.modulate = Color(1.0, 0.93, 0.45) if kind == "shop" else Color(1, 0.97, 0.94)
 		if kind == "rooftop":
 			label.modulate = Color(0.92, 0.08, 0.05)
 			label.outline_size = 18
 		holder.add_child(label)
 		if zh != "" and ru != "" and kind == "shop":
-			var sub := _label(ru, pixel * 0.62, 36)
-			sub.position = Vector3(0, -0.32, -0.09)
+			var sub := _label(ru, pixel * 0.72, 42)
+			sub.position = Vector3(0, -0.38, -0.1)
 			sub.rotation.y = PI
-			sub.modulate = Color(1, 0.95, 0.85)
+			sub.modulate = Color(0.9, 0.95, 1.0)
 			holder.add_child(sub)
+			var spill := OmniLight3D.new()
+			spill.position = Vector3(0, 0, -0.8)
+			spill.light_color = Color(1.0, 0.45, 0.18) if palette == 0 else Color(0.45, 0.65, 1.0)
+			spill.light_energy = 3.2
+			spill.omni_range = 7.0
+			spill.shadow_enabled = false
+			holder.add_child(spill)
 		if kind == "shop":
 			holder.add_to_group("street_sign")
 		add_child(holder)
@@ -228,9 +236,9 @@ func _parked_car(sign_pos: Vector3, yaw: float) -> void:
 
 func _snowbanks(rows: Array) -> void:
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(5.5, 0.7, 1.3)
+	mesh.size = Vector3(3.4, 1.05, 1.15)
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.86, 0.88, 0.9)
+	mat.albedo_color = Color(0.72, 0.76, 0.8)
 	mat.roughness = 0.95
 	mesh.material = mat
 	var multi := MultiMesh.new()
@@ -240,11 +248,9 @@ func _snowbanks(rows: Array) -> void:
 	for row in rows:
 		if str(row.get("kind", "")) != "shop":
 			continue
-		if int(abs(row.get("x", 0.0))) % 18 > 6:
-			continue
 		var yaw := float(row["yaw"])
 		var facing := Vector3(-sin(yaw), 0.0, -cos(yaw))
-		var pos := Vector3(float(row["x"]), 0.32, float(row["z"])) + facing * 4.2
+		var pos := Vector3(float(row["x"]), 0.5, float(row["z"])) + facing * 2.3
 		xforms.append(Transform3D(Basis(Vector3.UP, yaw), pos))
 	if xforms.is_empty():
 		return
@@ -323,8 +329,9 @@ func _label(text: String, pixel: float, size: int) -> Label3D:
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	label.double_sided = true
 	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	label.outline_size = 6
-	label.outline_modulate = Color(0, 0, 0, 0.85)
+	label.shaded = false
+	label.outline_size = 10
+	label.outline_modulate = Color(0, 0, 0, 0.9)
 	label.modulate = Color(1, 0.97, 0.92)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -349,7 +356,10 @@ func _sign_material(palette: int, kind: String) -> StandardMaterial3D:
 	elif kind == "street":
 		mat.albedo_color = Color(0.05, 0.2, 0.62)
 	elif kind == "shop":
-		mat.albedo_color = Color(0.78, 0.05, 0.06) if palette == 0 else Color(0.04, 0.2, 0.7)
+		mat.albedo_color = Color(0.95, 0.08, 0.07) if palette == 0 else Color(0.12, 0.38, 0.95)
+		mat.emission_enabled = true
+		mat.emission = mat.albedo_color
+		mat.emission_energy_multiplier = 0.8
 	return mat
 
 func _air_conditioners(buildings: Array) -> void:
