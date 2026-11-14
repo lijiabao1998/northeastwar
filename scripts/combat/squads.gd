@@ -83,7 +83,10 @@ func pose_firefight(origin: Vector3, toward: Vector3) -> void:
 		child.set_meta("firing", true)
 		var flash := child.get_node_or_null("Flash") as OmniLight3D
 		if flash:
-			flash.light_energy = 6.0 if i % 2 == 0 else 2.5
+			flash.light_energy = 8.0 if i % 2 == 0 else 3.0
+		var muzzle := child.get_node_or_null("Muzzle") as MeshInstance3D
+		if muzzle:
+			muzzle.visible = i % 2 == 0
 		i += 1
 	squad.set_meta("mode", "fight")
 
@@ -155,7 +158,14 @@ func _shoot_at_player(body: Node3D) -> void:
 	body.set_meta("next_shot", Time.get_ticks_msec() / 1000.0 + randf_range(0.7, 1.5))
 	var flash := body.get_node_or_null("Flash") as OmniLight3D
 	if flash:
-		flash.light_energy = 5.0
+		flash.light_energy = 8.0
+	var muzzle := body.get_node_or_null("Muzzle") as MeshInstance3D
+	if muzzle:
+		muzzle.visible = true
+		get_tree().create_timer(0.06).timeout.connect(func():
+			if is_instance_valid(muzzle):
+				muzzle.visible = false
+		)
 	var player := _player()
 	if player == null:
 		return
@@ -193,15 +203,9 @@ func _grenade(from: Vector3, to: Vector3) -> void:
 	)
 
 func _boom(at: Vector3, radius: float, player_dmg: float, building_dmg: float) -> void:
-	var light := OmniLight3D.new()
-	light.position = at + Vector3(0, 1.5, 0)
-	light.light_color = Color(1, 0.55, 0.2)
-	light.light_energy = 18.0
-	light.omni_range = 22.0
-	add_child(light)
-	var tween := create_tween()
-	tween.tween_property(light, "light_energy", 0.0, 0.35)
-	tween.tween_callback(light.queue_free)
+	var guns := get_tree().get_first_node_in_group("ordinance")
+	if guns and guns.has_method("burst") and not GameState.shot_mode:
+		guns.burst(at, false)
 	var destruction := _destruction()
 	if destruction:
 		destruction.damage_at(at + Vector3(0, 3, 0), radius + 4.0, building_dmg)
@@ -216,16 +220,19 @@ func _boom(at: Vector3, radius: float, player_dmg: float, building_dmg: float) -
 func _tracer(a: Vector3, b: Vector3) -> void:
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(0.05, 0.05, a.distance_to(b))
+	box.size = Vector3(0.04, 0.04, a.distance_to(b))
 	mesh.mesh = box
 	mesh.position = (a + b) * 0.5
 	mesh.look_at(b, Vector3.UP)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1, 0.72, 0.3)
+	mat.albedo_color = Color(1, 0.78, 0.35)
+	mat.emission_enabled = true
+	mat.emission = Color(1, 0.6, 0.2)
+	mat.emission_energy_multiplier = 3.0
 	mesh.material_override = mat
 	add_child(mesh)
-	var timer := get_tree().create_timer(0.08)
+	var timer := get_tree().create_timer(0.12)
 	timer.timeout.connect(mesh.queue_free)
 
 func _soldier(index: int) -> CharacterBody3D:
@@ -243,7 +250,20 @@ func _soldier(index: int) -> CharacterBody3D:
 	body.add_child(shape)
 	var visual := Node3D.new()
 	body.add_child(visual)
-	_coat(visual, Color(0.25, 0.28, 0.2) if index % 2 == 0 else Color(0.32, 0.3, 0.24))
+	WinterFigure.attach(visual, "soldier", Color(0.34, 0.36, 0.26) if index % 2 == 0 else Color(0.42, 0.4, 0.32))
+	var muzzle := MeshInstance3D.new()
+	muzzle.name = "Muzzle"
+	var flash_mesh := SphereMesh.new()
+	flash_mesh.radius = 0.12
+	flash_mesh.height = 0.24
+	muzzle.mesh = flash_mesh
+	muzzle.position = Vector3(0.16, 1.12, -0.62)
+	var flash_mat := StandardMaterial3D.new()
+	flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash_mat.albedo_color = Color(1, 0.85, 0.45)
+	muzzle.material_override = flash_mat
+	muzzle.visible = false
+	body.add_child(muzzle)
 	var flash := OmniLight3D.new()
 	flash.name = "Flash"
 	flash.position = Vector3(0, 1.35, -0.4)
@@ -252,25 +272,6 @@ func _soldier(index: int) -> CharacterBody3D:
 	flash.light_energy = 0.0
 	body.add_child(flash)
 	return body
-
-func _coat(parent: Node3D, color: Color) -> void:
-	_box(parent, Vector3(0, 1.0, 0), Vector3(0.5, 0.7, 0.32), color)
-	_box(parent, Vector3(0, 1.48, 0), Vector3(0.22, 0.16, 0.22), Color(0.18, 0.2, 0.14))
-	_box(parent, Vector3(0.18, 1.15, -0.2), Vector3(0.08, 0.08, 0.7), Color(0.1, 0.1, 0.1))
-	_box(parent, Vector3(-0.12, 0.35, 0), Vector3(0.14, 0.55, 0.16), Color(0.15, 0.14, 0.12))
-	_box(parent, Vector3(0.12, 0.35, 0), Vector3(0.14, 0.55, 0.16), Color(0.15, 0.14, 0.12))
-
-func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mi.mesh = mesh
-	mi.position = pos
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.8
-	mi.material_override = mat
-	parent.add_child(mi)
 
 func _player() -> Player:
 	var node := get_tree().get_first_node_in_group("player")

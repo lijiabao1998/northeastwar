@@ -38,10 +38,10 @@ func _ready() -> void:
 		if quality not in LEVELS:
 			quality = "medium"
 	var args := OS.get_cmdline_user_args()
-	shot_mode = "--shots" in args or "--combat-shots" in args
+	shot_mode = "--shots" in args or "--combat-shots" in args or "--fidelity-shots" in args
 	if shot_mode:
 		started_play = true
-		quality = "medium"
+		quality = "high" if "--fidelity-shots" in args else "medium"
 
 func tick(delta: float) -> void:
 	if not started_play or paused or shot_mode:

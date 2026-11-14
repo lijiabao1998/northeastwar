@@ -34,8 +34,11 @@ void fragment() {
 	vec3 interior = vec3(1.0, 0.64, 0.30);
 	vec3 glass_col = mix(vec3(0.07, 0.09, 0.12), interior, lit);
 	glass_col = mix(glass_col, vec3(0.55, 0.62, 0.7), (1.0 - night) * 0.25);
+	float bars = step(0.84, fract(UV.x * 8.0)) + step(0.9, fract(UV.y * 6.0));
+	bars = clamp(bars, 0.0, 1.0);
 	ALBEDO = mix(glass_col, vec3(0.95, 0.96, 0.94), frame);
-	ROUGHNESS = mix(0.16, 0.55, frame);
-	METALLIC = 0.04 * glass;
-	EMISSION = interior * glass * lit * (2.2 + night * 1.4);
+	ALBEDO = mix(ALBEDO, vec3(0.14, 0.15, 0.16), bars * 0.8);
+	ROUGHNESS = mix(0.16, 0.55, max(frame, bars));
+	METALLIC = max(0.04 * glass, bars * 0.45);
+	EMISSION = interior * glass * lit * (2.2 + night * 1.4) * (1.0 - bars);
 }

@@ -3,11 +3,11 @@ class_name Pedestrians
 ## Ordinary people on the mapped sidewalks. Nobody here is a soldier.
 
 const COATS := [
-	Color(0.18, 0.19, 0.22),
-	Color(0.12, 0.16, 0.26),
-	Color(0.28, 0.16, 0.12),
-	Color(0.32, 0.1, 0.1),
-	Color(0.22, 0.22, 0.24),
+	Color(0.9, 0.91, 0.93),
+	Color(0.16, 0.18, 0.22),
+	Color(0.45, 0.18, 0.16),
+	Color(0.55, 0.42, 0.28),
+	Color(0.2, 0.24, 0.34),
 ]
 const BEFORE_ZH := [
 	"这风跟刀子似的。",
@@ -65,7 +65,8 @@ func build(data: Dictionary) -> void:
 		person.position = Vector3(float(start[0]), 0.05, float(start[1]))
 		var visual := Node3D.new()
 		person.add_child(visual)
-		_coat(visual, COATS[i % COATS.size()], 0.92 + (i % 5) * 0.03)
+		WinterFigure.attach(visual, "civilian", COATS[i % COATS.size()])
+		visual.scale = Vector3(1, 0.94 + (i % 5) * 0.02, 1)
 		var walker := Pedestrian.new()
 		walker.path = path
 		walker.index = randi() % path.size()
@@ -75,27 +76,6 @@ func build(data: Dictionary) -> void:
 		person.add_to_group("npc")
 		add_child(person)
 		_people.append(person)
-
-func _coat(parent: Node3D, color: Color, scale_y: float) -> void:
-	parent.scale = Vector3(1, scale_y, 1)
-	_box(parent, Vector3(0, 0.95, 0), Vector3(0.48, 0.75, 0.3), color)
-	_box(parent, Vector3(0, 1.4, 0.02), Vector3(0.2, 0.2, 0.2), Color(0.7, 0.56, 0.46))
-	_box(parent, Vector3(0, 1.5, 0.05), Vector3(0.28, 0.14, 0.28), Color(0.08, 0.07, 0.06))
-	_box(parent, Vector3(-0.14, 0.4, 0), Vector3(0.13, 0.5, 0.15), Color(0.07, 0.07, 0.08))
-	_box(parent, Vector3(0.14, 0.4, 0), Vector3(0.13, 0.5, 0.15), Color(0.07, 0.07, 0.08))
-
-func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mi.mesh = mesh
-	mi.position = pos
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.85
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)
 
 class Pedestrian extends Node:
 	var path: Array = []

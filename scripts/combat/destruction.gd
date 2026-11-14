@@ -136,6 +136,7 @@ func breach_facade(id: int, hint: Vector3) -> void:
 	if not _ensure(id):
 		return
 	_hurt_section(id, 0, 400.0)
+	_hurt_section(id, 1, 55.0)
 
 func nearest_id(point: Vector3) -> int:
 	var best := -1
@@ -154,13 +155,16 @@ func _hurt_section(id: int, section: int, amount: float) -> void:
 		return
 	hp[section] = float(hp[section]) - amount
 	state.hurt = float(state.hurt) + amount
-	if float(hp[section]) > 0.0:
-		return
-	hp[section] = 0.0
 	var building: Dictionary = state.building
 	var sections := int(state.sections)
 	var y0: float = float(building.height) * float(section) / float(sections)
 	var y1: float = float(building.height) * float(section + 1) / float(sections)
+	var at := Vector3(float(building.x), (y0 + y1) * 0.5, float(building.z))
+	if float(hp[section]) > 0.0:
+		_mark_crack(at, clampf(1.0 - float(hp[section]) / 100.0, 0.15, 1.0))
+		return
+	hp[section] = 0.0
+	_mark_crack(Vector3(at.x, y1 + 1.5, at.z), 0.7)
 	_carve(building, y0, y1)
 	var hint := _last_point
 	if hint == Vector3.ZERO:
@@ -199,6 +203,14 @@ func _push_uniforms() -> void:
 			mat.set_shader_parameter("a%d" % i, mn)
 			mat.set_shader_parameter("b%d" % i, mx)
 	_hide_signs()
+
+func _mark_crack(at: Vector3, amount: float) -> void:
+	var view := get_tree().get_first_node_in_group("city_view")
+	if view == null or not ("cut_materials" in view):
+		return
+	for mat in view.cut_materials:
+		mat.set_shader_parameter("crack_at", at)
+		mat.set_shader_parameter("crack", amount)
 
 func _hide_signs() -> void:
 	for node in get_tree().get_nodes_in_group("street_sign"):

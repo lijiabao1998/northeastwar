@@ -10,6 +10,7 @@ uniform float bay = 3.15;
 varying vec3 v_color;
 varying float v_seed;
 varying float v_shop;
+varying vec3 v_wnormal;
 
 float hashf(float n) {
 	return fract(sin(n) * 43758.5453);
@@ -20,6 +21,7 @@ void vertex() {
 	v_seed = UV2.x;
 	v_shop = UV2.y;
 	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	v_wnormal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
 void fragment() {
@@ -99,6 +101,51 @@ void fragment() {
 			emit = max(emit, glass * night * 0.35);
 		}
 		emission = interior * emit;
+		// Enclosed balcony: a glass band and a security grille on alternate floors.
+		if (!shop_floor && row > 0.5 && mod(row, 2.0) > 0.5) {
+			float band = smoothstep(0.06, 0.14, cell.y) * smoothstep(0.46, 0.34, cell.y);
+			float span = smoothstep(0.1, 0.18, cell.x) * smoothstep(0.9, 0.82, cell.x);
+			float balcony = band * span;
+			float bars = step(0.86, fract(cell.x * 16.0));
+			albedo = mix(albedo, vec3(0.62, 0.7, 0.74), balcony * 0.7);
+			albedo = mix(albedo, vec3(0.12, 0.13, 0.14), balcony * bars);
+			rough = mix(rough, 0.28, balcony * 0.8);
+			emission += vec3(0.35, 0.22, 0.1) * balcony * lit * 0.25;
+		}
+		// Snow caught on the sill.
+		float sill = smoothstep(0.2, 0.28, cell.y) * smoothstep(0.38, 0.3, cell.y);
+		sill *= smoothstep(0.2, 0.3, cell.x) * smoothstep(0.8, 0.7, cell.x);
+		albedo = mix(albedo, vec3(0.9, 0.92, 0.94), sill);
+		// Curtain behind some lit panes.
+		float curtain = glass * step(0.42, fract(h * 2.7));
+		vec3 curtain_col = mix(vec3(0.45, 0.16, 0.14), vec3(0.2, 0.28, 0.42), step(0.66, h));
+		albedo = mix(albedo, curtain_col, curtain * max(lit, shop_lit) * 0.75);
+		if (shop_floor && v_seed > 0.62) {
+			float shut = smoothstep(0.08, 0.5, cell.y);
+			float slat = step(0.55, fract(cell.y * 22.0));
+			albedo = mix(albedo, vec3(0.62, 0.63, 0.64), shut * 0.9);
+			albedo = mix(albedo, vec3(0.4, 0.41, 0.42), shut * slat);
+			emission *= (1.0 - shut);
+		}
+		float ac = step(0.8, cell.y) * step(cell.y, 0.96) * step(0.36, cell.x) * step(cell.x, 0.64);
+		ac *= step(0.45, fract(col * 0.37 + v_seed));
+		albedo = mix(albedo, vec3(0.75, 0.77, 0.78), ac);
+		rough = mix(0.95, rough, 1.0 - grout * 0.85);
+		float bump = grout + sill;
+		NORMAL = normalize(NORMAL + vec3(dFdx(bump), dFdy(bump), 0.0) * 1.6);
+	}
+	if (v_wnormal.y > 0.45) {
+		albedo = mix(albedo, vec3(0.93, 0.94, 0.96), smoothstep(0.45, 0.85, v_wnormal.y));
+		rough = mix(rough, 0.82, v_wnormal.y);
+	}
+	if (crack > 0.02) {
+		float dist = length(v_world.xz - crack_at.xz);
+		float reach = smoothstep(18.0 * crack + 4.0, 0.4, dist);
+		float fissure = smoothstep(0.86, 0.98, abs(sin(v_world.x * 5.5 + v_world.y * 8.0 + v_world.z * 2.0)));
+		float branch = smoothstep(0.9, 0.99, abs(sin(v_world.y * 3.0 - v_world.x * 7.0)));
+		albedo = mix(albedo, albedo * 0.45, reach * 0.55);
+		albedo = mix(albedo, vec3(0.05, 0.045, 0.04), reach * max(fissure, branch));
+		rough = mix(rough, 1.0, reach);
 	}
 	ALBEDO = albedo;
 	ROUGHNESS = rough;

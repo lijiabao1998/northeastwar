@@ -19,6 +19,8 @@ uniform vec3 a6 = vec3(0.0);
 uniform vec3 b6 = vec3(0.0);
 uniform vec3 a7 = vec3(0.0);
 uniform vec3 b7 = vec3(0.0);
+uniform vec3 crack_at = vec3(0.0, 8.0, 0.0);
+uniform float crack = 0.0;
 
 varying vec3 v_world;
 

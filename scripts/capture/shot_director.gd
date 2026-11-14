@@ -14,6 +14,11 @@ func _run() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if "--fidelity-shots" in OS.get_cmdline_user_args():
+		await _fidelity_shots()
+		print("SHOTS_DONE")
+		get_tree().quit(0)
+		return
 	if "--combat-shots" in OS.get_cmdline_user_args():
 		await _combat_shots()
 		print("SHOTS_DONE")
@@ -69,6 +74,73 @@ func _run() -> void:
 	await _save("04_alert_river")
 	print("SHOTS_DONE")
 	get_tree().quit(0)
+
+func _fidelity_shots() -> void:
+	if player and player.camera():
+		player.camera().current = true
+	GameState.set_quality("high")
+	var shop := Vector3(-268.8, 0.05, -325.2)
+	var facing := Vector3(0.427, 0.0, 0.904)
+	var street := shop + facing * 12.0
+	var mother := city.mother()
+	var bank := city.bank_z(mother.x)
+	GameState.hour = 15.95
+	_stand(street)
+	_crowd(street, facing)
+	player.set_zoom(0.95)
+	await _frame()
+	await _save("10_afternoon")
+	GameState.hour = 16.55
+	_stand(street)
+	_crowd(street, facing)
+	player.set_zoom(1.05)
+	await _frame()
+	await _save("11_dusk")
+	GameState.hour = 17.7
+	_stand(street)
+	_crowd(street, facing)
+	player.set_zoom(1.05)
+	await _frame()
+	await _save("12_night")
+	player.set_zoom(2.15)
+	_stand(shop + facing * 7.2)
+	await _frame()
+	await _save("13_storefront")
+	GameState.set_quality("low")
+	GameState.hour = 16.55
+	_stand(street)
+	_crowd(street, facing)
+	player.set_zoom(1.05)
+	await _frame()
+	await _save("18_low")
+	GameState.set_quality("high")
+	GameState.hour = 16.9
+	var prom := Vector3(mother.x + 18.0, 0.05, bank - 6.0)
+	_stand(prom)
+	player.set_zoom(1.35)
+	await _frame()
+	await _save("14_river")
+	GameState.hour = 17.2
+	GameState.under_fire = true
+	CombatHooks.enabled = true
+	_stand(street)
+	player.set_zoom(1.15)
+	var squads := get_tree().get_first_node_in_group("squads") as Squads
+	if squads:
+		squads.pose_firefight(street - facing * 8.0, street)
+	await _frame()
+	await _save("15_firefight")
+	var destruction := get_tree().get_first_node_in_group("destruction") as Destruction
+	if destruction:
+		destruction.breach_facade(destruction.nearest_id(shop), shop)
+	for i in 4:
+		await RenderingServer.frame_post_draw
+	await _save("16_collapse")
+	var guns := get_tree().get_first_node_in_group("ordinance") as Ordinance
+	if guns:
+		guns.pose_strike(street - facing * 2.5)
+	await _frame()
+	await _save("17_strike")
 
 func _combat_shots() -> void:
 	if player and player.camera():

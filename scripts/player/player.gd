@@ -40,8 +40,8 @@ func _ready() -> void:
 	_body = Node3D.new()
 	_body.name = "Body"
 	add_child(_body)
-	_build_coat(_body, Color(0.16, 0.17, 0.2))
-	_body.scale = Vector3(1.25, 1.15, 1.25)
+	WinterFigure.attach(_body, "civilian", Color(0.86, 0.87, 0.9))
+	_body.scale = Vector3(1.08, 1.05, 1.08)
 	_cam = Camera3D.new()
 	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	_cam.near = 0.5
@@ -202,45 +202,3 @@ func _talk() -> void:
 	if best and best.has_method("speak"):
 		best.speak()
 
-func _build_coat(parent: Node3D, cloth: Color) -> void:
-	# Padded coat reads from the isometric angle: wide shoulders, a hood,
-	# a scarf, and two boots. The head sits inside the hood.
-	_box(parent, Vector3(0, 1.02, 0), Vector3(0.62, 0.78, 0.38), cloth)
-	_box(parent, Vector3(0, 0.72, 0.02), Vector3(0.66, 0.22, 0.42), cloth.lightened(0.08))
-	_box(parent, Vector3(-0.34, 1.05, 0), Vector3(0.16, 0.42, 0.22), cloth)
-	_box(parent, Vector3(0.34, 1.05, 0), Vector3(0.16, 0.42, 0.22), cloth)
-	_sphere(parent, Vector3(0, 1.48, 0.02), 0.16, Color(0.55, 0.42, 0.34))
-	_sphere(parent, Vector3(0, 1.52, 0.0), 0.2, Color(0.05, 0.05, 0.06))
-	_box(parent, Vector3(0, 1.22, 0.16), Vector3(0.22, 0.1, 0.1), Color(0.55, 0.08, 0.08))
-	_box(parent, Vector3(-0.14, 0.38, 0.02), Vector3(0.16, 0.62, 0.2), Color(0.1, 0.1, 0.12))
-	_box(parent, Vector3(0.14, 0.38, 0.02), Vector3(0.16, 0.62, 0.2), Color(0.1, 0.1, 0.12))
-	_box(parent, Vector3(-0.14, 0.08, 0.04), Vector3(0.18, 0.1, 0.28), Color(0.15, 0.12, 0.1))
-	_box(parent, Vector3(0.14, 0.08, 0.04), Vector3(0.18, 0.1, 0.28), Color(0.15, 0.12, 0.1))
-	_box(parent, Vector3(0.22, 0.85, -0.12), Vector3(0.16, 0.28, 0.22), Color(0.2, 0.16, 0.1))
-
-func _sphere(parent: Node3D, pos: Vector3, radius: float, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var mesh := SphereMesh.new()
-	mesh.radius = radius
-	mesh.height = radius * 2.0
-	mi.mesh = mesh
-	mi.position = pos
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.8
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)
-
-func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mi.mesh = mesh
-	mi.position = pos
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.82
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)

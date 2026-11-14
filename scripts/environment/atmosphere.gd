@@ -80,9 +80,11 @@ func apply_quality(level: String) -> void:
 		"low":
 			environment.ssao_enabled = false
 			environment.ssil_enabled = false
+			environment.ssr_enabled = false
 			environment.glow_enabled = false
 			environment.volumetric_fog_enabled = false
 			environment.sdfgi_enabled = false
+			environment.adjustment_enabled = false
 			environment.fog_density = 0.0016
 			vp.msaa_3d = Viewport.MSAA_DISABLED
 			vp.scaling_3d_scale = 0.7
@@ -90,9 +92,15 @@ func apply_quality(level: String) -> void:
 		"high":
 			environment.ssao_enabled = true
 			environment.ssil_enabled = true
+			# Screen-space reflections smear into a grid on this orthographic
+			# view, so high keeps SSAO, SSIL, volumetric fog and SDFGI.
+			environment.ssr_enabled = false
 			environment.glow_enabled = true
 			environment.volumetric_fog_enabled = true
 			environment.sdfgi_enabled = true
+			environment.adjustment_enabled = true
+			environment.adjustment_contrast = 1.06
+			environment.adjustment_saturation = 0.9
 			environment.fog_density = 0.0007
 			vp.msaa_3d = Viewport.MSAA_4X
 			vp.scaling_3d_scale = 1.0
@@ -101,9 +109,11 @@ func apply_quality(level: String) -> void:
 		_:
 			environment.ssao_enabled = true
 			environment.ssil_enabled = false
+			environment.ssr_enabled = false
 			environment.glow_enabled = true
 			environment.volumetric_fog_enabled = false
 			environment.sdfgi_enabled = false
+			environment.adjustment_enabled = false
 			environment.fog_density = 0.0011
 			vp.msaa_3d = Viewport.MSAA_2X
 			vp.scaling_3d_scale = 0.9
@@ -128,7 +138,10 @@ func _apply_hour(hour: float) -> void:
 	environment.ambient_light_energy = lerpf(0.7, 0.22, t)
 	environment.tonemap_exposure = 0.92
 	environment.fog_light_color = Color(0.62, 0.66, 0.70).lerp(Color(0.08, 0.08, 0.09), t)
-	environment.fog_density = lerpf(0.0014, 0.0024, t)
+	var haze := lerpf(0.0009, 0.0016, t)
+	if GameState.quality == "low":
+		haze = lerpf(0.0014, 0.0022, t)
+	environment.fog_density = haze
 	environment.volumetric_fog_albedo = Color(0.55, 0.58, 0.62).lerp(Color(0.25, 0.24, 0.22), t)
 	environment.volumetric_fog_emission = Color(0.08, 0.05, 0.03)
 	if _city:

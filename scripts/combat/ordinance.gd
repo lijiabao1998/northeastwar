@@ -25,30 +25,106 @@ func barrage(center: Vector3, count: int = 4) -> void:
 
 func pose_strike(target: Vector3) -> void:
 	var rig := Node3D.new()
-	rig.position = target + Vector3(-8, 9, -6)
+	rig.position = target + Vector3(-6, 8, -4)
 	_drone_mesh(rig)
 	add_child(rig)
+	burst(target, true)
+	_impact(target, 6.5, 0.0, 90.0)
+
+func burst(at: Vector3, hold: bool = false) -> void:
+	var flash := OmniLight3D.new()
+	flash.position = at + Vector3(0, 1.6, 0)
+	flash.light_color = Color(1, 0.85, 0.6)
+	flash.light_energy = 28.0
+	flash.omni_range = 26.0
+	add_child(flash)
 	var ball := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
-	sphere.radius = 3.4
-	sphere.height = 6.8
+	sphere.radius = 1.1
+	sphere.height = 2.2
 	ball.mesh = sphere
-	ball.position = target + Vector3(0, 2.2, 0)
+	ball.position = at + Vector3(0, 1.4, 0)
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.albedo_color = Color(1.0, 0.45, 0.08)
+	glow.albedo_color = Color(1.0, 0.55, 0.12)
 	glow.emission_enabled = true
 	glow.emission = Color(1.0, 0.4, 0.05)
 	glow.emission_energy_multiplier = 4.0
 	ball.material_override = glow
 	add_child(ball)
-	var flash := OmniLight3D.new()
-	flash.position = target + Vector3(0, 3, 0)
-	flash.light_color = Color(1, 0.5, 0.15)
-	flash.light_energy = 16.0
-	flash.omni_range = 28.0
-	add_child(flash)
-	_impact(target, 6.5, 0.0, 90.0)
+	var scorch := MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = 3.2
+	disc.bottom_radius = 3.2
+	disc.height = 0.06
+	scorch.mesh = disc
+	scorch.position = at + Vector3(0, 0.08, 0)
+	var soot := StandardMaterial3D.new()
+	soot.albedo_color = Color(0.12, 0.1, 0.09)
+	soot.roughness = 1.0
+	scorch.material_override = soot
+	add_child(scorch)
+	for i in 7:
+		var chip := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(0.35, 0.22, 0.45)
+		chip.mesh = box
+		chip.position = at + Vector3(0, 1.2, 0)
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.45, 0.4, 0.36)
+		mat.roughness = 0.95
+		chip.material_override = mat
+		add_child(chip)
+		var ang := float(i) / 7.0 * TAU
+		var land := at + Vector3(cos(ang) * 3.4, 0.2, sin(ang) * 3.4)
+		if hold:
+			chip.position = land
+			chip.rotation = Vector3(0.4, ang, 0.2)
+		else:
+			var tween := create_tween()
+			tween.tween_property(chip, "position", land + Vector3(0, 2.2, 0), 0.18)
+			tween.tween_property(chip, "position", land, 0.35)
+	_column(at)
+	if hold:
+		ball.scale = Vector3(2.4, 2.4, 2.4)
+		flash.light_energy = 12.0
+	else:
+		var tween := create_tween()
+		tween.tween_property(ball, "scale", Vector3(3.2, 3.2, 3.2), 0.35)
+		tween.parallel().tween_property(flash, "light_energy", 0.0, 0.45)
+		tween.tween_callback(func():
+			ball.queue_free()
+			flash.queue_free()
+		)
+
+func _column(at: Vector3) -> void:
+	var puff := GPUParticles3D.new()
+	puff.position = at + Vector3(0, 0.4, 0)
+	puff.amount = 28
+	puff.lifetime = 3.2
+	puff.one_shot = true
+	puff.explosiveness = 0.35
+	var proc := ParticleProcessMaterial.new()
+	proc.direction = Vector3(0, 1, 0)
+	proc.spread = 12.0
+	proc.initial_velocity_min = 3.0
+	proc.initial_velocity_max = 7.0
+	proc.gravity = Vector3(0.2, -0.2, 0)
+	proc.scale_min = 1.4
+	proc.scale_max = 3.2
+	proc.color = Color(0.25, 0.23, 0.2, 0.7)
+	puff.process_material = proc
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.4, 2.4)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.albedo_color = Color(0.35, 0.32, 0.28, 0.55)
+	quad.material = mat
+	puff.draw_pass_1 = quad
+	add_child(puff)
+	puff.emitting = true
 
 func fpv_strike(target: Vector3) -> Node3D:
 	GameState.show_subtitle("巡飞弹。贴着楼飞过来了。", "An FPV. It is coming in along the roofs.")

@@ -13,6 +13,9 @@ func build(data: Dictionary) -> void:
 	_trees(data.get("trees", []))
 	_lamps(data.get("lamps", []))
 	_signs(data.get("signs", []))
+	_snowbanks(data.get("signs", []))
+	_steam(data.get("signs", []))
+	_far_bank(data.get("buildings", []))
 	_smoke(data.get("chimneys", []))
 	_flashes(data.get("flashes", []))
 	GameState.quality_changed.connect(_apply_quality)
@@ -97,6 +100,10 @@ func _lamps(rows: Array) -> void:
 			light.light_color = Color(1.0, 0.62, 0.28)
 			light.light_energy = 1.6
 			light.omni_range = 18.0
+		elif i % 3 == 0:
+			light.light_color = Color(0.82, 0.88, 1.0)
+			light.light_energy = 1.7
+			light.omni_range = 14.0
 		else:
 			light.light_color = Color(1.0, 0.45, 0.12)
 			light.light_energy = 2.4
@@ -199,14 +206,105 @@ func _parked_car(sign_pos: Vector3, yaw: float) -> void:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(1.7, 1.45, 4.2)
 	body.mesh = mesh
-	body.position = sign_pos + facing * 7.5 + Vector3(0, -1.6, 0)
+	body.position = sign_pos + facing * 7.5 + Vector3(0, -1.4, 0)
 	body.rotation.y = yaw
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.82, 0.84, 0.86) if int(absf(sign_pos.x)) % 2 == 0 else Color(0.12, 0.13, 0.15)
-	mat.roughness = 0.45
-	mat.metallic = 0.35
+	mat.albedo_color = Color(0.72, 0.74, 0.76) if int(absf(sign_pos.x)) % 2 == 0 else Color(0.1, 0.11, 0.12)
+	mat.roughness = 0.55
+	mat.metallic = 0.25
 	body.material_override = mat
 	add_child(body)
+	var snow := MeshInstance3D.new()
+	var cap := BoxMesh.new()
+	cap.size = Vector3(1.55, 0.22, 4.0)
+	snow.mesh = cap
+	snow.position = body.position + Vector3(0, 0.8, 0)
+	snow.rotation.y = yaw
+	var white := StandardMaterial3D.new()
+	white.albedo_color = Color(0.93, 0.94, 0.95)
+	white.roughness = 0.9
+	snow.material_override = white
+	add_child(snow)
+
+func _snowbanks(rows: Array) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(5.5, 0.7, 1.3)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.86, 0.88, 0.9)
+	mat.roughness = 0.95
+	mesh.material = mat
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = mesh
+	var xforms: Array[Transform3D] = []
+	for row in rows:
+		if str(row.get("kind", "")) != "shop":
+			continue
+		if int(abs(row.get("x", 0.0))) % 18 > 6:
+			continue
+		var yaw := float(row["yaw"])
+		var facing := Vector3(-sin(yaw), 0.0, -cos(yaw))
+		var pos := Vector3(float(row["x"]), 0.32, float(row["z"])) + facing * 4.2
+		xforms.append(Transform3D(Basis(Vector3.UP, yaw), pos))
+	if xforms.is_empty():
+		return
+	multi.instance_count = xforms.size()
+	for i in xforms.size():
+		multi.set_instance_transform(i, xforms[i])
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = multi
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(inst)
+
+func _steam(rows: Array) -> void:
+	var made := 0
+	for row in rows:
+		if str(row.get("kind", "")) != "shop" or made >= 8:
+			continue
+		if int(abs(row.get("x", 0.0))) % 40 > 8:
+			continue
+		var yaw := float(row["yaw"])
+		var facing := Vector3(-sin(yaw), 0.0, -cos(yaw))
+		var puff := GPUParticles3D.new()
+		puff.position = Vector3(float(row["x"]), 0.4, float(row["z"])) + facing * 1.2
+		puff.amount = 8
+		puff.lifetime = 1.8
+		var proc := ParticleProcessMaterial.new()
+		proc.direction = Vector3(0, 1, 0)
+		proc.spread = 8.0
+		proc.initial_velocity_min = 0.4
+		proc.initial_velocity_max = 1.1
+		proc.gravity = Vector3(0.1, 0.2, 0)
+		proc.scale_min = 0.4
+		proc.scale_max = 1.1
+		proc.color = Color(0.85, 0.86, 0.88, 0.35)
+		puff.process_material = proc
+		puff.draw_pass_1 = _soft_quad(0.8)
+		add_child(puff)
+		made += 1
+
+func _far_bank(buildings: Array) -> void:
+	# Nearest Russian footprints are about 750 m north. A few window-lights
+	# mark that bank. This camera looks back at the Chinese street, so they
+	# sit behind the lens.
+	var placed := 0
+	for building in buildings:
+		if str(building.get("side", "")) != "ru" or placed >= 10:
+			continue
+		var c: Array = building.get("centroid", [])
+		if c.size() < 2:
+			continue
+		var z := float(c[1])
+		if z < 700.0 or z > 900.0:
+			continue
+		var light := OmniLight3D.new()
+		light.position = Vector3(float(c[0]), 12.0, z)
+		light.light_color = Color(1.0, 0.72, 0.4)
+		light.light_energy = 2.0
+		light.omni_range = 40.0
+		light.shadow_enabled = false
+		add_child(light)
+		placed += 1
 
 func _short_sign(text: String) -> String:
 	var cut := text.find("（")
