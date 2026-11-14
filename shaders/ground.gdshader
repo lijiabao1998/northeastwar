@@ -12,7 +12,7 @@ void vertex() {
 
 void fragment() {
 	vec2 uv = v_world.xz * 0.08;
-	ALBEDO = texture(snow_alb, uv).rgb;
+	ALBEDO = texture(snow_alb, uv).rgb * vec3(0.62, 0.68, 0.76);
 	NORMAL_MAP = texture(snow_nrm, uv).rgb;
 	ROUGHNESS = 0.88;
 	METALLIC = 0.0;

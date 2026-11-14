@@ -134,13 +134,13 @@ func _apply_hour(hour: float) -> void:
 	sun.rotation_degrees = Vector3(-elev, 238.0 + 180.0, 0.0)
 	sun.light_energy = lerpf(0.42, 0.03, sunset)
 	sun.light_color = Color(1.0, 0.78, 0.58).lerp(Color(0.55, 0.62, 0.72), sunset)
-	environment.ambient_light_color = Color(0.62, 0.68, 0.74).lerp(Color(0.28, 0.32, 0.38), t)
-	environment.ambient_light_energy = lerpf(0.7, 0.22, t)
+	environment.ambient_light_color = Color(0.45, 0.52, 0.64).lerp(Color(0.12, 0.14, 0.2), t)
+	environment.ambient_light_energy = lerpf(0.28, 0.07, t)
 	environment.tonemap_exposure = 0.92
 	environment.fog_light_color = Color(0.62, 0.66, 0.70).lerp(Color(0.08, 0.08, 0.09), t)
-	var haze := lerpf(0.0009, 0.0016, t)
+	var haze := lerpf(0.004, 0.009, t)
 	if GameState.quality == "low":
-		haze = lerpf(0.0014, 0.0022, t)
+		haze = lerpf(0.003, 0.006, t)
 	environment.fog_density = haze
 	environment.volumetric_fog_albedo = Color(0.7, 0.72, 0.76).lerp(Color(0.35, 0.36, 0.4), t)
 	environment.volumetric_fog_emission = Color(0.02, 0.02, 0.025)

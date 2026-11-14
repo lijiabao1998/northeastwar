@@ -70,7 +70,7 @@ Wind, snow crunch, the phone tone and the distant booms are synthesized in `tool
 These files are in the repo and are not covered by the proprietary code licence.
 
 - Textures from [Poly Haven](https://polyhaven.com) (CC0): `snow_02`, `snow_04`, `asphalt_02`, `rectangular_facade_tiles`, `yellow_plaster`, `white_plaster_02`, `red_brick_03`, `granite_tile`, `concrete_wall_001`. 1K JPG, diffuse and normal (and roughness for snow and asphalt). Files live in `assets/textures/polyhaven/`.
-- Characters from [Quaternius](https://quaternius.com) (CC0): Casual Male, Casual Female and Worker Male, from the Universal / casual character packs. The glb files in `assets/models/quaternius/` are those meshes. They are casual and work clothes, not a surveyed Northeast winter coat and not a current Russian infantry uniform. A rifle box on the worker is original.
+- Character files from [Quaternius](https://quaternius.com) (CC0): Casual Male, Casual Female and Worker Male, kept in `assets/models/quaternius/`. The street figures in the current build are original low-poly coats and fur hats, and white winter camouflage with a helmet and rifle, because those CC0 meshes read as casual clothes rather than a Northeast winter street.
 
 ## Engine
 

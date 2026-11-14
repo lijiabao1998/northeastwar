@@ -34,7 +34,7 @@ func build(city: CityData) -> void:
 		_surf(white, white_n, 0.68, 0.0, Vector3(4, 4, 4), Color(1.25, 1.22, 1.15)),
 		_surf(tiles, tiles_n, 0.6, 0.0, Vector3(6, 6, 6), Color(1.35, 1.22, 1.05)),
 	]
-	var snow_mat := _surf(snow, snow_n, 0.88, 0.0, Vector3(2, 2, 2))
+	var snow_mat := _surf(snow, snow_n, 0.88, 0.0, Vector3(2, 2, 2), Color(0.68, 0.74, 0.82))
 	var frame_mat := StandardMaterial3D.new()
 	frame_mat.albedo_color = Color(0.9, 0.91, 0.9)
 	frame_mat.roughness = 0.4
@@ -101,7 +101,28 @@ func build(city: CityData) -> void:
 		root.name = "B%d" % id
 		add_child(root)
 		var parts: Array = []
-		var mat: StandardMaterial3D = wall_mats[kept % wall_mats.size()]
+		var brick_diff := load("res://assets/textures/polyhaven/red_brick_diff.jpg")
+		var brick_nor := load("res://assets/textures/polyhaven/red_brick_nor.jpg")
+		var brick_mat := _surf(brick_diff, brick_nor, 0.78, 0.0, Vector3(2.2, 3.0, 2.2), Color(0.95, 0.78, 0.7))
+		var pastel := StandardMaterial3D.new()
+		pastel.albedo_color = Color(0.9, 0.74, 0.68)
+		pastel.roughness = 0.72
+		var blue_glass := StandardMaterial3D.new()
+		blue_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		blue_glass.albedo_color = Color(0.45, 0.62, 0.82, 0.55)
+		blue_glass.roughness = 0.08
+		blue_glass.emission_enabled = true
+		blue_glass.emission = Color(0.55, 0.72, 0.95)
+		blue_glass.emission_energy_multiplier = 0.35
+		var quilt_a := StandardMaterial3D.new()
+		quilt_a.albedo_color = Color(0.62, 0.1, 0.1)
+		var quilt_b := StandardMaterial3D.new()
+		quilt_b.albedo_color = Color(0.12, 0.28, 0.42)
+		var awning_mat := StandardMaterial3D.new()
+		awning_mat.albedo_color = Color(0.75, 0.12, 0.1)
+		var styles: Array[String] = ["russian", "walkup", "shoprow", "tile"]
+		var storeys: Array[int] = [3, 6, 2, 5]
+		var edge_i := 0
 		for edge in edges:
 			var a: Vector2 = edge["a"]
 			var b: Vector2 = edge["b"]
@@ -112,6 +133,7 @@ func build(city: CityData) -> void:
 			var out := Vector3(normal.x, 0, normal.y)
 			var along := Vector3(tangent.x, 0, tangent.y)
 			var basis := Basis(along, Vector3.UP, out).orthonormalized()
+			var mixed := edge_i == 0
 			for f in floors:
 				var floor_node := Node3D.new()
 				floor_node.name = "E%dF%d" % [parts.size(), f]
@@ -119,22 +141,46 @@ func build(city: CityData) -> void:
 				floor_node.set_meta("out", out)
 				root.add_child(floor_node)
 				for k in bays:
+					var chunk := int(k / 5)
+					var style := styles[chunk % styles.size()] if mixed else "walkup"
+					var top := storeys[chunk % storeys.size()] if mixed else mini(floors, 6)
+					if f >= top:
+						continue
+					var wall: Material = wall_mats[chunk % wall_mats.size()]
+					if style == "walkup":
+						wall = brick_mat
+					elif style == "russian":
+						wall = pastel
 					var t := (float(k) + 0.5) / float(bays)
 					var p := a.lerp(b, t)
 					var origin := Vector3(p.x, float(f) * FLOOR_H + FLOOR_H * 0.5, p.y)
 					var xf := Transform3D(basis, origin + out * 0.16)
-					_put(floor_node, wall_mesh, mat, xf)
-					_put(floor_node, sill_mesh, snow_mat, Transform3D(basis, origin + out * 0.28 + Vector3(0, FLOOR_H * 0.46, 0)))
+					_put(floor_node, wall_mesh, wall, xf)
+					if f == top - 1:
+						_roof(floor_node, basis, origin, out, style, snow_mat, frame_mat, metal, k)
 					if f == 0:
-						_storefront(floor_node, basis, origin, out, shop_glass, glass_mat, frame_mesh, frame_mat, slat_mesh, shutter_mat, k)
+						_storefront(floor_node, basis, origin, out, shop_glass, glass_mat if style != "tile" else blue_glass, frame_mesh, frame_mat, slat_mesh, shutter_mat, k)
+						_door(floor_node, basis, origin, out, k % 2 == 0, quilt_a if k % 2 == 0 else quilt_b)
+						if style == "shoprow" or style == "russian":
+							_put(floor_node, _box(Vector3(2.3, 0.08, 1.15)), awning_mat, Transform3D(basis, origin + out * 1.05 + Vector3(0, 0.55, 0)))
+					elif style == "russian":
+						_arch(floor_node, basis, origin, out, frame_mat, glass_mat)
+					elif style == "tile":
+						_put(floor_node, glass_mesh, blue_glass, Transform3D(basis, origin + out * 0.3))
+						_balcony(floor_node, basis, origin, out, balcony_mesh, frame_mat, rail_mesh, metal, glass_mesh, blue_glass)
 					elif (k + f) % 3 == 0:
 						_balcony(floor_node, basis, origin, out, balcony_mesh, frame_mat, rail_mesh, metal, glass_mesh, glass_mat)
+						_bars(floor_node, basis, origin, out, metal)
 					else:
 						_window(floor_node, basis, origin, out, frame_mesh, frame_mat, mullion_mesh, glass_mesh, glass_mat, curtain_mesh, k + f)
-						if (k + f) % 2 == 0:
-							_put(floor_node, ac_mesh, ac_mat, Transform3D(basis, origin + out * 0.42 + Vector3(0, 0.85, 0) + along * 0.7))
+						_put(floor_node, ac_mesh, ac_mat, Transform3D(basis, origin + out * 0.42 + Vector3(0, 0.85, 0) + along * 0.55))
+						if f == 1:
+							_bars(floor_node, basis, origin, out, metal)
 				parts.append(floor_node)
 			_curb_and_bank(root, a, b, tangent, normal, curb_mesh, rubble_mat, bank_mesh, snow_mat)
+			if mixed:
+				_street_life(root, a, b, tangent, normal)
+			edge_i += 1
 		_parts[id] = parts
 		kept += 1
 	_push_hides(hides)
@@ -161,6 +207,110 @@ func drop_between(id: int, y0: float, y1: float) -> void:
 			tween.parallel().tween_property(node, "rotation_degrees", Vector3(76, 8, 18), 0.8)
 		_dust(node.global_position + out * 2.0)
 		_pile(node.global_position + out * 2.4)
+
+func _roof(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, style: String, snow_mat: Material, white: Material, metal: Material, index: int) -> void:
+	var top := origin + Vector3(0, FLOOR_H * 0.55, 0) - out * 1.4
+	_put(parent, _box(Vector3(BAY * 0.98, 0.28, 3.2)), snow_mat, Transform3D(basis, top))
+	_put(parent, _box(Vector3(BAY, 0.22, 0.28)), white, Transform3D(basis, origin + out * 0.32 + Vector3(0, FLOOR_H * 0.5, 0)))
+	if style == "walkup" and index % 5 == 0:
+		_put(parent, _box(Vector3(1.3, 1.1, 1.3)), metal, Transform3D(basis, top + Vector3(0, 0.7, 0)))
+		_put(parent, _box(Vector3(0.35, 1.4, 0.35)), metal, Transform3D(basis, top + Vector3(0.8, 0.8, 0)))
+	for i in 4:
+		var x := -1.0 + float(i) * 0.6
+		_put(parent, _box(Vector3(0.06, 0.45, 0.06)), snow_mat, Transform3D(basis, origin + out * 0.4 + basis.x * x + Vector3(0, FLOOR_H * 0.28, 0)))
+
+func _door(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, quilt: bool, cloth: Material) -> void:
+	var at := origin + out * 0.4 + Vector3(0, -0.7, 0)
+	_put(parent, _box(Vector3(0.95, 1.7, 0.1)), cloth, Transform3D(basis, at))
+	if not quilt:
+		var strip := StandardMaterial3D.new()
+		strip.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		strip.albedo_color = Color(0.85, 0.9, 0.86, 0.55)
+		for i in 5:
+			_put(parent, _box(Vector3(0.08, 1.5, 0.02)), strip, Transform3D(basis, at + out * 0.08 + basis.x * (-0.3 + float(i) * 0.15)))
+
+func _arch(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, white: Material, glass_mat: Material) -> void:
+	var at := origin + out * 0.3
+	_put(parent, _box(Vector3(1.15, 1.9, 0.08)), white, Transform3D(basis, at))
+	_put(parent, _box(Vector3(0.85, 1.5, 0.03)), glass_mat, Transform3D(basis, at - out * 0.02))
+	var crown := MeshInstance3D.new()
+	var dome := SphereMesh.new()
+	dome.radius = 0.48
+	dome.height = 0.7
+	crown.mesh = dome
+	crown.material_override = white
+	crown.transform = Transform3D(basis, at + Vector3(0, 0.85, 0))
+	crown.scale = Vector3(1.15, 0.55, 0.35)
+	parent.add_child(crown)
+
+func _bars(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, metal: Material) -> void:
+	var at := origin + out * 0.4
+	for i in 4:
+		_put(parent, _box(Vector3(0.04, 1.35, 0.04)), metal, Transform3D(basis, at + basis.x * (-0.45 + float(i) * 0.3)))
+	_put(parent, _box(Vector3(1.3, 0.04, 0.04)), metal, Transform3D(basis, at + Vector3(0, 0.35, 0)))
+
+func _street_life(parent: Node3D, a: Vector2, b: Vector2, tangent: Vector2, normal: Vector2) -> void:
+	var out := Vector3(normal.x, 0, normal.y)
+	var along := Vector3(tangent.x, 0, tangent.y)
+	var basis := Basis(along, Vector3.UP, out).orthonormalized()
+	var mid := a.lerp(b, 0.35)
+	var stall := Vector3(mid.x, 0, mid.y) + out * 5.5
+	_put(parent, _box(Vector3(1.8, 0.9, 0.8)), _flat(Color(0.45, 0.28, 0.14)), Transform3D(basis, stall + Vector3(0, 0.5, 0)))
+	_put(parent, _box(Vector3(2.2, 0.06, 1.6)), _flat(Color(0.15, 0.35, 0.55)), Transform3D(basis, stall + Vector3(0, 1.7, 0)))
+	var warm := OmniLight3D.new()
+	warm.position = stall + Vector3(0, 1.5, 0)
+	warm.light_color = Color(1.0, 0.55, 0.18)
+	warm.light_energy = 2.4
+	warm.omni_range = 8.0
+	warm.shadow_enabled = false
+	parent.add_child(warm)
+	_label(parent, "烤串", stall + Vector3(0, 2.05, 0), 0.4)
+	var fruit_at := Vector3(a.lerp(b, 0.62).x, 0, a.lerp(b, 0.62).y) + out * 5.2
+	_put(parent, _box(Vector3(2.4, 0.08, 1.8)), _flat(Color(0.15, 0.42, 0.22)), Transform3D(basis, fruit_at + Vector3(0, 2.0, 0)))
+	_put(parent, _box(Vector3(0.08, 2.0, 0.08)), _flat(Color(0.3, 0.28, 0.24)), Transform3D(basis, fruit_at + along * 0.9))
+	var coal := Vector3(a.lerp(b, 0.2).x, 0.3, a.lerp(b, 0.2).y) + out * 1.6
+	for i in 4:
+		_put(parent, _box(Vector3(0.7, 0.28, 0.45)), _flat(Color(0.1, 0.09, 0.08)), Transform3D(basis, coal + Vector3(0, float(i) * 0.22, 0)))
+	_put(parent, _box(Vector3(8.0, 0.12, 0.14)), _flat(Color(0.35, 0.36, 0.38)), Transform3D(basis, coal + along * 3.0 + Vector3(0, 0.5, 0)))
+	var gate := Vector3(a.lerp(b, 0.82).x, 0, a.lerp(b, 0.82).y) + out * 2.2
+	_put(parent, _box(Vector3(0.35, 2.6, 0.35)), _flat(Color(0.75, 0.73, 0.68)), Transform3D(basis, gate + along * -1.4 + Vector3(0, 1.3, 0)))
+	_put(parent, _box(Vector3(0.35, 2.6, 0.35)), _flat(Color(0.75, 0.73, 0.68)), Transform3D(basis, gate + along * 1.4 + Vector3(0, 1.3, 0)))
+	_put(parent, _box(Vector3(3.2, 0.28, 0.28)), _flat(Color(0.82, 0.16, 0.12)), Transform3D(basis, gate + Vector3(0, 2.5, 0)))
+	_label(parent, "小区", gate + Vector3(0, 2.5, 0), 0.35)
+	var board := Vector3(a.lerp(b, 0.48).x, 16.5, a.lerp(b, 0.48).y) + out * 0.4
+	_put(parent, _box(Vector3(7.5, 3.2, 0.2)), _flat(Color(0.75, 0.08, 0.08)), Transform3D(basis, board))
+	_label(parent, "中央街", board + out * 0.2, 0.7)
+	for i in 4:
+		var t := 0.15 + float(i) * 0.2
+		var p := a.lerp(b, t)
+		_vehicle(parent, Vector3(p.x, 0, p.y) + out * 6.5 + along * (1.5 if i % 2 == 0 else -1.2), basis, i)
+
+func _vehicle(parent: Node3D, at: Vector3, basis: Basis, index: int) -> void:
+	var paint := _flat(Color(0.85, 0.72, 0.1) if index % 2 == 0 else Color(0.15, 0.16, 0.18))
+	_put(parent, _box(Vector3(1.7, 1.35, 4.1)), paint, Transform3D(basis, at + Vector3(0, 0.75, 0)))
+	var snow := _surf(load("res://assets/textures/polyhaven/snow_02_diff.jpg"), null, 0.9, 0.0, Vector3(1, 1, 1), Color(0.7, 0.74, 0.8))
+	_put(parent, _box(Vector3(1.55, 0.18, 3.9)), snow, Transform3D(basis, at + Vector3(0, 1.5, 0)))
+	var plate := _flat(Color(0.08, 0.08, 0.1))
+	_put(parent, _box(Vector3(0.42, 0.16, 0.03)), plate, Transform3D(basis, at + basis.z * 2.05 + Vector3(0, 0.55, 0)))
+	_label(parent, "黑A", at + basis.z * 2.08 + Vector3(0, 0.55, 0), 0.12)
+
+func _label(parent: Node3D, text: String, at: Vector3, height: float) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font = load("res://assets/fonts/NotoSansSC-VF.ttf")
+	label.font_size = 64
+	label.pixel_size = height / 64.0
+	label.modulate = Color(1.0, 0.9, 0.35)
+	label.outline_size = 8
+	label.position = at
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	parent.add_child(label)
+
+func _flat(color: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.75
+	return mat
 
 func _storefront(parent: Node3D, basis: Basis, origin: Vector3, out: Vector3, glass: BoxMesh, glass_mat: Material, frame: BoxMesh, frame_mat: Material, slat: BoxMesh, shutter: Material, index: int) -> void:
 	var at := origin + out * 0.34 + Vector3(0, -0.35, 0)

@@ -1,81 +1,53 @@
 extends RefCounted
 class_name WinterFigure
-## Quaternius CC0 characters (Universal / casual pack, redistributed as glb).
-## They are real human meshes. The pack does not include a padded Northeast
-## winter coat or a modern infantry uniform, so civilians stay in the casual
-## outfits and the infantry figure is the worker mesh plus a rifle.
-
-const MALE := "res://assets/models/quaternius/Casual_Male.glb"
-const FEMALE := "res://assets/models/quaternius/Casual_Female.glb"
-const WORKER := "res://assets/models/quaternius/Worker_Male.glb"
+## Low-poly on purpose. The readable part is the silhouette: a long quilted
+## coat and a fur hat for civilians, white winter camouflage, a helmet and a
+## rifle for infantry. Polygon count is not the point.
 
 static func attach(parent: Node3D, kind: String, cloth: Color) -> void:
-	var path := MALE
+	var root := Node3D.new()
+	root.scale = Vector3(1.2, 1.2, 1.2)
+	parent.add_child(root)
 	if kind == "soldier":
-		path = WORKER
-	elif cloth.b > cloth.r:
-		path = FEMALE
-	var packed: PackedScene = load(path)
-	if packed == null:
-		return
-	var inst := packed.instantiate()
-	parent.add_child(inst)
-	if kind == "soldier" and inst is Node3D:
-		_rifle(inst as Node3D, _height(inst as Node3D))
-	if inst is Node3D:
-		_fit(inst as Node3D)
+		_soldier(root)
+	else:
+		_civilian(root, cloth)
 
-static func _fit(inst: Node3D) -> void:
-	var height := _height(inst)
-	if height < 0.05:
-		return
-	var scale := 1.78 / height
-	inst.scale = Vector3.ONE * scale
-	var bottom := _bottom(inst) * scale
-	inst.position.y = -bottom
+static func _civilian(root: Node3D, cloth: Color) -> void:
+	_box(root, Vector3(0, 0.95, 0), Vector3(0.62, 1.05, 0.38), cloth)
+	_box(root, Vector3(0, 0.55, 0.02), Vector3(0.66, 0.28, 0.42), cloth.lightened(0.08))
+	_box(root, Vector3(-0.28, 1.05, 0), Vector3(0.16, 0.55, 0.22), cloth)
+	_box(root, Vector3(0.28, 1.05, 0), Vector3(0.16, 0.55, 0.22), cloth)
+	_box(root, Vector3(-0.12, 0.32, 0), Vector3(0.16, 0.5, 0.2), cloth.darkened(0.25))
+	_box(root, Vector3(0.12, 0.32, 0), Vector3(0.16, 0.5, 0.2), cloth.darkened(0.25))
+	_box(root, Vector3(-0.12, 0.08, 0.05), Vector3(0.18, 0.1, 0.28), Color(0.1, 0.09, 0.08))
+	_box(root, Vector3(0.12, 0.08, 0.05), Vector3(0.18, 0.1, 0.28), Color(0.1, 0.09, 0.08))
+	_box(root, Vector3(0, 1.64, 0), Vector3(0.36, 0.2, 0.36), Color(0.42, 0.32, 0.2))
+	_box(root, Vector3(-0.16, 1.52, 0), Vector3(0.1, 0.16, 0.08), Color(0.35, 0.28, 0.2))
+	_box(root, Vector3(0.16, 1.52, 0), Vector3(0.1, 0.16, 0.08), Color(0.35, 0.28, 0.2))
+	_box(root, Vector3(0, 1.48, 0.02), Vector3(0.12, 0.12, 0.12), Color(0.55, 0.42, 0.34))
+	_box(root, Vector3(0, 1.22, 0.16), Vector3(0.22, 0.1, 0.06), Color(0.55, 0.08, 0.08))
 
-static func _height(node: Node) -> float:
-	var box := _merged(node, Transform3D.IDENTITY)
-	return box.size.y
+static func _soldier(root: Node3D) -> void:
+	var white := Color(0.82, 0.84, 0.8)
+	var grey := Color(0.62, 0.66, 0.64)
+	_box(root, Vector3(0, 0.98, 0), Vector3(0.52, 0.85, 0.32), white)
+	_box(root, Vector3(0, 1.15, 0.12), Vector3(0.46, 0.4, 0.12), grey)
+	_box(root, Vector3(-0.24, 1.05, 0), Vector3(0.12, 0.45, 0.16), white)
+	_box(root, Vector3(0.24, 1.05, 0), Vector3(0.12, 0.45, 0.16), white)
+	_box(root, Vector3(-0.11, 0.32, 0), Vector3(0.14, 0.52, 0.16), grey)
+	_box(root, Vector3(0.11, 0.32, 0), Vector3(0.14, 0.52, 0.16), grey)
+	_box(root, Vector3(0, 1.62, 0), Vector3(0.24, 0.16, 0.26), Color(0.55, 0.58, 0.54))
+	_box(root, Vector3(0.16, 1.15, -0.28), Vector3(0.05, 0.05, 0.7), Color(0.08, 0.08, 0.09))
 
-static func _bottom(node: Node) -> float:
-	var box := _merged(node, Transform3D.IDENTITY)
-	return box.position.y
-
-static func _merged(node: Node, parent: Transform3D) -> AABB:
-	var here := parent
-	if node is Node3D and node != node.get_parent():
-		here = parent * (node as Node3D).transform
-	var box := AABB()
-	var any := false
-	if node is MeshInstance3D:
-		var mi := node as MeshInstance3D
-		if mi.mesh:
-			box = here * mi.mesh.get_aabb()
-			any = true
-	for child in node.get_children():
-		var sub := _merged(child, here if node is Node3D else parent)
-		if sub.size.length() < 0.001:
-			continue
-		if not any:
-			box = sub
-			any = true
-		else:
-			box = box.merge(sub)
-	if not any:
-		return AABB()
-	return box
-
-static func _rifle(inst: Node3D, height: float) -> void:
-	var gun := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(height * 0.035, height * 0.035, height * 0.42)
-	gun.mesh = box
-	gun.position = Vector3(height * 0.12, height * 0.58, height * 0.16)
+static func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mi.mesh = mesh
+	mi.position = pos
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.08, 0.08, 0.09)
-	mat.metallic = 0.4
-	mat.roughness = 0.45
-	gun.material_override = mat
-	if inst is Node3D:
-		(inst as Node3D).add_child(gun)
+	mat.albedo_color = color
+	mat.roughness = 0.8
+	mi.material_override = mat
+	parent.add_child(mi)

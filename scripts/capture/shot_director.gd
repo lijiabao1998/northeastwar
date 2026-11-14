@@ -87,22 +87,22 @@ func _fidelity_shots() -> void:
 	GameState.hour = 15.95
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(0.8)
+	player.set_zoom(0.72)
 	await _frame()
 	await _save("10_afternoon")
 	GameState.hour = 16.55
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(0.8)
+	player.set_zoom(0.72)
 	await _frame()
 	await _save("11_dusk")
 	GameState.hour = 17.7
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(0.8)
+	player.set_zoom(0.72)
 	await _frame()
 	await _save("12_night")
-	player.set_zoom(1.55)
+	player.set_zoom(1.35)
 	_stand(shop + facing * 7.2)
 	await _frame()
 	await _save("13_storefront")
@@ -110,7 +110,7 @@ func _fidelity_shots() -> void:
 	GameState.hour = 16.55
 	_stand(street)
 	_crowd(street, facing)
-	player.set_zoom(0.8)
+	player.set_zoom(0.72)
 	await _frame()
 	await _save("18_low")
 	GameState.set_quality("high")
@@ -129,7 +129,7 @@ func _fidelity_shots() -> void:
 	GameState.under_fire = true
 	CombatHooks.enabled = true
 	_stand(street)
-	player.set_zoom(0.85)
+	player.set_zoom(0.78)
 	var squads := get_tree().get_first_node_in_group("squads") as Squads
 	if squads:
 		squads.pose_firefight(street - facing * 8.0, street)

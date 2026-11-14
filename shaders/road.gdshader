@@ -29,6 +29,7 @@ void fragment() {
 	vec3 albedo = mix(dirty, snow, 0.55);
 	albedo = mix(albedo, tar, rut * 0.82);
 	albedo = mix(albedo, mix(tar, dirty, 0.45), slush * 0.65);
+	albedo *= vec3(0.66, 0.7, 0.78);
 	vec3 n_snow = texture(snow_nrm, uv).rgb;
 	vec3 n_tar = texture(asphalt_nrm, uv * 1.7).rgb;
 	NORMAL_MAP = mix(n_snow, n_tar, max(rut, slush * 0.5));

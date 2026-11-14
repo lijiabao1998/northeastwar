@@ -1,9 +1,10 @@
 extends CharacterBody3D
 class_name Player
 ## Same rig as DefendTaipei: a fixed isometric camera, not a mouse-look.
-## The camera sits 40 m east, 56 m up and 40 m north of you and looks at your
-## feet. Orthographic height is 32 m at zoom 1, closer than the original 44 m
-## so a person and a shopfront can be read. The offset, and so the angle, is unchanged. The wheel (and a pinch) zooms
+## Close isometric, in the spirit of a block-scale game: the camera is 14 m
+## east, 36 m up and 14 m north, so a roof and a shopfront share the frame.
+## Orthographic height is 30 m at zoom 1. One 中央街 block fills the view.
+## The wheel (and a pinch) zooms
 ## between 0.5 and 2.2. W/S run along the screen's up axis, A/D along its right,
 ## which is the diagonal (-1, 0, -1) / (1, 0, -1) used there. Walk 3.4 m/s,
 ## run 6 m/s. Clicking sets an aim point for the combat hook and does not
@@ -21,8 +22,8 @@ var _pinch: float = -1.0
 var city: CityData
 var face_river: bool = false
 
-const CAM_OFF := Vector3(40, 56, 40)
-const CAM_RIVER := Vector3(26, 38, -26)
+const CAM_OFF := Vector3(14, 36, 14)
+const CAM_RIVER := Vector3(16, 34, -16)
 const SCREEN_UP := Vector3(-0.70710678, 0, -0.70710678)
 const SCREEN_RIGHT := Vector3(0.70710678, 0, -0.70710678)
 const WALK := 3.4
@@ -43,8 +44,14 @@ func _ready() -> void:
 	_body = Node3D.new()
 	_body.name = "Body"
 	add_child(_body)
-	WinterFigure.attach(_body, "civilian", Color(0.86, 0.87, 0.9))
-	_body.scale = Vector3(1.08, 1.05, 1.08)
+	WinterFigure.attach(_body, "civilian", Color(0.12, 0.13, 0.15))
+	var reveal := OmniLight3D.new()
+	reveal.position = Vector3(0, 7, 0)
+	reveal.light_color = Color(0.62, 0.72, 0.86)
+	reveal.light_energy = 1.1
+	reveal.omni_range = 24.0
+	reveal.shadow_enabled = false
+	add_child(reveal)
 	_cam = Camera3D.new()
 	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	_cam.near = 0.5
@@ -63,9 +70,9 @@ func set_zoom(value: float) -> void:
 	var vp := get_viewport()
 	if vp and vp.size.y > 0.0:
 		aspect = vp.size.x / vp.size.y
-	var half := 16.0
+	var half := 15.0
 	if aspect < 1.0:
-		half = maxf(16.0, 12.0 / aspect) * 0.62
+		half = maxf(15.0, 11.0 / aspect) * 0.62
 	_cam.size = (half * 2.0) / zoom
 
 func _unhandled_input(event: InputEvent) -> void:
