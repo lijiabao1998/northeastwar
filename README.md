@@ -14,6 +14,8 @@ You are not a soldier. You are an ordinary person in Harbin: a delivery rider, a
 ## Notes
 
 - This is a work of fiction set in the near future. All characters and events are invented. Real places are used as settings.
-- Web first (TypeScript + Three.js + Vite), playable on desktop and mobile at game.lijiabao.uk/northeastwar/ once the first slice is ready. It reuses the engine work from the author's other games, not their worlds.
+- Web first (TypeScript + Three.js + Vite), playable on desktop and mobile on the Jiabao Digital Cultural Centre (https://lijiabao.uk/games/) once the first slice is ready. It reuses the engine work from the author's other games, not their worlds.
 
-© 2026 李家宝. All rights reserved.
+Status: Planned (籌備中).
+
+© 2026 李家寶. All rights reserved.
