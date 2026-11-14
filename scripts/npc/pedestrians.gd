@@ -122,7 +122,7 @@ class Pedestrian extends Node:
 			return
 		var speed := 1.15
 		var target := Vector3.ZERO
-		if GameState.alert_stage >= 2:
+		if GameState.alert_stage >= 2 or GameState.under_fire:
 			speed = 3.3
 			target = _body.global_position + Vector3(randf_range(-0.4, 0.4), 0, -1.0)
 		else:

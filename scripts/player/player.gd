@@ -75,6 +75,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_zoom(zoom * 0.9)
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			_aim_at_screen(event.position)
+			CombatHooks.request_fire()
 	elif event is InputEventScreenTouch and event.pressed and _touch_count() >= 2:
 		_pinch = _touch_span()
 	elif event is InputEventScreenDrag and _touch_count() >= 2 and _pinch > 0.0:

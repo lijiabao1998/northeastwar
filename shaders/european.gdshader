@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 
+#include "res://shaders/cuts.gdshaderinc"
+
 uniform float night : hint_range(0.0, 1.0) = 0.45;
 uniform float floor_h = 4.05;
 uniform float bay = 3.7;
@@ -15,9 +17,13 @@ float hashf(float n) {
 void vertex() {
 	v_color = COLOR.rgb;
 	v_seed = UV2.x;
+	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
+	if (carved(v_world)) {
+		discard;
+	}
 	vec3 albedo = v_color * 0.92;
 	float rough = 0.7;
 	vec3 emission = vec3(0.0);

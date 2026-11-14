@@ -6,6 +6,7 @@ class_name CityView
 
 var night: float = 0.35
 var _night_mats: Array[ShaderMaterial] = []
+var cut_materials: Array[ShaderMaterial] = []
 
 func _ready() -> void:
 	var packed: PackedScene = load("res://data/heihe/city.gltf")
@@ -15,6 +16,7 @@ func _ready() -> void:
 	var city := packed.instantiate()
 	city.name = "ImportedCity"
 	add_child(city)
+	add_to_group("city_view")
 	var facade := _shader("res://shaders/facade.gdshader", {"floor_h": 3.0, "bay": 3.15})
 	var euro := _shader("res://shaders/european.gdshader", {"floor_h": 4.05, "bay": 3.7})
 	var glass := _shader("res://shaders/glass.gdshader", {})
@@ -47,6 +49,7 @@ func _ready() -> void:
 		"Prop": prop,
 	}
 	_assign(city, assignment)
+	cut_materials = [facade, euro, glass]
 	GameState.quality_changed.connect(apply_quality)
 	apply_quality(GameState.quality)
 

@@ -45,6 +45,8 @@ func build(data: Dictionary) -> void:
 		var body := StaticBody3D.new()
 		body.collision_layer = 1
 		body.collision_mask = 0
+		body.set_meta("osm_id", int(building.get("id", 0)))
+		body.add_to_group("building_body")
 		var shape_node := CollisionShape3D.new()
 		var shape := ConcavePolygonShape3D.new()
 		shape.set_faces(faces)

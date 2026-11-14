@@ -14,6 +14,11 @@ func _run() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if "--combat-shots" in OS.get_cmdline_user_args():
+		await _combat_shots()
+		print("SHOTS_DONE")
+		get_tree().quit(0)
+		return
 	if player and player.camera():
 		player.camera().current = true
 	var mother := city.mother()
@@ -64,6 +69,34 @@ func _run() -> void:
 	await _save("04_alert_river")
 	print("SHOTS_DONE")
 	get_tree().quit(0)
+
+func _combat_shots() -> void:
+	if player and player.camera():
+		player.camera().current = true
+	var shop := Vector3(-268.8, 0.05, -325.2)
+	var facing := Vector3(0.427, 0.0, 0.904)
+	var street := shop + facing * 12.0
+	GameState.hour = 17.15
+	GameState.under_fire = true
+	CombatHooks.enabled = true
+	_stand(street)
+	player.set_zoom(1.2)
+	var squads := get_tree().get_first_node_in_group("squads") as Squads
+	if squads:
+		squads.pose_firefight(street - facing * 9.0, street)
+	await _frame()
+	await _save("07_firefight")
+	var destruction := get_tree().get_first_node_in_group("destruction") as Destruction
+	if destruction:
+		destruction.breach_facade(destruction.nearest_id(shop), shop)
+	for i in 6:
+		await RenderingServer.frame_post_draw
+	await _save("08_collapse")
+	var guns := get_tree().get_first_node_in_group("ordinance") as Ordinance
+	if guns:
+		guns.pose_strike(street - facing * 3.0)
+	await _frame()
+	await _save("09_drone")
 
 func _stand(at: Vector3) -> void:
 	if player:

@@ -49,5 +49,14 @@ func _init() -> void:
 			push_error("missing node " + required)
 			quit(1)
 			return
+	# Same rule as Destruction.section_index: height is split into equal storeys.
+	if _section(18.0, 0.4, 3) != 0 or _section(18.0, 7.0, 3) != 1 or _section(18.0, 14.0, 3) != 2:
+		push_error("section index")
+		quit(1)
+		return
 	print("gdscript tests ok")
 	quit(0)
+
+func _section(height: float, y: float, sections: int) -> int:
+	var t := clampf(y / height, 0.0, 0.999)
+	return mini(sections - 1, int(t * float(sections)))

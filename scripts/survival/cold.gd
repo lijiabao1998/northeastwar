@@ -25,6 +25,11 @@ func _process(delta: float) -> void:
 	if sheltered:
 		temp = minf(36.9, temp + 0.014 * delta)
 		_sheltered_for += delta
+		if GameState.bleeding:
+			GameState.player_hp = minf(70.0, GameState.player_hp + 8.0 * delta)
+			if GameState.player_hp >= 55.0:
+				GameState.bleeding = false
+				GameState.show_subtitle("血止住了。先别出去。", "The bleeding stopped. Stay inside a moment.")
 	else:
 		temp -= 0.0042 * exposed * delta
 		_sheltered_for = 0.0

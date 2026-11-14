@@ -185,6 +185,8 @@ func _signs(rows: Array) -> void:
 			sub.rotation.y = PI
 			sub.modulate = Color(1, 0.95, 0.85)
 			holder.add_child(sub)
+		if kind == "shop":
+			holder.add_to_group("street_sign")
 		add_child(holder)
 		if kind == "shop" and int(absf(holder.position.x)) % 24 < 8:
 			_parked_car(holder.global_position, holder.rotation.y)

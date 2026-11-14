@@ -52,6 +52,20 @@ func _ready() -> void:
 	add_child(people)
 	people.build(city.data)
 
+	var destruction := Destruction.new()
+	destruction.name = "Destruction"
+	add_child(destruction)
+	destruction.bind(city)
+
+	var squads := Squads.new()
+	squads.name = "Squads"
+	add_child(squads)
+
+	var ordinance := Ordinance.new()
+	ordinance.name = "Ordinance"
+	ordinance.add_to_group("ordinance")
+	add_child(ordinance)
+
 	var story := DayOne.new()
 	story.name = "Story"
 	story.city = city

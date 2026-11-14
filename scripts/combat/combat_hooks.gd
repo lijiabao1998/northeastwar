@@ -21,6 +21,20 @@ func request_fire() -> void:
 		return
 	fire_requested.emit(aim_point)
 
+func hurt_player(amount: float) -> void:
+	if GameState.shot_mode:
+		return
+	GameState.under_fire = true
+	GameState.player_hp = maxf(0.0, GameState.player_hp - amount)
+	if GameState.player_hp <= 0.0:
+		GameState.player_hp = 35.0
+		GameState.bleeding = false
+		GameState.show_subtitle("同伴把你拖进了门洞。", "Someone dragged you into a doorway.")
+		return
+	if GameState.player_hp < 45.0:
+		GameState.bleeding = true
+		GameState.show_subtitle("你挂彩了。靠到门脸里停血。", "You're hit. Get into a doorway and stop the bleeding.")
+
 func mark_block(building_id: int) -> void:
 	marked_block = building_id
 	block_marked.emit(building_id)

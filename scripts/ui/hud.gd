@@ -42,7 +42,10 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if GameState.started_play:
-		_clock.text = "2031年1月17日  黑河\n" + GameState.clock_text()
+		var hp := ""
+		if CombatHooks.enabled or GameState.under_fire:
+			hp = "  伤势 %.0f" % GameState.player_hp
+		_clock.text = "2031年1月17日  黑河\n" + GameState.clock_text() + hp
 	if _subtitle_until > 0.0 and Time.get_ticks_msec() / 1000.0 > _subtitle_until and _story_line == "":
 		_subtitle_zh.text = ""
 		_subtitle_en.text = ""
@@ -149,7 +152,7 @@ func _build_pause() -> void:
 		button.pressed.connect(func(): GameState.set_quality(level))
 		row.add_child(button)
 	box.add_child(row)
-	box.add_child(_centered("低：无体积雾、少灯光，给核显。\n高：体积雾、辉光、SDFGI。", 14))
+	box.add_child(_centered("低：少灯光，可破坏建筑更少。\n高：体积雾，更多楼层会被炸开。", 14))
 	box.add_child(_centered("地图 © OpenStreetMap 贡献者，ODbL 1.0\n字体：Noto Sans / Noto Sans SC，OFL\n© 2026 李家宝", 13))
 	var resume := Button.new()
 	resume.text = "继续  Resume"

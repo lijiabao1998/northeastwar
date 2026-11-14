@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode diffuse_burley, cull_disabled;
 
+#include "res://shaders/cuts.gdshaderinc"
+
 uniform float night : hint_range(0.0, 1.0) = 0.45;
 
 varying float v_seed;
@@ -11,9 +13,13 @@ float hashf(float n) {
 
 void vertex() {
 	v_seed = UV2.x;
+	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
+	if (carved(v_world)) {
+		discard;
+	}
 	float pane_x = floor(UV.x / 1.15);
 	float pane_y = floor(UV.y / 1.35);
 	vec2 cell = vec2(fract(UV.x / 1.15), fract(UV.y / 1.35));

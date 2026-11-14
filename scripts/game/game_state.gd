@@ -26,6 +26,9 @@ var on_ice: bool = false
 var sheltered: bool = false
 var move_scale: float = 1.0
 var shot_mode: bool = false
+var under_fire: bool = false
+var player_hp: float = 100.0
+var bleeding: bool = false
 
 func _ready() -> void:
 	_ensure_actions()
@@ -34,7 +37,8 @@ func _ready() -> void:
 		quality = str(cfg.get_value("video", "quality", "medium"))
 		if quality not in LEVELS:
 			quality = "medium"
-	shot_mode = "--shots" in OS.get_cmdline_user_args()
+	var args := OS.get_cmdline_user_args()
+	shot_mode = "--shots" in args or "--combat-shots" in args
 	if shot_mode:
 		started_play = true
 		quality = "medium"

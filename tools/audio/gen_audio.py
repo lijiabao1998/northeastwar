@@ -79,8 +79,35 @@ def boom() -> None:
     save("boom.wav", samples)
 
 
+def whistle() -> None:
+    samples = []
+    n = int(RATE * 1.6)
+    for i in range(n):
+        t = i / RATE
+        freq = 420 + t * 380
+        env = math.sin(math.pi * min(1.0, t / 1.6)) * math.exp(-t * 0.4)
+        samples.append(math.sin(2 * math.pi * freq * t) * env * 0.45)
+    save("whistle.wav", samples)
+
+
+def drone() -> None:
+    rng = random.Random(9)
+    samples = []
+    n = int(RATE * 1.8)
+    phase = 0.0
+    for i in range(n):
+        t = i / RATE
+        phase += (140 + 30 * math.sin(t * 18)) / RATE
+        buzz = math.sin(2 * math.pi * phase) * 0.4 + math.sin(2 * math.pi * phase * 2.02) * 0.2
+        edge = min(1.0, t * 8, (1.8 - t) * 8)
+        samples.append((buzz + (rng.random() - 0.5) * 0.05) * edge * 0.5)
+    save("drone.wav", samples)
+
+
 if __name__ == "__main__":
     wind()
     crunch()
     phone()
     boom()
+    whistle()
+    drone()
