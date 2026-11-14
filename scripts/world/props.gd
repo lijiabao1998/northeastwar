@@ -9,6 +9,7 @@ var _flash_lights: Array[OmniLight3D] = []
 var _font: Font
 
 func build(data: Dictionary) -> void:
+	add_to_group("city_props")
 	_font = _load_font()
 	_air_conditioners(data.get("buildings", []))
 	_trees(data.get("trees", []))

@@ -170,7 +170,10 @@ func _shoot_at_player(body: Node3D) -> void:
 	if player == null:
 		return
 	var aim := player.global_position + Vector3(randf_range(-1.2, 1.2), 1.0, randf_range(-1.2, 1.2))
-	if body.global_position.distance_to(player.global_position) < 42.0 and randf() < 0.55:
+	var seen := 1.0
+	if GameState.blackout and not GameState.revealed:
+		seen = 0.2
+	if body.global_position.distance_to(player.global_position) < 42.0 and randf() < 0.55 * seen:
 		var cover := 0.55 if _near_building(player.global_position) else 1.0
 		CombatHooks.hurt_player(randf_range(8.0, 16.0) * cover)
 	_tracer(body.global_position + Vector3(0, 1.3, 0), aim)

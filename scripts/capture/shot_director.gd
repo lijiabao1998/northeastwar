@@ -14,6 +14,11 @@ func _run() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if "--hold-shots" in OS.get_cmdline_user_args():
+		await _hold_shots()
+		print("SHOTS_DONE")
+		get_tree().quit(0)
+		return
 	if "--fidelity-shots" in OS.get_cmdline_user_args():
 		await _fidelity_shots()
 		print("SHOTS_DONE")
@@ -74,6 +79,47 @@ func _run() -> void:
 	await _save("04_alert_river")
 	print("SHOTS_DONE")
 	get_tree().quit(0)
+
+func _hold_shots() -> void:
+	if player and player.camera():
+		player.camera().current = true
+	var hold := get_tree().get_first_node_in_group("hold_night") as HoldNight
+	var shop := Vector3(-268.8, 0.05, -325.2)
+	var facing := Vector3(0.427, 0.0, 0.904)
+	var street := shop + facing * 3.6
+	GameState.hour = 21.0
+	_stand(street)
+	player.set_zoom(0.55)
+	if hold:
+		hold.pose_build()
+	await _frame()
+	await _save("19_build")
+	player.set_zoom(1.4)
+	_stand(shop + facing * 2.2)
+	if hold:
+		hold.pose_sos()
+	await _frame()
+	await _save("23_sos")
+	player.set_zoom(1.25)
+	_stand(shop + facing * 2.0)
+	if hold:
+		hold.pose_cold()
+	await _frame()
+	await _save("24_cold")
+	player.set_zoom(1.15)
+	_stand(street)
+	if hold:
+		hold.pose_wave()
+	await _frame()
+	await _save("20_wave")
+	if hold:
+		hold.pose_drone()
+	await _frame()
+	await _save("21_drone")
+	if hold:
+		hold.pose_fire()
+	await _frame()
+	await _save("22_fire")
 
 func _fidelity_shots() -> void:
 	if player and player.camera():

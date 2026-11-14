@@ -29,6 +29,15 @@ var shot_mode: bool = false
 var under_fire: bool = false
 var player_hp: float = 100.0
 var bleeding: bool = false
+var defend_night: bool = false
+var defend_phase: String = ""
+var scrap: int = 0
+var coal_stock: int = 0
+var radio_unlocked: bool = false
+var neighbours_rescued: bool = false
+var blackout: bool = false
+var revealed: bool = false
+var hold_hour: float = 21.0
 
 func _ready() -> void:
 	_ensure_actions()
@@ -38,7 +47,7 @@ func _ready() -> void:
 		if quality not in LEVELS:
 			quality = "medium"
 	var args := OS.get_cmdline_user_args()
-	shot_mode = "--shots" in args or "--combat-shots" in args or "--fidelity-shots" in args
+	shot_mode = "--shots" in args or "--combat-shots" in args or "--fidelity-shots" in args or "--hold-shots" in args
 	if shot_mode:
 		started_play = true
 		quality = "high" if "--fidelity-shots" in args else "medium"
@@ -115,6 +124,8 @@ func _ensure_actions() -> void:
 	_joy_button("sprint", JOY_BUTTON_LEFT_STICK)
 	_action("interact", [KEY_E, KEY_F])
 	_joy_button("interact", JOY_BUTTON_A)
+	_action("hold_night", [KEY_H])
+	_action("fire_mission", [KEY_R])
 	_action("pause", [KEY_ESCAPE])
 	_joy_button("pause", JOY_BUTTON_START)
 

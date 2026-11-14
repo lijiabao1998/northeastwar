@@ -23,6 +23,9 @@ func barrage(center: Vector3, count: int = 4) -> void:
 		var at := center + Vector3(randf_range(-7, 7), 0, randf_range(-7, 7))
 		get_tree().create_timer(delay).timeout.connect(func(): _impact(at, 9.0, 28.0, 160.0))
 
+func show_drone(parent: Node3D) -> void:
+	_drone_mesh(parent)
+
 func pose_strike(target: Vector3) -> void:
 	var rig := Node3D.new()
 	rig.position = target + Vector3(-6, 8, -4)

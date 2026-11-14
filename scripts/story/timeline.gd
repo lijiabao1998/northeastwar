@@ -37,7 +37,7 @@ func _process(delta: float) -> void:
 			"Emergency: Russian troops are crossing the frozen Heilongjiang toward the city. Leave the riverfront and the ice. Take shelter. Keep warm. Do not gather to watch."
 		)
 		GameState.show_subtitle("警报。不是演习。", "The alert. It says this is not a drill.")
-		GameState.show_objective("离开江面，到亮着的店门口站一会儿。", "Get off the ice. Stand in a lit shop doorway.")
+		GameState.show_objective("离开江面。若留下守街，按 H。你也可以继续走。", "Get off the ice. Press H to hold the street, or keep walking.")
 	if h >= 17.52 and not _fired.has("follow"):
 		_fired["follow"] = true
 		GameState.push_phone(

@@ -71,6 +71,10 @@ func _ready() -> void:
 	ordinance.add_to_group("ordinance")
 	add_child(ordinance)
 
+	var hold := HoldNight.new()
+	hold.name = "HoldNight"
+	add_child(hold)
+
 	var story := DayOne.new()
 	story.name = "Story"
 	story.city = city
