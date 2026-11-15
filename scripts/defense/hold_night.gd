@@ -23,6 +23,7 @@ var _tooltip: Label
 var _title: Control
 var _strip: Label
 var _squad_label: Label
+var _panel: PanelContainer
 var _militia: Array = []
 var _selected_man := 0
 var _barricades: Array = []
@@ -86,7 +87,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if _phase == "build":
 			_place(_aim())
-		elif _phase == "night":
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		if _phase == "night":
 			_order_move(_aim())
 
 func begin_build() -> void:
@@ -97,7 +99,14 @@ func begin_build() -> void:
 	GameState.coal_stock = 3
 	GameState.blackout = false
 	_phase = "build"
+	# The four men at the shop hand you a rifle. Outside this night you have none.
+	GameState.armed = true
+	CombatHooks.enabled = true
 	_show_title(true)
+	get_tree().create_timer(3.5).timeout.connect(func():
+		if _phase == "build":
+			_show_title(false)
+	)
 	_seed_piles()
 	_seed_militia()
 	_seed_sos()
@@ -562,7 +571,11 @@ func _ui() -> void:
 	_title = Control.new()
 	_title.visible = false
 	_title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# The card is something to read, not something to click. Without this it
+	# swallowed every mouse click for the whole build phase.
+	_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var dim := ColorRect.new()
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dim.color = Color(0.02, 0.03, 0.05, 0.45)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_title.add_child(dim)
@@ -574,6 +587,7 @@ func _ui() -> void:
 	card.size = Vector2(440, 160)
 	card.add_theme_font_size_override("font_size", 42)
 	card.add_theme_color_override("font_color", Color(0.95, 0.9, 0.8))
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_title.add_child(card)
 	layer.add_child(_title)
 	var panel := PanelContainer.new()
@@ -590,6 +604,8 @@ func _ui() -> void:
 	_squad_label.add_theme_color_override("font_color", Color(0.78, 0.84, 0.76))
 	box.add_child(_squad_label)
 	layer.add_child(panel)
+	_panel = panel
+	_panel.visible = false
 	_tooltip = Label.new()
 	_tooltip.visible = false
 	_tooltip.add_theme_font_size_override("font_size", 20)
@@ -636,13 +652,18 @@ func _refresh_strip() -> void:
 	if _strip == null:
 		return
 	_strip.visible = GameState.defend_night
+	if _panel:
+		_panel.visible = GameState.defend_night
 	var h := GameState.hold_hour
 	var clock_h := int(h) % 24
 	var clock_m := int((h - float(int(h))) * 60.0)
 	var spec: Dictionary = KINDS[_selected]
-	_strip.text = "%02d:%02d   体温 %.1f°   室外 -24°\n废铁 %d   煤 %d\n放置 %s  废铁%d 煤%d" % [
-		clock_h, clock_m, GameState.body_temp, GameState.scrap, GameState.coal_stock,
-		spec["zh"], spec["scrap"], spec["coal"]]
+	_strip.text = "%02d:%02d   体温 %.1f°   伤势 %.0f   室外 -24°\n废铁 %d   煤 %d" % [
+		clock_h, clock_m, GameState.body_temp, GameState.player_hp, GameState.scrap, GameState.coal_stock]
+	if _phase == "build":
+		_strip.text += "\n放置 %s  废铁%d 煤%d\n1-5 选工事 · 左键 放下 · E 搜物资 · B 开始守夜" % [spec["zh"], spec["scrap"], spec["coal"]]
+	elif _phase == "night":
+		_strip.text += "\n左键 开枪 · 右键 派民兵 · G 上楼守窗 · R 呼叫火力 · Q 绷带"
 	if _squad_label:
 		var line := "民兵"
 		for man in _militia:

@@ -60,12 +60,34 @@ func _ready() -> void:
 	add_child(_cam)
 	set_zoom(1.0)
 	add_to_group("player")
+	_add_marker()
+
+func _add_marker() -> void:
+	## A thin ring at your feet that draws through walls, so a building
+	## between you and the camera never hides where you are.
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.52
+	torus.outer_radius = 0.6
+	torus.rings = 24
+	torus.ring_segments = 6
+	ring.mesh = torus
+	ring.position = Vector3(0, 0.08, 0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.92, 0.6, 0.55)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.no_depth_test = true
+	mat.render_priority = 10
+	ring.material_override = mat
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(ring)
 
 func camera() -> Camera3D:
 	return _cam
 
 func set_zoom(value: float) -> void:
-	zoom = clampf(value, 0.5, 2.2)
+	zoom = clampf(value, 0.3, 2.2)
 	var aspect := 1.0
 	var vp := get_viewport()
 	if vp and vp.size.y > 0.0:
@@ -77,7 +99,7 @@ func set_zoom(value: float) -> void:
 	_cam.size = (half * 2.0) / zoom
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not GameState.started_play or GameState.paused or GameState.shot_mode:
+	if not GameState.started_play or GameState.paused or GameState.shot_mode or GameState.dead:
 		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -103,6 +125,12 @@ func _physics_process(delta: float) -> void:
 	_rig()
 	if GameState.shot_mode or not GameState.started_play or GameState.paused:
 		return
+	if GameState.dead:
+		# One life. He stays where he fell.
+		GameState.gait = "still"
+		_body.rotation.x = lerp_angle(_body.rotation.x, -PI * 0.5, 0.12)
+		_body.position.y = lerpf(_body.position.y, 0.25, 0.12)
+		return
 	var wish := SCREEN_UP * (Input.get_action_strength("move_forward") - Input.get_action_strength("move_back"))
 	wish += SCREEN_RIGHT * (Input.get_action_strength("move_right") - Input.get_action_strength("move_left"))
 	var stick := _touch_axis()
@@ -127,6 +155,8 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y = -0.4
 	move_and_slide()
+	var pace := Vector2(velocity.x, velocity.z).length()
+	GameState.gait = "run" if (running and pace > 2.0) else ("walk" if pace > 0.6 else "still")
 	_clamp_world()
 	if moving and is_on_floor():
 		_step_time -= delta

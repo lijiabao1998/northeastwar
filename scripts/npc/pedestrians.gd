@@ -39,6 +39,7 @@ const AFTER_EN := [
 ]
 
 var _people: Array[Node] = []
+static var doors: PackedVector2Array = PackedVector2Array()
 
 func build(data: Dictionary) -> void:
 	var paths: Array = data.get("paths", [])
@@ -48,6 +49,9 @@ func build(data: Dictionary) -> void:
 			usable.append(path)
 	if usable.is_empty():
 		return
+	doors = PackedVector2Array()
+	for heat in data.get("heat", []):
+		doors.append(Vector2(float(heat["x"]), float(heat["z"])))
 	var count := 10 if GameState.quality == "low" else 16
 	for i in count:
 		var path: Array = usable[i % usable.size()]
@@ -84,6 +88,7 @@ class Pedestrian extends Node:
 	var lines_zh: Array = []
 	var lines_en: Array = []
 	var _body: CharacterBody3D
+	var _fled_for: float = 0.0
 
 	func _ready() -> void:
 		_body = get_parent() as CharacterBody3D
@@ -102,9 +107,25 @@ class Pedestrian extends Node:
 			return
 		var speed := 1.15
 		var target := Vector3.ZERO
-		if GameState.alert_stage >= 2 or GameState.under_fire:
+		if GameState.alert_stage >= 2:
+			# After the alert people get indoors: the nearest shop door, then gone.
 			speed = 3.3
-			target = _body.global_position + Vector3(randf_range(-0.4, 0.4), 0, -1.0)
+			var here := Vector2(_body.global_position.x, _body.global_position.z)
+			var best := here + Vector2(0, -30)
+			var best_d := 1.0e12
+			for door in Pedestrians.doors:
+				var d := door.distance_squared_to(here)
+				if d < best_d:
+					best_d = d
+					best = door
+			if best_d < 2.5 * 2.5 or _fled_for > 25.0:
+				_body.visible = false
+				_body.remove_from_group("npc")
+				_body.collision_layer = 0
+				set_physics_process(false)
+				return
+			_fled_for += delta
+			target = Vector3(best.x, _body.global_position.y, best.y)
 		else:
 			var pt: Array = path[index]
 			target = Vector3(float(pt[0]), _body.global_position.y, float(pt[1]))

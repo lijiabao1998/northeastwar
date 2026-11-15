@@ -63,14 +63,14 @@ func _ready() -> void:
 	add_child(sun)
 	GameState.quality_changed.connect(apply_quality)
 	apply_quality(GameState.quality)
-	_apply_hour(GameState.hour)
+	_apply_hour(minf(GameState.hour, 22.0))
 
 func bind(city: CityView, props: CityProps) -> void:
 	_city = city
 	_props = props
 
 func _process(_delta: float) -> void:
-	_apply_hour(GameState.hour)
+	_apply_hour(minf(GameState.hour, 22.0))
 
 func apply_quality(level: String) -> void:
 	var vp := get_viewport()
@@ -157,4 +157,4 @@ func _apply_hour(hour: float) -> void:
 	if _city:
 		_city.set_night(night)
 	if _props:
-		_props.set_lamp_strength(smoothstep(15.8, 16.35, hour))
+		_props.set_lamp_strength(0.0 if GameState.blackout else smoothstep(15.8, 16.35, hour))

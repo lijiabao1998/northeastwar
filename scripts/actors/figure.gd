@@ -73,8 +73,8 @@ static func _cyl(parent: Node3D, a: Vector3, b: Vector3, radius: float, color: C
 	mesh.bottom_radius = radius
 	mesh.height = a.distance_to(b)
 	mi.mesh = mesh
-	mi.position = (a + b) * 0.5
-	mi.look_at(b, Vector3.UP)
+	# Built from the direction itself: a node that is not in the tree yet cannot look_at.
+	mi.transform = Transform3D(Basis.looking_at(b - a, Vector3.UP), (a + b) * 0.5)
 	mi.rotate_object_local(Vector3.RIGHT, PI * 0.5)
 	mi.material_override = _paint(color)
 	parent.add_child(mi)

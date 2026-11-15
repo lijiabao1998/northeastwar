@@ -28,9 +28,13 @@ You need [Godot 4.7.2 stable](https://godotengine.org/download/archive/4.7.2-sta
 godot --path .
 ```
 
-The opening is about eight real minutes (16:00 to 18:00 in the game, at 15×). You are a shop worker who just got off 中央街. Walk north to the river. A phone alert tells you Russian troops are crossing the frozen Heilongjiang. After you have walked a little way, small infantry patrols can meet you in the street. Civilians run for doorways. They are not targets, and nothing in the game scores a kill.
+Until 17:36 it is an ordinary evening and the shops are open. Every shop sign is a door: stand under it and hold E to take what the shop has (a pharmacy has bandages, a clothes shop a padded coat). At 17:36 Russian troops cross the frozen Heilongjiang. From then on the goal is to be alive at 07:00. You have one life; a run that ends starts again at 16:00.
 
-The camera matches DefendTaipei: orthographic, fixed above and to the northeast (`40, 56, 40` metres), looking at your feet. The mouse wheel zooms between 0.5 and 2.2. W and S move along the screen's up axis, A and D along its right. A touch stick does the same thing. Clicking aims and, once a patrol is near, fires. The mouse is not captured. `CombatHooks` is where drones, artillery, armour and retaking a block attach. Civilians are never a target. How much of a building can fall apart follows the same low / medium / high setting: low tracks fewer buildings and fewer storeys. Sources for the fighting are in `docs/WAR_SOURCES.md`. What the 中央街 block is matched to is in `docs/HEIHE_LOOK_SOURCES.md`. After the alert, H starts one optional night on that street: scavenge, place barricades, and hold until 06:00. It does not replace the evening walk.
+You are not a soldier and you have no weapon. Infantry groups of two to five patrol the streets the front has reached. A soldier has to see you: inside his reach for the light, inside the arc he faces, with nothing solid in between. Running is heard. If a group is sure of you it shouts: stand still and you are searched and robbed, run and they shoot. A small drone comes and goes; if it holds you in view, mortar rounds follow a few minutes later. A doorway hides you from it. Rifle wounds bleed until bandaged, the cold kills, and the heating stops at 21:00.
+
+The Russian side's numbers are in `data/russia/forces.json`, each with its source. They follow how the equipment performed in Ukraine, as far as open reporting goes, and say where a number had to be chosen for play. The design is in `docs/DESIGN.md`, the findings in `docs/research/ukraine-performance.md`.
+
+The camera is fixed above and to the northeast, looking at your feet, so north is toward the bottom left of the screen. The mouse wheel zooms between 0.3 and 2.2. A ring at your feet shows through walls. After the alert, H starts the older defend-the-shop night on 中央街 (scavenge, place barricades with the left mouse button, B to begin, hold until 06:00); only there are you handed a rifle. Sources for the fighting are in `docs/WAR_SOURCES.md`. What the 中央街 block is matched to is in `docs/HEIHE_LOOK_SOURCES.md`.
 
 ### Controls
 
@@ -39,12 +43,14 @@ The camera matches DefendTaipei: orthographic, fixed above and to the northeast 
 | Move | WASD or arrows | Left stick |
 | Zoom | Mouse wheel | Pinch |
 | Run | Shift | Push the stick, or RB |
-| Talk to someone | E or F | A |
+| Talk to someone, or hold to take from a shop | E or F | A |
+| Bandage / eat / drink / hand warmer | Q / Z / X / C | |
+| Start again after dying | Enter | |
 | Pause, quality, credits | Esc | Start |
 
 Click the window, or press a key, to start. Quality is Low / Medium / High from the pause menu and is remembered. Low turns off volumetric fog, SDFGI, SSAO and most real lights so an integrated GPU can hold a frame rate. High turns those back on.
 
-Body temperature starts at 36.8°C. The street is about −24°C. Standing in a lit shop doorway warms you. The ice is colder, and running makes it worse.
+Body temperature starts at 36.8°C. The street is about −24°C. Standing in a shop doorway warms you until the heating stops at 21:00; after that it only keeps the wind off. The ice is colder, and running makes it worse.
 
 ## Build
 

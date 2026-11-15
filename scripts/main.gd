@@ -47,6 +47,12 @@ func _ready() -> void:
 	cold.city = city
 	player.add_child(cold)
 
+	var scavenge := Scavenge.new()
+	scavenge.name = "Scavenge"
+	scavenge.player = player
+	add_child(scavenge)
+	scavenge.build(city.data)
+
 	var people := Pedestrians.new()
 	people.name = "People"
 	add_child(people)
@@ -70,6 +76,11 @@ func _ready() -> void:
 	ordinance.name = "Ordinance"
 	ordinance.add_to_group("ordinance")
 	add_child(ordinance)
+
+	var drone := ReconDrone.new()
+	drone.name = "ReconDrone"
+	drone.player = player
+	add_child(drone)
 
 	var hold := HoldNight.new()
 	hold.name = "HoldNight"
@@ -104,6 +115,10 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if GameState.shot_mode:
 		return
+	if GameState.dead:
+		if event.is_action_pressed("restart"):
+			restart()
+		return
 	if not GameState.started_play:
 		var pressed := false
 		if event is InputEventMouseButton and event.pressed:
@@ -119,3 +134,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		GameState.set_paused(not GameState.paused)
 		get_viewport().set_input_as_handled()
+
+func restart() -> void:
+	## One life per run. A new run starts at 16:00 again.
+	GameState.reset_run()
+	CombatHooks.reset()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var tree := get_tree()
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var fresh := packed.instantiate()
+	var root := tree.root
+	root.remove_child(self)
+	queue_free()
+	root.add_child(fresh)
+	tree.current_scene = fresh

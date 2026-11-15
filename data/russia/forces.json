@@ -1,0 +1,177 @@
+{
+  "meta": {
+    "rule": "Every number here is meant to follow how the thing performed in Ukraine from 2022 on, as openly reported. It is not taken from a brochure. `src` names the entry in docs/WAR_SOURCES.md. `basis` says how firm it is: reported (a figure from a source), derived (worked out from reported figures), play (chosen so the game is playable; the source gives the shape but not the number).",
+    "units": "Fields ending _m are metres. _s are seconds as played. _min are minutes on the war clock, which runs 15 times faster than play, so 4 _min is 16 seconds of play. _p is a chance from 0 to 1.",
+    "revision": 2,
+    "research": "docs/research/ukraine-performance.md holds the figures and links these numbers were set from."
+  },
+  "infantry_group": {
+    "name_zh": "步兵小组",
+    "size": [
+      2,
+      5
+    ],
+    "size_src": "rusi-emergent-2025",
+    "size_basis": "reported",
+    "spacing_m": 7.0,
+    "walk_mps": 1.3,
+    "rush_mps": 3.1,
+    "advance_m_per_min": 9.0,
+    "advance_basis": "play",
+    "sight_m": {
+      "day": 85.0,
+      "dusk": 55.0,
+      "night_lit": 38.0,
+      "night_dark": 13.0
+    },
+    "sight_basis": "play",
+    "night_optics_p": 0.2,
+    "night_optics_sight_m": 55.0,
+    "night_optics_src": "uk-mod-2023",
+    "night_optics_basis": "derived",
+    "view_half_angle_deg": 100.0,
+    "hearing_m": {
+      "run": 14.0,
+      "walk": 4.5,
+      "still": 0.0
+    },
+    "notice_s": {
+      "near": 0.45,
+      "far": 2.6
+    },
+    "challenge_s": 1.6,
+    "lose_sight_s": 4.0,
+    "search_s": 45.0,
+    "calm_after_search_s": 60.0,
+    "conduct": {
+      "outside_after_crossing": "challenged, then shot at if you run",
+      "stand_still": "searched and robbed, then let go",
+      "src": "hrw-bucha",
+      "basis": "derived"
+    }
+  },
+  "rifle": {
+    "name_zh": "AK-74M / AK-12",
+    "burst_gap_s": [
+      0.9,
+      1.7
+    ],
+    "hit_p_by_range_m": [
+      [
+        8,
+        0.6
+      ],
+      [
+        25,
+        0.38
+      ],
+      [
+        50,
+        0.2
+      ],
+      [
+        85,
+        0.08
+      ]
+    ],
+    "hit_basis": "play",
+    "moving_target_mul": 0.6,
+    "cover_mul": 0.45,
+    "dark_mul": 0.5,
+    "wound_hp": [
+      28,
+      52
+    ],
+    "bleed_p": 0.85
+  },
+  "grenade": {
+    "name_zh": "手榴弹",
+    "throw_m": 22.0,
+    "fuse_s": 0.7,
+    "lethal_m": 4.0,
+    "wound_m": 8.0,
+    "wound_hp": [
+      35,
+      70
+    ],
+    "use": "Thrown at doorways and windows before going in. Buildings are cleared with grenades first.",
+    "src": "king-urban",
+    "basis": "reported"
+  },
+  "recon_drone": {
+    "name_zh": "侦察四轴（Mavic 一类）",
+    "altitude_m": 90.0,
+    "sight_radius_m": {
+      "day": 55.0,
+      "dusk": 40.0,
+      "night_thermal": 45.0,
+      "night_plain": 8.0
+    },
+    "thermal_p": 0.3,
+    "orbit_mps": 9.0,
+    "on_station_min": 20.0,
+    "cold_endurance_mul": 0.6,
+    "gap_between_sorties_min": [
+      15.0,
+      40.0
+    ],
+    "confirm_s": 6.0,
+    "src": "rusi-third-year",
+    "basis": "derived",
+    "nominal_endurance_min": 45.0
+  },
+  "mortar_82": {
+    "name_zh": "82 毫米迫击炮",
+    "sensor_to_shooter_min": [
+      3.0,
+      5.0
+    ],
+    "sensor_src": "rusi-meatgrinder",
+    "sensor_basis": "reported",
+    "rounds": [
+      3,
+      6
+    ],
+    "round_gap_s": [
+      1.6,
+      3.2
+    ],
+    "first_round_error_m": 28.0,
+    "corrected_error_m": 11.0,
+    "lethal_m": 6.0,
+    "wound_m": 16.0,
+    "wound_hp": [
+      25,
+      60
+    ],
+    "indoor_mul": 0.25,
+    "basis": "derived"
+  },
+  "fpv": {
+    "name_zh": "FPV 自杀无人机",
+    "spotted_to_strike_min": [
+      10.0,
+      20.0
+    ],
+    "reach_target_p": 0.3,
+    "reach_src": "rusi-third-year",
+    "reach_basis": "reported",
+    "speed_mps": 28.0,
+    "lethal_m": 3.0,
+    "wound_m": 7.0,
+    "wound_hp": [
+      40,
+      90
+    ],
+    "follows_into_doorway_p": 0.5,
+    "cold_failure_p": 0.15,
+    "basis": "derived",
+    "strike_src": "wotr-fpv-2025",
+    "strike_basis": "reported",
+    "reach_note": "60 to 80 percent of FPVs miss; measured on Ukrainian drones, no Russian-side figure exists",
+    "fibre_optic_p": 0.2,
+    "fibre_src": "fpri-2026",
+    "per_tank": 12,
+    "per_tank_src": "rusi-third-year"
+  }
+}

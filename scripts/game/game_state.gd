@@ -11,6 +11,9 @@ signal phone_message(title: String, body_zh: String, body_en: String)
 signal alert_stage_changed(stage: int)
 signal boom
 signal temperature_changed(celsius: float)
+signal died(cause_zh: String, cause_en: String)
+signal items_changed
+signal night_survived
 
 const TIME_SCALE := 15.0
 const LEVELS := ["low", "medium", "high"]
@@ -38,6 +41,29 @@ var neighbours_rescued: bool = false
 var blackout: bool = false
 var revealed: bool = false
 var hold_hour: float = 21.0
+## Survival layer. One life: when `dead` is set the run is over.
+var dead: bool = false
+var death_zh: String = ""
+var death_en: String = ""
+var hunger: float = 100.0
+var thirst: float = 100.0
+var items: Dictionary = {}
+var coat_bonus: float = 0.0
+## 0 = nobody has noticed you, 1 = a soldier is sure of what he sees.
+var notice: float = 0.0
+var challenged: bool = false
+var drone_overhead: bool = false
+var drone_sees: bool = false
+## still, walk or run. Soldiers hear the last two.
+var gait: String = "still"
+## The line the HUD shows when there is something to do right here.
+var prompt: String = ""
+## Only true while you hold a weapon (the defend night hands you one).
+var armed: bool = false
+var hours_alive: float = 0.0
+var dawn_seen: bool = false
+
+const END_HOUR := 31.0
 
 func _ready() -> void:
 	_ensure_actions()
@@ -55,9 +81,14 @@ func _ready() -> void:
 func tick(delta: float) -> void:
 	if not started_play or paused or shot_mode:
 		return
-	hour += delta * TIME_SCALE / 3600.0
-	if hour > 22.0:
-		hour = 22.0
+	if dead:
+		return
+	var step := delta * TIME_SCALE / 3600.0
+	hour = minf(hour + step, END_HOUR)
+	hours_alive += step
+	if hour >= END_HOUR and not dawn_seen:
+		dawn_seen = true
+		night_survived.emit()
 
 func begin() -> void:
 	if started_play:
@@ -108,7 +139,85 @@ func set_temperature(celsius: float, ice: bool, warm: bool, scale: float) -> voi
 func clock_text() -> String:
 	var h := int(hour)
 	var m := int((hour - float(h)) * 60.0)
-	return "%02d:%02d" % [h, m]
+	return "%02d:%02d" % [h % 24, m]
+
+func date_text() -> String:
+	return "2031年1月%d日" % (17 + int(hour) / 24)
+
+static func hm(hours: int, minutes: int) -> float:
+	## A time of day as the clock's decimal hours. 17:36 is hm(17, 36), not 17.36.
+	return float(hours) + float(minutes) / 60.0
+
+func light() -> String:
+	## day, dusk, night_lit or night_dark. Soldiers and drones see by this.
+	if hour < hm(16, 30):
+		return "day"
+	if hour < hm(17, 15):
+		return "dusk"
+	return "night_dark" if blackout else "night_lit"
+
+func kill(cause_zh: String, cause_en: String) -> void:
+	if dead or shot_mode:
+		return
+	dead = true
+	death_zh = cause_zh
+	death_en = cause_en
+	player_hp = 0.0
+	died.emit(cause_zh, cause_en)
+
+func give(item: String, count: int = 1) -> void:
+	items[item] = int(items.get(item, 0)) + count
+	items_changed.emit()
+
+func take(item: String, count: int = 1) -> bool:
+	var have := int(items.get(item, 0))
+	if have < count:
+		return false
+	items[item] = have - count
+	items_changed.emit()
+	return true
+
+func count(item: String) -> int:
+	return int(items.get(item, 0))
+
+func reset_run() -> void:
+	## Back to 16:00 on day one. Called before the scene is reloaded.
+	hour = 16.0
+	started_play = false
+	paused = false
+	alert_stage = 0
+	body_temp = 36.8
+	on_ice = false
+	sheltered = false
+	move_scale = 1.0
+	under_fire = false
+	player_hp = 100.0
+	bleeding = false
+	defend_night = false
+	defend_phase = ""
+	scrap = 0
+	coal_stock = 0
+	radio_unlocked = false
+	neighbours_rescued = false
+	blackout = false
+	revealed = false
+	hold_hour = 21.0
+	dead = false
+	death_zh = ""
+	death_en = ""
+	hunger = 100.0
+	thirst = 100.0
+	items = {}
+	coat_bonus = 0.0
+	notice = 0.0
+	challenged = false
+	drone_overhead = false
+	drone_sees = false
+	gait = "still"
+	prompt = ""
+	armed = false
+	hours_alive = 0.0
+	dawn_seen = false
 
 func _ensure_actions() -> void:
 	_action("move_forward", [KEY_W, KEY_UP])
@@ -125,6 +234,11 @@ func _ensure_actions() -> void:
 	_action("interact", [KEY_E, KEY_F])
 	_joy_button("interact", JOY_BUTTON_A)
 	_action("hold_night", [KEY_H])
+	_action("use_bandage", [KEY_Q])
+	_action("use_food", [KEY_Z])
+	_action("use_water", [KEY_X])
+	_action("use_warmer", [KEY_C])
+	_action("restart", [KEY_ENTER])
 	_action("fire_mission", [KEY_R])
 	_action("pause", [KEY_ESCAPE])
 	_joy_button("pause", JOY_BUTTON_START)
