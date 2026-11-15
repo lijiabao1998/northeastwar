@@ -1,0 +1,17 @@
+{
+  "id": "heihe_riverfront",
+  "title": "Heihe riverfront, a few blocks around 中央街 and 母亲广场",
+  "origin": {
+    "lat": 50.2510885,
+    "lon": 127.4960436,
+    "osm": "node/7779151765",
+    "note": "母亲雕塑 / Скульптура матери, Heilongjiang Park, facing Blagoveshchensk"
+  },
+  "overpass_url": "https://overpass-api.de/api/interpreter",
+  "query_file": "heihe_riverfront.overpassql",
+  "notes": [
+    "Walkable streets are the Chinese bank: 中央街, 王肃街, 文化街, 海兰街, 兴安街 and the promenade.",
+    "The north bank of the Amur (黑龙江) is included as a visual skyline only.",
+    "Origin is the Mother sculpture so the plaza sits near (0, 0)."
+  ]
+}

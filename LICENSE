@@ -1,0 +1,16 @@
+Copyright (c) 2026 李家宝. All rights reserved.
+
+The game code, original art, original audio, story text and shaders in this
+repository are proprietary. You may not copy, modify, or distribute them
+without permission from the copyright holder.
+
+This license does not apply to the OpenStreetMap-derived database under
+data/heihe/, which remains © OpenStreetMap contributors and is available
+under the Open Database License (ODbL) 1.0. See data/heihe/ODBL.txt.
+
+The Noto fonts under assets/fonts/ are not covered by this proprietary
+license. They are licensed under the SIL Open Font License 1.1. See
+assets/fonts/OFL.txt.
+
+Godot Engine is licensed under the MIT License. This project is not
+affiliated with the Godot Engine authors.
