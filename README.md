@@ -20,6 +20,21 @@ Status: Prototype (原型). The first playable slice is the evening of 17 Januar
 
 © 2026 李家寶. All rights reserved.
 
+## The Rust build
+
+The game is being rewritten in Rust, starting with the city of Heihe itself. `crates/sim` holds the world and the rules with no renderer in it; `crates/game` draws it with Bevy. See `docs/DESIGN.md`.
+
+```bash
+cargo run -p northeast --release
+cargo run -p northeast --release -- --hour 18.5
+cargo run -p northeast --release -- --shots out/shots
+cargo test -p sim
+```
+
+WASD walks, Shift runs, the wheel zooms, `[` and `]` turn the clock. `--shots` saves a set of views of the town to a folder without opening a window. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from.
+
+The Godot project below is the earlier build. It stays until the Rust one does everything it does.
+
 ## Play the Heihe slice
 
 You need [Godot 4.7.2 stable](https://godotengine.org/download/archive/4.7.2-stable/). Open this folder as a project and press Play. Or, with the editor binary on your PATH:

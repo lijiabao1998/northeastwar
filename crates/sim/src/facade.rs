@@ -1,0 +1,274 @@
+//! Buildings, drawn from their footprints. Each kind in `look::Kind` is one
+//! of the kinds of building the photographs of Heihe show, and is built here
+//! out of flat pieces: wall, bands, pilasters, frames, glass, a roof under
+//! snow, and on Central Street a cone or a dome on a corner.
+
+use crate::city::Building;
+use crate::geom::{hash01, P2};
+use crate::look::{Dress, Kind, Palette, Rgb};
+use crate::soup::{world, world_dir, Soup};
+
+/// What one building turns into.
+#[derive(Default)]
+pub struct Built {
+    /// Walls, bands, frames, roof, snow: lit by the sun and the lamps.
+    pub solid: Soup,
+    /// Windows nobody is behind.
+    pub glass: Soup,
+    /// Windows with a light on. They glow after dark.
+    pub lit: Soup,
+}
+
+const GROUND_SHOP: f32 = 3.9;
+const BAY: f32 = 3.3;
+
+struct Edge<'a> {
+    a: P2,
+    dir: P2,
+    out: P2,
+    len: f32,
+    soup: &'a mut Soup,
+}
+
+impl Edge<'_> {
+    fn at(&self, along: f32, up: f32, proud: f32) -> [f32; 3] {
+        world(self.a.add(self.dir.mul(along)).add(self.out.mul(proud)), up)
+    }
+
+    /// A flat piece on this wall: from `s0` to `s1` along it, `h0` to `h1` up it,
+    /// standing `proud` metres off the wall so nothing fights for the same depth.
+    fn piece(&mut self, s0: f32, s1: f32, h0: f32, h1: f32, proud: f32, colour: Rgb) {
+        if s1 - s0 < 0.02 || h1 - h0 < 0.02 {
+            return;
+        }
+        let corners = [self.at(s0, h0, proud), self.at(s1, h0, proud), self.at(s1, h1, proud), self.at(s0, h1, proud)];
+        let normal = world_dir(self.out);
+        self.soup.quad(corners, normal, colour);
+    }
+}
+
+fn piece_on(soup: &mut Soup, a: P2, dir: P2, out: P2, s0: f32, s1: f32, h0: f32, h1: f32, proud: f32, colour: Rgb) {
+    let at = |along: f32, up: f32| world(a.add(dir.mul(along)).add(out.mul(proud)), up);
+    soup.quad([at(s0, h0), at(s1, h0), at(s1, h1), at(s0, h1)], world_dir(out), colour);
+}
+
+/// Bays along a wall of this length: (count, first centre, spacing).
+fn bays(len: f32) -> (usize, f32, f32) {
+    let usable = len - 1.2;
+    if usable < BAY * 0.8 {
+        return (0, 0.0, 0.0);
+    }
+    let n = (usable / BAY).floor().max(1.0) as usize;
+    let step = usable / n as f32;
+    (n, 0.6 + step * 0.5, step)
+}
+
+pub fn build(b: &Building, dress: Dress, pal: &Palette) -> Built {
+    let mut out = Built::default();
+    let ring = &b.footprint;
+    let n = ring.len();
+    let parapet = if dress.kind == Kind::FarBank { 0.0 } else { 0.7 };
+    let top = b.height;
+    let ground = if dress.shops { GROUND_SHOP.min(top) } else { 0.0 };
+    let floors_above = (((top - ground) / b.floor_h).round() as i32).max(if ground > 0.0 { 0 } else { 1 }) as usize;
+    let floor_h = if floors_above > 0 { (top - ground) / floors_above as f32 } else { b.floor_h };
+
+    let (wall, trim, band) = match dress.kind {
+        Kind::CentralSalmon => (pal.get("central_salmon"), pal.get("central_pilaster"), pal.get("central_cream")),
+        Kind::CentralBaroque => (pal.get("baroque_red"), pal.get("baroque_white"), pal.get("baroque_white")),
+        Kind::CentralClassical => (pal.get("classical_grey"), pal.get("baroque_white"), pal.get("tile_white")),
+        Kind::YellowCrimson => (pal.get("resi_yellow"), pal.get("resi_cream"), pal.get("resi_crimson")),
+        Kind::TanTile => (pal.get("tile_tan"), pal.get("tile_cream"), pal.get("tile_cream")),
+        Kind::SalmonYellow => (pal.get("salmon_block"), pal.get("tile_cream"), pal.get("bay_yellow")),
+        Kind::LowBrick => (pal.get("tile_white"), pal.get("tile_white"), pal.get("brick_red")),
+        Kind::FarBank => {
+            let brick = hash01(b.id, 3) < 0.55;
+            let c = if brick { pal.get("far_bank_brick") } else { pal.get("far_bank_white") };
+            (c, c, c)
+        }
+    };
+    let frame = pal.get("window_frame");
+    let glass = pal.get("glass_day");
+
+    for i in 0..n {
+        let a = ring[i];
+        let c = ring[(i + 1) % n];
+        let len = a.dist(c);
+        if len < 0.3 {
+            continue;
+        }
+        let dir = c.sub(a).norm();
+        let outw = dir.right();
+        {
+            let mut e = Edge { a, dir, out: outw, len, soup: &mut out.solid };
+            // The wall itself, up past the roof as a parapet.
+            e.piece(0.0, len, 0.0, top + parapet, 0.0, wall);
+            if dress.kind == Kind::FarBank {
+                continue;
+            }
+            if dress.kind == Kind::LowBrick {
+                e.piece(0.0, len, 0.0, (top * 0.45).min(3.2), 0.02, band);
+            }
+            // Cornice.
+            if matches!(dress.kind, Kind::CentralSalmon | Kind::CentralBaroque | Kind::CentralClassical) {
+                e.piece(0.0, len, top - 0.35, top + parapet, 0.18, trim);
+                e.piece(0.0, len, ground - 0.25, ground + 0.15, 0.14, trim);
+            }
+            if dress.kind == Kind::TanTile {
+                for f in 0..=floors_above {
+                    let h = ground + f as f32 * floor_h;
+                    e.piece(0.0, len, h - 0.18, h + 0.12, 0.03, trim);
+                }
+            }
+            let _ = e.len;
+        }
+
+        let (count, first, step) = bays(len);
+        // Ground floor: shops.
+        if ground > 0.0 && count > 0 {
+            for k in 0..count {
+                let cx = first + k as f32 * step;
+                let half = step * 0.5 - 0.25;
+                let shut = dress.kind == Kind::LowBrick && hash01(b.id, 100 + (i * 37 + k) as u32) < 0.35;
+                if shut {
+                    piece_on(&mut out.solid, a, dir, outw, cx - half, cx + half, 0.15, 2.9, 0.05, pal.get("shutter"));
+                } else {
+                    piece_on(&mut out.solid, a, dir, outw, cx - half, cx + half, 0.0, 3.0, 0.04, pal.get("shopfront"));
+                    let lit = hash01(b.id, 200 + (i * 37 + k) as u32) < 0.7;
+                    let target = if lit { &mut out.lit } else { &mut out.glass };
+                    piece_on(target, a, dir, outw, cx - half + 0.15, cx + half - 0.15, 0.45, 2.75, 0.07, glass);
+                }
+            }
+        }
+        // Upper floors.
+        for f in 0..floors_above {
+            let base = ground + f as f32 * floor_h;
+            let sill = base + 0.95;
+            let head = base + floor_h - 0.55;
+            match dress.kind {
+                Kind::YellowCrimson => {
+                    // The crimson apron under every row of windows: the thing you remember.
+                    piece_on(&mut out.solid, a, dir, outw, 0.0, len, base + 0.05, sill - 0.05, 0.06, band);
+                }
+                Kind::CentralSalmon => {
+                    piece_on(&mut out.solid, a, dir, outw, 0.0, len, base + 0.1, sill - 0.1, 0.03, band);
+                }
+                _ => {}
+            }
+            for k in 0..count {
+                let cx = first + k as f32 * step;
+                let key = (f * 1009 + i * 37 + k) as u32;
+                let stair = k % 4 == 3 && matches!(dress.kind, Kind::YellowCrimson | Kind::TanTile | Kind::SalmonYellow);
+                let mut w = match dress.kind {
+                    Kind::TanTile => step * 0.36,
+                    Kind::YellowCrimson => step * 0.34,
+                    Kind::CentralClassical => step * 0.3,
+                    _ => step * 0.27,
+                };
+                if stair {
+                    w = 0.5;
+                }
+                let (mut s, mut h) = (sill, head);
+                if stair {
+                    s = base + 1.3;
+                    h = base + floor_h - 0.3;
+                }
+                if dress.kind == Kind::SalmonYellow && k % 3 == 1 {
+                    // The yellow bay: a column of bay windows running up the block.
+                    piece_on(&mut out.solid, a, dir, outw, cx - step * 0.42, cx + step * 0.42, base, base + floor_h, 0.1, band);
+                    w = step * 0.36;
+                }
+                if dress.kind == Kind::LowBrick && f == 0 && ground == 0.0 {
+                    s = base + 1.0;
+                }
+                piece_on(&mut out.solid, a, dir, outw, cx - w - 0.09, cx + w + 0.09, s - 0.09, h + 0.09, 0.12, frame);
+                if dress.kind == Kind::CentralBaroque || dress.kind == Kind::CentralClassical {
+                    // An arched head, as three short pieces.
+                    piece_on(&mut out.solid, a, dir, outw, cx - w * 0.8, cx + w * 0.8, h + 0.09, h + 0.34, 0.12, frame);
+                    piece_on(&mut out.solid, a, dir, outw, cx - w * 0.45, cx + w * 0.45, h + 0.34, h + 0.5, 0.12, frame);
+                }
+                let lit = hash01(b.id, 5000 + key) < 0.42;
+                let target = if lit { &mut out.lit } else { &mut out.glass };
+                piece_on(target, a, dir, outw, cx - w, cx + w, s, h, 0.15, glass);
+                // A glazing bar, so a window is not one blank pane.
+                piece_on(&mut out.solid, a, dir, outw, cx - 0.035, cx + 0.035, s, h, 0.17, frame);
+            }
+            // Pilasters between bays on Central Street.
+            if matches!(dress.kind, Kind::CentralSalmon | Kind::CentralBaroque) && count > 1 {
+                for k in 0..=count {
+                    let px = first - step * 0.5 + k as f32 * step;
+                    piece_on(&mut out.solid, a, dir, outw, px - 0.22, px + 0.22, base, base + floor_h, 0.1, trim);
+                }
+            }
+        }
+        // Gables standing on the cornice of the long salmon blocks.
+        if dress.kind == Kind::CentralSalmon && count >= 4 {
+            let mut k = 2;
+            while k < count {
+                let cx = first + k as f32 * step;
+                let p = |along: f32, up: f32| world(a.add(dir.mul(along)).add(outw.mul(0.16)), up);
+                out.solid.tri(
+                    [p(cx - step * 0.9, top + parapet), p(cx + step * 0.9, top + parapet), p(cx, top + parapet + 1.7)],
+                    world_dir(outw),
+                    trim,
+                );
+                k += 5;
+            }
+        }
+    }
+
+    // Roof, under snow, and the inner face of the parapet.
+    if dress.kind == Kind::FarBank {
+        out.solid.flat(ring, top, pal.get("snow"));
+    } else {
+        out.solid.flat(ring, top, pal.get("snow"));
+        for i in 0..n {
+            let a = ring[i];
+            let c = ring[(i + 1) % n];
+            let dir = a.sub(c).norm();
+            if a.dist(c) < 0.3 {
+                continue;
+            }
+            // Seen from inside the roof: the wall's back.
+            let inw = dir.right();
+            out.solid.quad(
+                [world(c, top), world(a, top), world(a, top + parapet), world(c, top + parapet)],
+                world_dir(inw),
+                pal.get("parapet"),
+            );
+        }
+    }
+
+    // A crown on one corner: the red cone of the salmon blocks, the green dome of the red ones.
+    if dress.crown && n >= 3 {
+        let mut best = 0;
+        let mut best_score = f32::MIN;
+        for i in 0..n {
+            let prev = ring[(i + n - 1) % n];
+            let next = ring[(i + 1) % n];
+            // The sharpest convex corner with long walls either side.
+            let score = ring[i].dist(prev).min(ring[i].dist(next)).min(20.0);
+            if score > best_score {
+                best_score = score;
+                best = i;
+            }
+        }
+        let corner = ring[best];
+        let inward = b.centroid.sub(corner).norm();
+        let centre = corner.add(inward.mul(2.6));
+        let drum = 2.3;
+        match dress.kind {
+            Kind::CentralBaroque => {
+                out.solid.boxed(centre, top, [drum * 1.7, 1.6, drum * 1.7], 0.0, trim);
+                out.solid.cone(centre, top + 1.6, drum * 1.05, 2.6, 12, pal.get("dome_green"));
+                out.solid.cone(centre, top + 3.6, 0.25, 1.6, 6, pal.get("dome_green"));
+            }
+            Kind::CentralSalmon => {
+                out.solid.boxed(centre, top, [drum * 1.6, 2.4, drum * 1.6], 0.0, band);
+                out.solid.cone(centre, top + 2.4, drum * 1.05, 5.2, 8, pal.get("spire_red"));
+            }
+            _ => {}
+        }
+    }
+    out
+}

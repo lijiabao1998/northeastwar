@@ -1,0 +1,10 @@
+[package]
+name = "northeast"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+sim = { path = "../sim" }
+bevy = { version = "0.20", features = ["jpeg"] }
+fontdue = "0.9"
