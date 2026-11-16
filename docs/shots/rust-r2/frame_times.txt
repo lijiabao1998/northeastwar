@@ -1,0 +1,85 @@
+# --shots frame times, 16 November 2026: debug build with optimised dependencies, 3200 x 1800, no vsync, Intel Arc 140V, on mains power.
+# Each run was started with no other session's headless test browser running. The machine is shared with other work;
+# the same view varies up to twofold between runs, and in run 6 two views stalled at Bevy's 250 ms cap on a frame's step.
+
+# Runs 4-6: the committed build.
+
+## run 4
+01_central_street_noon       mean   32.6 ms  p95   34.6 ms  over 24 frames
+02_central_street_wide       mean   40.0 ms  p95   41.9 ms  over 24 frames
+03_housing_noon              mean   41.6 ms  p95   43.2 ms  over 24 frames
+04_mother_square             mean   16.9 ms  p95   18.5 ms  over 24 frames
+05_river_and_far_bank        mean   27.7 ms  p95   30.2 ms  over 24 frames
+06_whole_town                mean   37.1 ms  p95   39.0 ms  over 24 frames
+07_central_street_dusk       mean   22.2 ms  p95   23.3 ms  over 24 frames
+08_housing_night             mean   27.2 ms  p95   29.2 ms  over 24 frames
+09_central_street_night      mean   23.8 ms  p95   25.8 ms  over 24 frames
+10_shop_boards_close         mean   27.1 ms  p95   31.0 ms  over 24 frames
+11_shop_boards_night         mean   27.6 ms  p95   30.0 ms  over 24 frames
+
+## run 5
+01_central_street_noon       mean   27.7 ms  p95   31.1 ms  over 24 frames
+02_central_street_wide       mean   34.6 ms  p95   37.2 ms  over 24 frames
+03_housing_noon              mean   35.8 ms  p95   54.5 ms  over 24 frames
+04_mother_square             mean   11.5 ms  p95   12.9 ms  over 24 frames
+05_river_and_far_bank        mean   27.0 ms  p95   31.1 ms  over 24 frames
+06_whole_town                mean   29.1 ms  p95   31.2 ms  over 24 frames
+07_central_street_dusk       mean   20.6 ms  p95   23.1 ms  over 24 frames
+08_housing_night             mean   22.9 ms  p95   24.7 ms  over 24 frames
+09_central_street_night      mean   24.2 ms  p95   26.6 ms  over 24 frames
+10_shop_boards_close         mean   29.1 ms  p95   31.1 ms  over 24 frames
+11_shop_boards_night         mean   40.8 ms  p95   44.2 ms  over 24 frames
+
+## run 6
+01_central_street_noon       mean   12.9 ms  p95   21.4 ms  over 24 frames
+02_central_street_wide       mean   14.8 ms  p95   24.1 ms  over 24 frames
+03_housing_noon              mean   14.7 ms  p95   17.8 ms  over 24 frames
+04_mother_square             mean    5.9 ms  p95    7.1 ms  over 24 frames
+05_river_and_far_bank        mean  176.4 ms  p95  250.0 ms  over 24 frames
+06_whole_town                mean   17.5 ms  p95   20.3 ms  over 24 frames
+07_central_street_dusk       mean   11.5 ms  p95   14.3 ms  over 24 frames
+08_housing_night             mean   14.6 ms  p95   17.3 ms  over 24 frames
+09_central_street_night      mean   12.8 ms  p95   14.2 ms  over 24 frames
+10_shop_boards_close         mean  241.0 ms  p95  250.0 ms  over 24 frames
+11_shop_boards_night         mean   15.7 ms  p95   18.2 ms  over 24 frames
+
+# Runs 1-3: the build before crowns were judged by their own triangles (a test browser from another session started during each).
+
+## run 1
+01_central_street_noon       mean   36.7 ms  p95   39.1 ms  over 24 frames
+02_central_street_wide       mean   44.8 ms  p95   46.6 ms  over 24 frames
+03_housing_noon              mean   44.3 ms  p95   48.3 ms  over 24 frames
+04_mother_square             mean   13.4 ms  p95   14.8 ms  over 24 frames
+05_river_and_far_bank        mean   27.8 ms  p95   30.3 ms  over 24 frames
+06_whole_town                mean   37.8 ms  p95   41.9 ms  over 24 frames
+07_central_street_dusk       mean   20.4 ms  p95   22.2 ms  over 24 frames
+08_housing_night             mean   25.3 ms  p95   27.5 ms  over 24 frames
+09_central_street_night      mean   25.6 ms  p95   30.0 ms  over 24 frames
+10_shop_boards_close         mean   27.8 ms  p95   31.2 ms  over 24 frames
+11_shop_boards_night         mean   41.3 ms  p95   46.1 ms  over 24 frames
+
+## run 2
+01_central_street_noon       mean   35.8 ms  p95   37.6 ms  over 24 frames
+02_central_street_wide       mean   39.5 ms  p95   45.5 ms  over 24 frames
+03_housing_noon              mean   29.5 ms  p95   31.4 ms  over 24 frames
+04_mother_square             mean   11.9 ms  p95   13.3 ms  over 24 frames
+05_river_and_far_bank        mean   24.3 ms  p95   25.8 ms  over 24 frames
+06_whole_town                mean   40.7 ms  p95   43.1 ms  over 24 frames
+07_central_street_dusk       mean   27.9 ms  p95   30.6 ms  over 24 frames
+08_housing_night             mean   38.2 ms  p95   44.2 ms  over 24 frames
+09_central_street_night      mean   41.4 ms  p95   60.0 ms  over 24 frames
+10_shop_boards_close         mean   40.5 ms  p95   48.9 ms  over 24 frames
+11_shop_boards_night         mean   36.7 ms  p95   46.0 ms  over 24 frames
+
+## run 3
+01_central_street_noon       mean   36.9 ms  p95   38.3 ms  over 24 frames
+02_central_street_wide       mean   31.9 ms  p95   35.1 ms  over 24 frames
+03_housing_noon              mean   31.6 ms  p95   34.1 ms  over 24 frames
+04_mother_square             mean   13.2 ms  p95   14.9 ms  over 24 frames
+05_river_and_far_bank        mean   30.8 ms  p95   32.6 ms  over 24 frames
+06_whole_town                mean   33.5 ms  p95   36.5 ms  over 24 frames
+07_central_street_dusk       mean   23.0 ms  p95   25.0 ms  over 24 frames
+08_housing_night             mean   29.6 ms  p95   31.3 ms  over 24 frames
+09_central_street_night      mean   27.6 ms  p95   29.4 ms  over 24 frames
+10_shop_boards_close         mean   46.9 ms  p95   61.3 ms  over 24 frames
+11_shop_boards_night         mean   47.7 ms  p95   70.9 ms  over 24 frames

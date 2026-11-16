@@ -31,7 +31,9 @@ cargo run -p northeast --release -- --shots out/shots
 cargo test -p sim
 ```
 
-WASD walks, Shift runs, the wheel zooms, `[` and `]` turn the clock. `--shots` saves a set of views of the town to a folder without opening a window. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from.
+WASD walks, Shift runs, the wheel zooms, `[` and `]` turn the clock. A building that stands between the camera and you turns to glass. `--shots` saves a set of views of the town to a folder from a hidden window, and writes the frame time at each to `frame_times.txt`. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from.
+
+The buildings are OpenStreetMap's, filled in from CMAB (see `CREDITS.md`). To cut the CMAB layer again: download `heilongjiang.zip` from figshare 27992417 into `data/raw/cmab-v7/`, extract `processed_1809_20230514_all.*` into `data/raw/cmab-v7/heihe/`, and run `python -I tools/cmab/slice_heihe.py data/raw/cmab-v7/heihe/processed_1809_20230514_all.shp data/heihe/cmab.json` with a Python that has `pyshp`.
 
 The Godot project below is the earlier build. It stays until the Rust one does everything it does.
 

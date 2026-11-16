@@ -54,6 +54,6 @@ One thing the old build had wrong and the new one is built to prevent: the map f
 Order of work on the city, most visible first:
 
 1. Colours and the kinds of building the photographs show (Central Street salmon blocks with red cones, the red and white fronts with green domes, a pale classical front, yellow housing with crimson balcony bands, tan tile blocks, salmon blocks with yellow bays, low white-and-brick shops). Done in the first Rust pass.
-2. More of the real town. The map today is what OpenStreetMap has: 198 buildings on the Chinese bank. The national building dataset used for the Beijing and Shanghai games (CMAB, CC BY 4.0) covers Heilongjiang and would fill in the blocks OpenStreetMap leaves empty.
+2. More of the real town. OpenStreetMap has 198 buildings on the Chinese bank of this map. From 16 November 2026 the rest comes from CMAB (CC BY 4.0), the national building dataset the Beijing and Shanghai games use: its Heihe layer (imagery of 2023-05-14) is cut by `tools/cmab/slice_heihe.py` into `data/heihe/cmab.json`, and `crates/sim/src/cmab.rs` decides which roofs to add and how tall they are. An OpenStreetMap building always wins over a CMAB roof.
 3. The things a resident would miss: the teal arch of the Russian goods street, the Ferris wheel, steps up to raised shops, wires overhead, the three-wheelers, quilted door curtains.
 4. Then the survival rules from the Godot build move across, one at a time, each with its test.

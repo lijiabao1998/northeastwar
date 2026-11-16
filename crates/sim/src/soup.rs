@@ -142,10 +142,15 @@ impl Soup {
 
     /// A cone or a pyramid on a ring: a spire, a dome made of facets.
     pub fn cone(&mut self, centre: P2, base_up: f32, radius: f32, height: f32, sides: usize, colour: Rgb) {
+        self.cone_turned(centre, base_up, radius, height, sides, 0.0, colour);
+    }
+
+    /// `cone`, with its first corner at `start` radians (counter-clockwise from east).
+    pub fn cone_turned(&mut self, centre: P2, base_up: f32, radius: f32, height: f32, sides: usize, start: f32, colour: Rgb) {
         let tip = world(centre, base_up + height);
         for i in 0..sides {
-            let a0 = i as f32 / sides as f32 * std::f32::consts::TAU;
-            let a1 = (i + 1) as f32 / sides as f32 * std::f32::consts::TAU;
+            let a0 = start + i as f32 / sides as f32 * std::f32::consts::TAU;
+            let a1 = start + (i + 1) as f32 / sides as f32 * std::f32::consts::TAU;
             let p0 = centre.add(P2::new(a0.cos(), a0.sin()).mul(radius));
             let p1 = centre.add(P2::new(a1.cos(), a1.sin()).mul(radius));
             let mid = P2::new(((a0 + a1) * 0.5).cos(), ((a0 + a1) * 0.5).sin());
@@ -154,6 +159,11 @@ impl Soup {
             let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
             self.tri([world(p0, base_up), world(p1, base_up), tip], [n[0] / l, n[1] / l, n[2] / l], colour);
         }
+    }
+
+    /// Every triangle, as its three corners in the world.
+    pub fn triangle_list(&self) -> Vec<[[f32; 3]; 3]> {
+        self.idx.chunks(3).map(|t| [self.pos[t[0] as usize], self.pos[t[1] as usize], self.pos[t[2] as usize]]).collect()
     }
 
     pub fn append(&mut self, other: &Soup) {

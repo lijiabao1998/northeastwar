@@ -122,7 +122,9 @@ pub fn dress(building: &Building, city: &City) -> Dress {
         .iter()
         .filter(|r| r.name == "中央街")
         .any(|r| building.footprint.iter().any(|p| dist_to_polyline(*p, &r.line) < 24.0));
-    let near_street = city.roads.iter().filter(|r| r.width >= 8.0).any(|r| dist_to_polyline(building.centroid, &r.line) < 30.0);
+    // Shops on the ground floor: along a main street, or where CMAB says the building is for trade or the public.
+    let for_trade = matches!(building.function.as_str(), "Business" | "Public service" | "Office");
+    let near_street = for_trade || city.roads.iter().filter(|r| r.width >= 8.0).any(|r| dist_to_polyline(building.centroid, &r.line) < 30.0);
     let pick = hash01(building.id, 1);
     if on_central {
         let kind = if pick < 0.62 {
@@ -134,7 +136,8 @@ pub fn dress(building: &Building, city: &City) -> Dress {
         };
         return Dress { kind, shops: true, crown: hash01(building.id, 2) < 0.6 };
     }
-    if building.levels <= 3 {
+    // Low brick shops, but not a two-storey hall with 4 m storeys.
+    if building.levels <= 3 && building.floor_h < 3.5 {
         return Dress { kind: Kind::LowBrick, shops: near_street, crown: false };
     }
     let kind = if pick < 0.4 {

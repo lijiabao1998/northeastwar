@@ -107,6 +107,160 @@ pub fn dist_to_polyline(p: P2, line: &[P2]) -> f32 {
     best
 }
 
+/// A closed ring with every point dropped that lies within `tolerance` metres of
+/// the straight line its neighbours would make (Douglas-Peucker). CMAB traces
+/// roofs as long chains of centimetre steps; walls are drawn per edge, so those
+/// steps must go before a facade is built.
+pub fn simplify(ring: &[P2], tolerance: f32) -> Vec<P2> {
+    let n = ring.len();
+    if n < 4 {
+        return ring.to_vec();
+    }
+    // Split the ring at its two points furthest apart, then simplify each half as a line.
+    let mut a = 0;
+    let mut b = 0;
+    let mut far = -1.0;
+    for i in 0..n {
+        let d = ring[i].dist(ring[0]);
+        if d > far {
+            far = d;
+            b = i;
+        }
+    }
+    far = -1.0;
+    for i in 0..n {
+        let d = ring[i].dist(ring[b]);
+        if d > far {
+            far = d;
+            a = i;
+        }
+    }
+    let (a, b) = (a.min(b), a.max(b));
+    if a == b {
+        return ring.to_vec();
+    }
+    let first: Vec<P2> = ring[a..=b].to_vec();
+    let mut second: Vec<P2> = ring[b..].to_vec();
+    second.extend_from_slice(&ring[..=a]);
+    let mut out = dp_line(&first, tolerance);
+    out.pop();
+    let mut rest = dp_line(&second, tolerance);
+    rest.pop();
+    out.extend(rest);
+    if out.len() < 3 {
+        return ring.to_vec();
+    }
+    out
+}
+
+fn dp_line(line: &[P2], tolerance: f32) -> Vec<P2> {
+    if line.len() <= 2 {
+        return line.to_vec();
+    }
+    let (a, b) = (line[0], line[line.len() - 1]);
+    let mut worst = 0.0;
+    let mut at = 0;
+    for (i, p) in line.iter().enumerate().take(line.len() - 1).skip(1) {
+        let d = p.dist(nearest_on_segment(*p, a, b));
+        if d > worst {
+            worst = d;
+            at = i;
+        }
+    }
+    if worst <= tolerance {
+        return vec![a, b];
+    }
+    let mut left = dp_line(&line[..=at], tolerance);
+    let right = dp_line(&line[at..], tolerance);
+    left.pop();
+    left.extend(right);
+    left
+}
+
+/// The stretches of segment a-b that lie inside `ring`, as fractions along it.
+pub fn spans_inside(a: P2, b: P2, ring: &[P2]) -> Vec<(f32, f32)> {
+    let n = ring.len();
+    let d = b.sub(a);
+    // Where the segment crosses the ring's edges.
+    let mut cuts = vec![0.0f32, 1.0];
+    for i in 0..n {
+        let (c, e) = (ring[i], ring[(i + 1) % n]);
+        let f = e.sub(c);
+        let den = d.cross(f);
+        if den.abs() < 1.0e-9 {
+            continue;
+        }
+        let t = c.sub(a).cross(f) / den;
+        let u = c.sub(a).cross(d) / den;
+        if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+            cuts.push(t);
+        }
+    }
+    cuts.sort_by(|x, y| x.total_cmp(y));
+    let mut out = Vec::new();
+    for k in 0..cuts.len() - 1 {
+        let (t0, t1) = (cuts[k], cuts[k + 1]);
+        if t1 - t0 > 1.0e-6 && point_in_ring(a.lerp(b, (t0 + t1) * 0.5), ring) {
+            out.push((t0, t1));
+        }
+    }
+    out
+}
+
+/// True when two edges of the ring cross (edges that share a corner do not count).
+pub fn self_intersects(ring: &[P2]) -> bool {
+    let n = ring.len();
+    let cross = |a: P2, b: P2, c: P2, d: P2| -> bool {
+        let d1 = b.sub(a).cross(c.sub(a));
+        let d2 = b.sub(a).cross(d.sub(a));
+        let d3 = d.sub(c).cross(a.sub(c));
+        let d4 = d.sub(c).cross(b.sub(c));
+        (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0) && d1 != 0.0 && d2 != 0.0 && d3 != 0.0 && d4 != 0.0
+    };
+    for i in 0..n {
+        for j in i + 1..n {
+            if j == i + 1 || (i == 0 && j == n - 1) {
+                continue;
+            }
+            if cross(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n]) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `simplify`, but never at the cost of a ring that crosses itself: the tolerance
+/// is halved until it does not, the last try at exactly 1 cm. None if even that does not help; the
+/// unsimplified ring is no answer, since its centimetre steps are what leaves
+/// see-through slits in the walls. A speck that simplifies to fewer than three
+/// points comes back as it is, for the caller's size check to drop.
+pub fn simplify_safely(ring: &[P2], tolerance: f32) -> Option<Vec<P2>> {
+    let mut t = tolerance;
+    loop {
+        let s = clean_ring(simplify(ring, t));
+        if s.len() < 3 || !self_intersects(&s) {
+            return Some(s);
+        }
+        if t <= 0.01 {
+            return None;
+        }
+        t = (t * 0.5).max(0.01);
+    }
+}
+
+/// How much of `line` runs inside `ring`, in metres.
+pub fn length_inside(line: &[P2], ring: &[P2]) -> f32 {
+    let mut total = 0.0;
+    for w in line.windows(2) {
+        let len = w[0].dist(w[1]);
+        for (t0, t1) in spans_inside(w[0], w[1], ring) {
+            total += len * (t1 - t0);
+        }
+    }
+    total
+}
+
 fn tri_contains(a: P2, b: P2, c: P2, p: P2) -> bool {
     let d1 = b.sub(a).cross(p.sub(a));
     let d2 = c.sub(b).cross(p.sub(b));
@@ -218,6 +372,76 @@ mod tests {
     }
 
     #[test]
+    fn a_line_through_a_square_is_measured_inside_it() {
+        let ring = clean_ring(vec![P2::new(0.0, 0.0), P2::new(10.0, 0.0), P2::new(10.0, 10.0), P2::new(0.0, 10.0)]);
+        // Straight across: 10 m inside.
+        assert!((length_inside(&[P2::new(-5.0, 5.0), P2::new(15.0, 5.0)], &ring) - 10.0).abs() < 1.0e-3);
+        // Starting inside, bending out: 5 + 0.
+        assert!((length_inside(&[P2::new(5.0, 5.0), P2::new(5.0, 20.0), P2::new(30.0, 20.0)], &ring) - 5.0).abs() < 1.0e-3);
+        // Passing by: nothing.
+        assert_eq!(length_inside(&[P2::new(-5.0, 12.0), P2::new(15.0, 12.0)], &ring), 0.0);
+    }
+
+    #[test]
+    fn simplify_drops_centimetre_steps_and_keeps_corners() {
+        // A 20 x 10 m rectangle traced as 5 cm stairs along its long sides.
+        let mut ring = Vec::new();
+        for i in 0..400 {
+            ring.push(P2::new(i as f32 * 0.05, if i % 2 == 0 { 0.0 } else { 0.04 }));
+        }
+        ring.push(P2::new(20.0, 0.0));
+        ring.push(P2::new(20.0, 10.0));
+        for i in (0..400).rev() {
+            ring.push(P2::new(i as f32 * 0.05, if i % 2 == 0 { 10.0 } else { 9.96 }));
+        }
+        let ring = clean_ring(ring);
+        let simple = clean_ring(simplify(&ring, 0.3));
+        assert!(simple.len() <= 6, "{} points left", simple.len());
+        assert!((signed_area(&simple) - 200.0).abs() < 2.0, "{}", signed_area(&simple));
+        // Every edge long enough to get a wall.
+        for i in 0..simple.len() {
+            assert!(simple[i].dist(simple[(i + 1) % simple.len()]) >= 0.3);
+        }
+    }
+
+    #[test]
+    fn simplify_never_makes_a_ring_cross_itself() {
+        // A 10 x 10 m block whose south wall dips 0.25 m in the middle, with a notch from
+        // the north wall reaching down to 0.1 m: plain Douglas-Peucker at 0.3 m drops the
+        // dip and the notch pokes through the wall (found in review, 16 November 2026).
+        let ring = clean_ring(vec![
+            P2::new(0.0, 0.25),
+            P2::new(5.0, 0.0),
+            P2::new(10.0, 0.25),
+            P2::new(10.0, 10.0),
+            P2::new(5.2, 10.0),
+            P2::new(5.0, 0.1),
+            P2::new(4.8, 10.0),
+            P2::new(0.0, 10.0),
+        ]);
+        assert!(!self_intersects(&ring));
+        assert!(self_intersects(&clean_ring(simplify(&ring, 0.3))), "the case no longer shows the problem");
+        assert!(!self_intersects(&simplify_safely(&ring, 0.3).unwrap()));
+        // A ring that crosses itself whatever the tolerance is refused, not passed on.
+        let bowtie = vec![P2::new(0.0, 0.0), P2::new(10.0, 10.0), P2::new(10.0, 0.0), P2::new(0.0, 10.0)];
+        assert!(simplify_safely(&bowtie, 0.3).is_none());
+        // A ring that only 1 cm saves is saved: the last try is exactly 1 cm, not 1.9 cm.
+        let fine = clean_ring(vec![
+            P2::new(0.0, 0.015),
+            P2::new(5.0, 0.0),
+            P2::new(10.0, 0.015),
+            P2::new(10.0, 10.0),
+            P2::new(5.2, 10.0),
+            P2::new(5.0, 0.0075),
+            P2::new(4.8, 10.0),
+            P2::new(0.0, 10.0),
+        ]);
+        assert!(self_intersects(&clean_ring(simplify(&fine, 0.01875))), "the case no longer shows the problem");
+        let saved = simplify_safely(&fine, 0.3).expect("1 cm saves it");
+        assert!(!self_intersects(&saved));
+    }
+
+    #[test]
     fn hash_is_stable_and_spread() {
         assert_eq!(hash01(42, 1), hash01(42, 1));
         let mut low = 0;
@@ -229,5 +453,17 @@ mod tests {
             }
         }
         assert!(low > 400 && low < 600);
+    }
+
+    #[test]
+    fn a_line_ending_inside_counts_to_its_end() {
+        let ring = clean_ring(vec![P2::new(0.0, 0.0), P2::new(10.0, 0.0), P2::new(10.0, 10.0), P2::new(0.0, 10.0)]);
+        // Coming in from outside and stopping inside: 5 m.
+        assert!((length_inside(&[P2::new(-5.0, 5.0), P2::new(5.0, 5.0)], &ring) - 5.0).abs() < 1.0e-3);
+        let s = spans_inside(P2::new(-5.0, 5.0), P2::new(5.0, 5.0), &ring);
+        assert_eq!(s.len(), 1);
+        assert!((s[0].0 - 0.5).abs() < 1.0e-5 && (s[0].1 - 1.0).abs() < 1.0e-6, "{s:?}");
+        // Wholly inside: all of it.
+        assert!((length_inside(&[P2::new(2.0, 5.0), P2::new(8.0, 5.0)], &ring) - 6.0).abs() < 1.0e-3);
     }
 }

@@ -22,10 +22,24 @@ pub struct Board {
     pub ink: Rgb,
 }
 
+/// One building on the Chinese bank, kept apart so it can be cut away when it hides you.
+pub struct Block {
+    pub id: i64,
+    pub footprint: Vec<P2>,
+    pub height: f32,
+    pub solid: Soup,
+    pub glass: Soup,
+    pub lit: Soup,
+    /// Its corner crown's triangles in the world, as drawn (facade::Built::crown).
+    pub crown: Vec<[[f32; 3]; 3]>,
+}
+
 #[derive(Default)]
 pub struct Scene {
     pub ground: Soup,
+    /// The far bank, all in one: it is across the ice and never in the way.
     pub buildings: Soup,
+    pub blocks: Vec<Block>,
     pub glass: Soup,
     pub lit: Soup,
     pub props: Soup,
@@ -67,9 +81,13 @@ pub fn build(city: &City, pal: &Palette) -> Scene {
 
     for b in &city.buildings {
         let built = facade::build(b, dress(b, city), pal);
-        scene.buildings.append(&built.solid);
-        scene.glass.append(&built.glass);
-        scene.lit.append(&built.lit);
+        if b.bank == Bank::China {
+            scene.blocks.push(Block { id: b.id, footprint: b.footprint.clone(), height: b.height, solid: built.solid, glass: built.glass, lit: built.lit, crown: built.crown });
+        } else {
+            scene.buildings.append(&built.solid);
+            scene.glass.append(&built.glass);
+            scene.lit.append(&built.lit);
+        }
     }
 
     lamps(city, pal, &mut scene);

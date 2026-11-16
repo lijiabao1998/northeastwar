@@ -30,6 +30,12 @@ pub struct Building {
     pub footprint: Vec<P2>,
     pub centroid: P2,
     pub solid: bool,
+    /// What the building is for, where a source says: CMAB's Residence, Business,
+    /// Public service, Office or Other. Empty for OpenStreetMap buildings.
+    pub function: String,
+    /// True when nobody measured the height: the OSM importer guessed it from
+    /// the footprint's area and a hash of the building's id.
+    pub height_guessed: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +95,8 @@ pub struct City {
 struct RawBuilding {
     id: i64,
     side: String,
+    #[serde(default)]
+    height_source: String,
     #[serde(default)]
     levels: f32,
     #[serde(default)]
@@ -198,6 +206,8 @@ impl City {
                 footprint: ring,
                 centroid,
                 solid: b.collision,
+                function: String::new(),
+                height_guessed: b.height_source == "estimated_from_footprint",
             });
         }
 

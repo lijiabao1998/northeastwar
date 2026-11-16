@@ -21,3 +21,4 @@ __pycache__/
 /out/
 /target-sim/
 /out-build.log
+/data/raw/

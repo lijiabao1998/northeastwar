@@ -45,9 +45,52 @@ pub struct Eye {
 #[derive(Component)]
 struct ClockText;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Solid,
+    Window,
+}
+
+/// A piece of a building that is cut away when the building hides you.
+#[derive(Component)]
+struct Cut {
+    /// The building up to its parapet, and its crown if it has one (sim::cutaway::Occluder).
+    occluder: std::sync::Arc<sim::cutaway::Occluder>,
+    part: Part,
+    hidden: bool,
+}
+
+#[derive(Resource)]
+struct Cutaway {
+    view: sim::cutaway::View,
+    solid: Handle<StandardMaterial>,
+    ghost: Handle<StandardMaterial>,
+}
+
+/// Buildings between the camera and you turn to glass; their windows go.
+fn cut_away(
+    cutaway: Option<Res<Cutaway>>,
+    player: Single<&Player>,
+    mut parts: Query<(&mut Cut, &mut MeshMaterial3d<StandardMaterial>, &mut Visibility)>,
+) {
+    let Some(cutaway) = cutaway else { return };
+    for (mut cut, mut material, mut visibility) in &mut parts {
+        let hide = cut.occluder.hides(player.at, &cutaway.view, 2.5);
+        if hide == cut.hidden {
+            continue;
+        }
+        cut.hidden = hide;
+        match cut.part {
+            Part::Solid => material.0 = if hide { cutaway.ghost.clone() } else { cutaway.solid.clone() },
+            Part::Window => *visibility = if hide { Visibility::Hidden } else { Visibility::Inherited },
+        }
+    }
+}
+
 pub const VIEW_METRES: f32 = 46.0;
 /// The camera stands south-east of you and looks north-west, so the river is up and to the right.
-const EYE_OFFSET: Vec3 = Vec3::new(120.0, 124.0, 120.0);
+/// It is orthographic, so its distance changes nothing on screen (see sim::cutaway::EYE_OFFSET).
+const EYE_OFFSET: Vec3 = Vec3::from_array(sim::cutaway::EYE_OFFSET);
 
 pub fn to_mesh(soup: &Soup) -> Mesh {
     Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
@@ -85,6 +128,9 @@ fn main() {
                     resolution: (1600, 900).into(),
                     // Taking pictures needs no window on anyone's screen.
                     visible: shots_dir.is_none(),
+                    // Taking pictures also times each view, and waiting for the screen's
+                    // refresh would put a floor of one refresh (16.7 ms at 60 Hz) under that.
+                    present_mode: if shots_dir.is_some() { bevy::window::PresentMode::AutoNoVsync } else { bevy::window::PresentMode::Fifo },
                     ..default()
                 }),
                 ..default()
@@ -95,8 +141,10 @@ fn main() {
     .insert_resource(Clock { hour, running: shots_dir.is_none() && arg("--hour").is_none() })
     .insert_resource(ClearColor(Color::srgb(0.62, 0.70, 0.80)))
     .add_systems(Startup, (setup, sky::setup))
-    .add_systems(Update, (walk, zoom, follow, tick, sky::apply, hud));
+    .add_systems(Update, (walk, zoom, follow, tick, sky::apply, sky::follow_zoom.after(zoom), hud, cut_away.after(walk)));
     if let Some(dir) = shots_dir {
+        // A hidden window may count as unfocused, which would hold it to 60 updates a second.
+        app.insert_resource(bevy::winit::WinitSettings::continuous());
         shots::install(&mut app, dir);
     }
     app.run();
@@ -122,9 +170,40 @@ pub fn setup(
 
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.ground))), MeshMaterial3d(snowy)));
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.buildings))), MeshMaterial3d(matte.clone())));
+    // The Chinese bank, one building at a time, so the one in front of you can be cut away.
+    let ghost = materials.add(StandardMaterial {
+        base_color: Color::srgba(1.0, 1.0, 1.0, 0.16),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.9,
+        ..default()
+    });
+    let view = sim::cutaway::View::from_offset(EYE_OFFSET.to_array());
+    for block in &scene.blocks {
+        // The same occluder the sim's tests check.
+        let occluder = std::sync::Arc::new(sim::cutaway::Occluder::of_block(block, &view));
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&block.solid))), MeshMaterial3d(matte.clone()), Cut { occluder: occluder.clone(), part: Part::Solid, hidden: false }));
+        if block.glass.triangles() > 0 {
+            commands.spawn((Mesh3d(meshes.add(to_mesh(&block.glass))), MeshMaterial3d(glass.clone()), Cut { occluder: occluder.clone(), part: Part::Window, hidden: false }));
+        }
+        if block.lit.triangles() > 0 {
+            commands.spawn((Mesh3d(meshes.add(to_mesh(&block.lit))), MeshMaterial3d(window_glow.clone()), Cut { occluder, part: Part::Window, hidden: false }));
+        }
+    }
+    // A speck of the cut-away material that is always on screen, so its shader is built at the
+    // start. Otherwise the first time a building is cut away the whole frame comes out empty.
+    // Made by to_mesh like every building, so it has the same vertex layout and the
+    // pipeline built for it is the one a cut-away building uses.
+    let mut dot = Soup::default();
+    dot.boxed(P2::new(0.0, 0.0), 0.0, [0.02, 0.02, 0.02], 0.0, sim::look::Rgb { r: 1.0, g: 1.0, b: 1.0 });
+    let speck = commands.spawn((Mesh3d(meshes.add(to_mesh(&dot))), MeshMaterial3d(ghost.clone()), Transform::from_xyz(0.0, 0.01, 0.0))).id();
+    commands.insert_resource(Cutaway { view, solid: matte.clone(), ghost });
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.props))), MeshMaterial3d(matte.clone())));
-    commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.glass))), MeshMaterial3d(glass)));
-    commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lit))), MeshMaterial3d(window_glow.clone())));
+    if scene.glass.triangles() > 0 {
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.glass))), MeshMaterial3d(glass.clone())));
+    }
+    if scene.lit.triangles() > 0 {
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lit))), MeshMaterial3d(window_glow.clone())));
+    }
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lamp_glow))), MeshMaterial3d(lamp_glow.clone())));
     commands.insert_resource(sky::GlowMaterials { windows: window_glow, lamps: lamp_glow });
 
@@ -163,14 +242,14 @@ pub fn setup(
         MeshMaterial3d(matte),
         Transform::from_xyz(spawn.x, 0.0, -spawn.y),
         Player { at: spawn },
-    ));
+    )).add_child(speck);
 
     commands.spawn((
         Camera3d::default(),
         Projection::from(OrthographicProjection {
             scaling_mode: ScalingMode::FixedVertical { viewport_height: VIEW_METRES },
             near: 1.0,
-            far: 1200.0,
+            far: 2200.0,
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_translation(Vec3::new(spawn.x, 0.0, -spawn.y) + EYE_OFFSET).looking_at(Vec3::new(spawn.x, 1.0, -spawn.y), Vec3::Y),
@@ -189,7 +268,7 @@ pub fn setup(
         ClockText,
     ));
     commands.spawn((
-        Text::new("地图数据 © OpenStreetMap 贡献者（ODbL）   WASD 走 · Shift 跑 · 滚轮 缩放 · [ ] 调时间"),
+        Text::new("地图数据 © OpenStreetMap 贡献者（ODbL）· 建筑轮廓 CMAB（CC BY 4.0）   WASD 走 · Shift 跑 · 滚轮 缩放 · [ ] 调时间"),
         TextFont { font: font.into(), font_size: bevy::text::FontSize::Px(13.0), ..default() },
         TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
         TextShadow::default(),

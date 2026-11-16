@@ -44,10 +44,44 @@ pub fn night(hour: f32) -> f32 {
 pub fn setup(mut commands: Commands) {
     commands.spawn((
         DirectionalLight { shadow_maps_enabled: true, illuminance: 20_000.0, ..default() },
-        bevy::light::CascadeShadowConfigBuilder { num_cascades: 3, first_cascade_far_bound: 180.0, maximum_distance: 520.0, ..default() }.build(),
+        shadow_slab(1.0),
         Transform::default(),
         Sun,
     ));
+}
+
+/// One shadow cascade holding exactly what the camera sees at this zoom.
+///
+/// The camera is orthographic and looks down at 36°, so everything on screen
+/// lies between D − 0.684·H + 1.7 − 1.695·h and D + 0.684·H + 1.7 from it, where
+/// D is its distance from you, H the height of the view in metres and h the
+/// height of a roof. The tallest things drawn are three 17-storey CMAB towers,
+/// 51.7 m to the top of the parapet; the 100 m margin below covers roofs up to
+/// 59 m. Casters nearer the sun than the slab are clamped onto it, so they still
+/// cast. Orthographic depth does not change how big things are on screen,
+/// so splitting the slab into several cascades buys little; one slab at zoom 1 is
+/// about 0.09 m a texel, where three fixed cascades gave 0.15–0.20 m.
+pub fn shadow_slab(zoom: f32) -> bevy::light::CascadeShadowConfig {
+    let d = Vec3::from_array(sim::cutaway::EYE_OFFSET).length();
+    let h = crate::VIEW_METRES / zoom;
+    let far = d + 0.69 * h + 5.0;
+    bevy::light::CascadeShadowConfigBuilder {
+        num_cascades: 1,
+        minimum_distance: (d - 0.69 * h - 100.0).max(1.0),
+        first_cascade_far_bound: far,
+        maximum_distance: far,
+        ..default()
+    }
+    .build()
+}
+
+/// Rebuild the shadow slab when the zoom changes.
+pub fn follow_zoom(eye: Single<&crate::Eye>, mut sun: Single<&mut bevy::light::CascadeShadowConfig, With<Sun>>, mut last: Local<f32>) {
+    if eye.zoom == *last {
+        return;
+    }
+    *last = eye.zoom;
+    **sun = shadow_slab(eye.zoom);
 }
 
 pub fn apply(

@@ -17,6 +17,18 @@ pub struct Built {
     pub glass: Soup,
     /// Windows with a light on. They glow after dark.
     pub lit: Soup,
+    /// The corner crown's triangles in the world, exactly as drawn (they are in `solid`
+    /// too). It stands above the roof, so the cut-away tests sight lines against them.
+    pub crown: Vec<[[f32; 3]; 3]>,
+}
+
+/// Width and height of a crown's drum, by kind; None for kinds that carry no crown.
+pub fn crown_drum(kind: Kind) -> Option<(f32, f32)> {
+    match kind {
+        Kind::CentralBaroque => Some((2.3 * 1.7, 1.6)),
+        Kind::CentralSalmon => Some((2.3 * 1.6, 2.4)),
+        _ => None,
+    }
 }
 
 const GROUND_SHOP: f32 = 3.9;
@@ -67,7 +79,7 @@ pub fn build(b: &Building, dress: Dress, pal: &Palette) -> Built {
     let mut out = Built::default();
     let ring = &b.footprint;
     let n = ring.len();
-    let parapet = if dress.kind == Kind::FarBank { 0.0 } else { 0.7 };
+    let parapet = if dress.kind == Kind::FarBank { 0.0 } else { crate::cutaway::PARAPET };
     let top = b.height;
     let ground = if dress.shops { GROUND_SHOP.min(top) } else { 0.0 };
     let floors_above = (((top - ground) / b.floor_h).round() as i32).max(if ground > 0.0 { 0 } else { 1 }) as usize;
@@ -240,35 +252,78 @@ pub fn build(b: &Building, dress: Dress, pal: &Palette) -> Built {
     }
 
     // A crown on one corner: the red cone of the salmon blocks, the green dome of the red ones.
-    if dress.crown && n >= 3 {
-        let mut best = 0;
-        let mut best_score = f32::MIN;
-        for i in 0..n {
-            let prev = ring[(i + n - 1) % n];
-            let next = ring[(i + 1) % n];
-            // The sharpest convex corner with long walls either side.
-            let score = ring[i].dist(prev).min(ring[i].dist(next)).min(20.0);
-            if score > best_score {
-                best_score = score;
-                best = i;
-            }
-        }
-        let corner = ring[best];
-        let inward = b.centroid.sub(corner).norm();
-        let centre = corner.add(inward.mul(2.6));
+    // The drum is turned with the wall and the facets of the cone face the walls, so neither
+    // stands out past the facade more than an eave does.
+    let place = crown_drum(dress.kind).filter(|_| dress.crown).and_then(|(w, h)| crown_at(ring, w * 0.5).map(|at| (at, w, h)));
+    if let Some(((centre, yaw), w, h)) = place {
         let drum = 2.3;
+        let mut c = Soup::default();
         match dress.kind {
             Kind::CentralBaroque => {
-                out.solid.boxed(centre, top, [drum * 1.7, 1.6, drum * 1.7], 0.0, trim);
-                out.solid.cone(centre, top + 1.6, drum * 1.05, 2.6, 12, pal.get("dome_green"));
-                out.solid.cone(centre, top + 3.6, 0.25, 1.6, 6, pal.get("dome_green"));
+                c.boxed(centre, top, [w, h, w], yaw, trim);
+                c.cone_turned(centre, top + h, drum * 1.05, 2.6, 12, yaw + std::f32::consts::PI / 12.0, pal.get("dome_green"));
+                c.cone_turned(centre, top + h + 2.0, 0.25, 1.6, 6, yaw + std::f32::consts::PI / 6.0, pal.get("dome_green"));
             }
-            Kind::CentralSalmon => {
-                out.solid.boxed(centre, top, [drum * 1.6, 2.4, drum * 1.6], 0.0, band);
-                out.solid.cone(centre, top + 2.4, drum * 1.05, 5.2, 8, pal.get("spire_red"));
+            _ => {
+                c.boxed(centre, top, [w, h, w], yaw, band);
+                c.cone_turned(centre, top + h, drum * 1.05, 5.2, 8, yaw + std::f32::consts::PI / 8.0, pal.get("spire_red"));
             }
-            _ => {}
         }
+        out.crown = c.triangle_list();
+        out.solid.append(&c);
     }
     out
+}
+
+/// Where a corner crown's drum stands and how it is turned: on the corner
+/// `crown_corner` picks, turned with the wall that arrives there, and moved in along
+/// the corner's bisector from 2.6 m until all four corners of a drum `half` metres
+/// from centre to side are inside the outline. None when nothing within 6 m fits.
+pub fn crown_at(ring: &[P2], half: f32) -> Option<(P2, f32)> {
+    let (corner, inward, along) = crown_corner(ring)?;
+    let yaw = along.y.atan2(along.x);
+    let (ax, ay) = (P2::new(yaw.cos(), yaw.sin()), P2::new(-yaw.sin(), yaw.cos()));
+    let mut d = 2.6;
+    while d <= 6.0 {
+        let c = corner.add(inward.mul(d));
+        let fits = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+            .iter()
+            .all(|&(u, v)| crate::geom::point_in_ring(c.add(ax.mul(u * half)).add(ay.mul(v * half)), ring));
+        if fits {
+            return Some((c, yaw));
+        }
+        d += 0.05;
+    }
+    None
+}
+
+/// The corner a tower goes on: a real convex corner (turning at least 45
+/// degrees) with long walls either side, the way into the building from it, and
+/// the direction of the wall that arrives at it. None when the outline has no such corner.
+pub fn crown_corner(ring: &[P2]) -> Option<(P2, P2, P2)> {
+    let n = ring.len();
+    if n < 3 {
+        return None;
+    }
+    let mut best: Option<(f32, P2, P2, P2)> = None;
+    for i in 0..n {
+        let (prev, here, next) = (ring[(i + n - 1) % n], ring[i], ring[(i + 1) % n]);
+        let (din, dout) = (here.sub(prev).norm(), next.sub(here).norm());
+        // Counter-clockwise ring: a left turn is a convex corner.
+        let turn = din.cross(dout).atan2(din.dot(dout)).to_degrees();
+        if turn < 45.0 {
+            continue;
+        }
+        let score = here.dist(prev).min(here.dist(next)).min(20.0);
+        // The building is on the left of each wall; halfway between the two is inward.
+        let inward = din.right().mul(-1.0).add(dout.right().mul(-1.0)).norm();
+        // The tower stands 2.6 m in from the corner; on a narrow wing that can be outside.
+        if !crate::geom::point_in_ring(here.add(inward.mul(2.6)), ring) {
+            continue;
+        }
+        if best.map_or(true, |(s, _, _, _)| score > s) {
+            best = Some((score, here, inward, din));
+        }
+    }
+    best.map(|(_, c, d, w)| (c, d, w))
 }
