@@ -16,11 +16,11 @@ use bevy::{
 };
 use sim::geom::P2;
 
-struct View {
-    name: &'static str,
-    at: P2,
-    zoom: f32,
-    hour: f32,
+pub(crate) struct View {
+    pub(crate) name: &'static str,
+    pub(crate) at: P2,
+    pub(crate) zoom: f32,
+    pub(crate) hour: f32,
 }
 
 #[derive(Resource)]
@@ -41,7 +41,13 @@ const AFTER: u32 = 30;
 
 pub fn install(app: &mut App, dir: String) {
     let _ = std::fs::create_dir_all(&dir);
-    let views = vec![
+    let views = views();
+    app.insert_resource(PlanSeed { dir, views }).add_systems(Startup, retarget.after(crate::setup)).add_systems(Update, run);
+}
+
+/// The places, zooms and hours pictures are taken at (and --bench times).
+pub(crate) fn views() -> Vec<View> {
+    vec![
         View { name: "01_central_street_noon", at: P2::new(-262.0, -322.0), zoom: 1.0, hour: 12.5 },
         View { name: "02_central_street_wide", at: P2::new(-300.0, -300.0), zoom: 0.42, hour: 12.5 },
         View { name: "03_housing_noon", at: P2::new(-140.0, -250.0), zoom: 0.8, hour: 13.5 },
@@ -53,8 +59,7 @@ pub fn install(app: &mut App, dir: String) {
         View { name: "09_central_street_night", at: P2::new(-262.0, -322.0), zoom: 0.6, hour: 18.8 },
         View { name: "10_shop_boards_close", at: P2::new(-139.0, -221.0), zoom: 2.2, hour: 13.0 },
         View { name: "11_shop_boards_night", at: P2::new(-139.0, -221.0), zoom: 2.2, hour: 18.8 },
-    ];
-    app.insert_resource(PlanSeed { dir, views }).add_systems(Startup, retarget.after(crate::setup)).add_systems(Update, run);
+    ]
 }
 
 #[derive(Resource)]

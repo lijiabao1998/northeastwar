@@ -28,10 +28,11 @@ The game is being rewritten in Rust, starting with the city of Heihe itself. `cr
 cargo run -p northeast --release
 cargo run -p northeast --release -- --hour 18.5
 cargo run -p northeast --release -- --shots out/shots
+cargo run -p northeast --release -- --bench out/bench
 cargo test -p sim
 ```
 
-WASD walks, Shift runs, the wheel zooms, `[` and `]` turn the clock. A building that stands between the camera and you turns to glass. `--shots` saves a set of views of the town to a folder from a hidden window, and writes the frame time at each to `frame_times.txt`. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from.
+WASD walks, Shift runs, the wheel zooms, `[` and `]` turn the clock. A building that stands between the camera and you turns to glass. `--shots` saves a set of views of the town to a folder from a hidden window, and writes the frame time at each to `frame_times.txt`. `--bench` times the drawing at some of those views with one setting changed at a time, by frame, main thread, render thread and GPU pass, and writes `bench.txt`. Time the release build: the dev build keeps Bevy's and wgpu's debug checks on. The settings that trade looks for speed (multisampling, shadow filtering, the cut-away glass, lamps per head or per post, the depth prepass) are environment variables, listed in `crates/game/src/graphics.rs`; what each costs is in `docs/rust-r3-receipt.md`. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from.
 
 The buildings are OpenStreetMap's, filled in from CMAB (see `CREDITS.md`). To cut the CMAB layer again: download `heilongjiang.zip` from figshare 27992417 into `data/raw/cmab-v7/`, extract `processed_1809_20230514_all.*` into `data/raw/cmab-v7/heihe/`, and run `python -I tools/cmab/slice_heihe.py data/raw/cmab-v7/heihe/processed_1809_20230514_all.shp data/heihe/cmab.json` with a Python that has `pyshp`.
 

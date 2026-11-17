@@ -3,7 +3,9 @@
 //! This crate only shows things and reads keys. What Heihe is, what colour it
 //! is and where you can walk are decided in the `sim` crate.
 
+mod bench;
 mod boards;
+mod graphics;
 mod shots;
 mod sky;
 
@@ -58,6 +60,18 @@ struct Cut {
     occluder: std::sync::Arc<sim::cutaway::Occluder>,
     part: Part,
     hidden: bool,
+}
+
+/// The speck that keeps the cut-away's shader built (see setup).
+#[derive(Component)]
+struct Speck;
+
+/// The materials buildings are drawn with, for --bench to draw them merged.
+#[derive(Resource)]
+struct Mats {
+    matte: Handle<StandardMaterial>,
+    glass: Handle<StandardMaterial>,
+    glow: Handle<StandardMaterial>,
 }
 
 #[derive(Resource)]
@@ -117,6 +131,10 @@ fn main() {
     let ground = Ground::new(&city);
     let assets = sim::data_dir().parent().map(|p| p.join("assets")).unwrap_or_else(|| "assets".into());
     let shots_dir = arg("--shots");
+    let bench_dir = arg("--bench");
+    // Taking pictures or timing: no window on anyone's screen, and no waiting for the
+    // screen's refresh, which would put a floor of one refresh (16.7 ms at 60 Hz) under every frame.
+    let unattended = shots_dir.is_some() || bench_dir.is_some();
     let hour = arg("--hour").and_then(|h| h.parse::<f32>().ok()).unwrap_or(13.0);
 
     let mut app = App::new();
@@ -126,11 +144,8 @@ fn main() {
                 primary_window: Some(Window {
                     title: "东北：俄罗斯入侵 — 黑河".into(),
                     resolution: (1600, 900).into(),
-                    // Taking pictures needs no window on anyone's screen.
-                    visible: shots_dir.is_none(),
-                    // Taking pictures also times each view, and waiting for the screen's
-                    // refresh would put a floor of one refresh (16.7 ms at 60 Hz) under that.
-                    present_mode: if shots_dir.is_some() { bevy::window::PresentMode::AutoNoVsync } else { bevy::window::PresentMode::Fifo },
+                    visible: !unattended,
+                    present_mode: if unattended { bevy::window::PresentMode::AutoNoVsync } else { bevy::window::PresentMode::Fifo },
                     ..default()
                 }),
                 ..default()
@@ -138,14 +153,19 @@ fn main() {
             .set(AssetPlugin { file_path: assets.to_string_lossy().into_owned(), ..default() }),
     )
     .insert_resource(Heihe { city, palette, ground })
-    .insert_resource(Clock { hour, running: shots_dir.is_none() && arg("--hour").is_none() })
+    .insert_resource(graphics::Graphics::from_env())
+    .insert_resource(Clock { hour, running: !unattended && arg("--hour").is_none() })
     .insert_resource(ClearColor(Color::srgb(0.62, 0.70, 0.80)))
     .add_systems(Startup, (setup, sky::setup))
     .add_systems(Update, (walk, zoom, follow, tick, sky::apply, sky::follow_zoom.after(zoom), hud, cut_away.after(walk)));
-    if let Some(dir) = shots_dir {
+    if unattended {
         // A hidden window may count as unfocused, which would hold it to 60 updates a second.
         app.insert_resource(bevy::winit::WinitSettings::continuous());
+    }
+    if let Some(dir) = shots_dir {
         shots::install(&mut app, dir);
+    } else if let Some(dir) = bench_dir {
+        bench::install(&mut app, dir);
     }
     app.run();
 }
@@ -153,6 +173,7 @@ fn main() {
 pub fn setup(
     mut commands: Commands,
     heihe: Res<Heihe>,
+    gfx: Res<graphics::Graphics>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -165,7 +186,13 @@ pub fn setup(
     let glass = materials.add(StandardMaterial { perceptual_roughness: 0.18, reflectance: 0.6, ..default() });
     // Their light is in real units, so the camera's exposure must apply to it:
     // a lit window is invisible at noon and bright at night, as it is.
-    let window_glow = materials.add(StandardMaterial { perceptual_roughness: 0.4, emissive_exposure_weight: 1.0, ..default() });
+    // A lit room behind glass and a curtain: a few tens of candelas per square metre.
+    let window_glow = materials.add(StandardMaterial {
+        perceptual_roughness: 0.4,
+        emissive: LinearRgba::new(22.0, 14.5, 6.6, 1.0),
+        emissive_exposure_weight: 1.0,
+        ..default()
+    });
     let lamp_glow = materials.add(StandardMaterial { perceptual_roughness: 0.5, emissive_exposure_weight: 1.0, ..default() });
 
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.ground))), MeshMaterial3d(snowy)));
@@ -175,6 +202,7 @@ pub fn setup(
         base_color: Color::srgba(1.0, 1.0, 1.0, 0.16),
         alpha_mode: AlphaMode::Blend,
         perceptual_roughness: 0.9,
+        unlit: !gfx.ghost_lit,
         ..default()
     });
     let view = sim::cutaway::View::from_offset(EYE_OFFSET.to_array());
@@ -195,7 +223,7 @@ pub fn setup(
     // pipeline built for it is the one a cut-away building uses.
     let mut dot = Soup::default();
     dot.boxed(P2::new(0.0, 0.0), 0.0, [0.02, 0.02, 0.02], 0.0, sim::look::Rgb { r: 1.0, g: 1.0, b: 1.0 });
-    let speck = commands.spawn((Mesh3d(meshes.add(to_mesh(&dot))), MeshMaterial3d(ghost.clone()), Transform::from_xyz(0.0, 0.01, 0.0))).id();
+    let speck = commands.spawn((Mesh3d(meshes.add(to_mesh(&dot))), MeshMaterial3d(ghost.clone()), Transform::from_xyz(0.0, 0.01, 0.0), Speck)).id();
     commands.insert_resource(Cutaway { view, solid: matte.clone(), ghost });
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.props))), MeshMaterial3d(matte.clone())));
     if scene.glass.triangles() > 0 {
@@ -205,20 +233,29 @@ pub fn setup(
         commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lit))), MeshMaterial3d(window_glow.clone())));
     }
     commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lamp_glow))), MeshMaterial3d(lamp_glow.clone())));
-    commands.insert_resource(sky::GlowMaterials { windows: window_glow, lamps: lamp_glow });
+    commands.insert_resource(Mats { matte: matte.clone(), glass: glass.clone(), glow: window_glow.clone() });
+    commands.insert_resource(sky::GlowMaterials { lamps: lamp_glow });
 
     let sodium = heihe.palette.get("lamp_sodium");
-    for head in &scene.lamp_heads {
+    // One light per lamp head, or one per post as bright as its heads together.
+    let lights: Vec<([f32; 3], f32)> = if gfx.lamp_per_head {
+        scene.lamp_heads.iter().map(|h| (*h, 1.0)).collect()
+    } else {
+        scene.lamp_posts.iter().map(|(at, heads)| (*at, *heads as f32)).collect()
+    };
+    for (head, heads) in &lights {
         commands.spawn((
+            // A 250 W sodium lamp gives about 28,000 lumens. sky::apply shows the lights after dark.
             PointLight {
                 color: Color::srgb(sodium.r, sodium.g, sodium.b),
-                intensity: 0.0,
+                intensity: 62_000.0 * heads,
                 range: 22.0,
-                radius: 0.2,
+                radius: graphics::lamp_radius(&gfx),
                 shadow_maps_enabled: false,
                 ..default()
             },
             Transform::from_xyz(head[0], head[1], head[2]),
+            Visibility::Hidden,
             sky::StreetLamp,
         ));
     }
@@ -244,19 +281,23 @@ pub fn setup(
         Player { at: spawn },
     )).add_child(speck);
 
-    commands.spawn((
+    let eye = commands.spawn((
         Camera3d::default(),
         Projection::from(OrthographicProjection {
             scaling_mode: ScalingMode::FixedVertical { viewport_height: VIEW_METRES },
-            near: 1.0,
+            near: graphics::near_plane(1.0),
             far: 2200.0,
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_translation(Vec3::new(spawn.x, 0.0, -spawn.y) + EYE_OFFSET).looking_at(Vec3::new(spawn.x, 1.0, -spawn.y), Vec3::Y),
-        Msaa::Sample4,
+        gfx.msaa,
+        gfx.shadows,
         bevy::camera::Exposure { ev100: 12.0 },
         Eye { zoom: 1.0 },
-    ));
+    )).id();
+    if gfx.prepass {
+        commands.entity(eye).insert(bevy::core_pipeline::prepass::DepthPrepass);
+    }
 
     let font: Handle<Font> = assets.load("fonts/NotoSansSC-VF.ttf");
     commands.spawn((
@@ -322,6 +363,7 @@ fn zoom(mut wheel: MessageReader<MouseWheel>, mut eye: Single<(&mut Eye, &mut Pr
 pub fn set_zoom(projection: &mut Projection, zoom: f32) {
     if let Projection::Orthographic(ortho) = projection {
         ortho.scaling_mode = ScalingMode::FixedVertical { viewport_height: VIEW_METRES / zoom };
+        ortho.near = graphics::near_plane(zoom);
     }
 }
 
@@ -359,5 +401,9 @@ fn hud(clock: Res<Clock>, player: Single<&Player>, heihe: Res<Heihe>, mut text: 
         }
     }
     let ice = if heihe.ground.on_ice(player.at) { "黑龙江冰面" } else { street };
-    text.0 = format!("2031年1月17日  黑河\n{h:02}:{m:02}  {ice}    北 ↗");
+    let line = format!("2031年1月17日  黑河\n{h:02}:{m:02}  {ice}    北 ↗");
+    // Only when it changes: setting the text lays it out again.
+    if text.0 != line {
+        text.0 = line;
+    }
 }

@@ -13,7 +13,6 @@ pub struct StreetLamp;
 
 #[derive(Resource)]
 pub struct GlowMaterials {
-    pub windows: Handle<StandardMaterial>,
     pub lamps: Handle<StandardMaterial>,
 }
 
@@ -33,6 +32,18 @@ pub fn sun(hour: f32) -> (f32, f32) {
     };
     let azimuth = 125.0 + 110.0 * t.clamp(-0.3, 1.3);
     (elevation, azimuth)
+}
+
+/// True when the cut-away glass is drawn unlit (in full day and full night); in
+/// twilight it is lit, since no fixed colour matches the light there.
+pub fn ghost_unlit(hour: f32) -> bool {
+    let d = night(hour);
+    d <= 0.0 || d >= 1.0
+}
+
+/// True when the street lamps are lit.
+pub fn lamps_on(hour: f32) -> bool {
+    night(hour) > 0.25
 }
 
 /// 0 in full day, 1 in full night.
@@ -89,11 +100,14 @@ pub fn apply(
     mut sun_light: Single<(&mut DirectionalLight, &mut Transform), With<Sun>>,
     mut ambient: ResMut<GlobalAmbientLight>,
     mut clear: ResMut<ClearColor>,
-    mut lamps: Query<&mut PointLight, With<StreetLamp>>,
+    mut lamps: Query<&mut Visibility, With<StreetLamp>>,
     mut exposure: Single<&mut bevy::camera::Exposure>,
     glow: Option<Res<GlowMaterials>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    (cutaway, gfx): (Option<Res<crate::Cutaway>>, Res<crate::graphics::Graphics>),
     mut last: Local<f32>,
+    mut lamps_were_on: Local<Option<bool>>,
+    mut ghost_state: Local<Option<u8>>,
 ) {
     if (clock.hour - *last).abs() < 0.004 && *last != 0.0 {
         return;
@@ -128,17 +142,38 @@ pub fn apply(
     exposure.ev100 = 10.7 - 6.3 * dark;
     clear.0 = Color::srgb(0.56, 0.68, 0.84).mix(&Color::srgb(0.015, 0.02, 0.05), dark);
 
-    // A 250 W sodium lamp gives about 28,000 lumens. Heihe's posts carry two.
-    let lamp_on = dark > 0.25;
-    for mut lamp in &mut lamps {
-        lamp.intensity = if lamp_on { 62_000.0 } else { 0.0 };
-    }
-    if let Some(glow) = glow {
-        if let Some(mut m) = materials.get_mut(&glow.windows) {
-            // A lit room behind glass and a curtain: a few tens of candelas per square metre.
-            m.emissive = LinearRgba::new(22.0, 14.5, 6.6, 1.0);
+    // The lamps are hidden by day rather than dimmed to nothing: a light of zero
+    // intensity is still clustered and still shaded in every pixel it reaches, which
+    // cost 3 to 7 ms of GPU time a frame at 3200 x 1800 by day, with the depth prepass
+    // on, and more without it (--bench, November 2026). Lights
+    // and materials are touched only when the lamps switch, since changing a
+    // material makes Bevy prepare everything drawn with it again.
+    // The cut-away glass. Unlit, it costs nothing extra, but an unlit colour takes
+    // neither light nor exposure, so its colour is set by hand: white in full day, the
+    // night sky's dark in full night (both match the lit glass). In twilight the light
+    // and the exposure change too fast for any fixed colour to match, and an unlit
+    // tint there was a grey veil twice as bright as the lit glass, so in twilight it is
+    // lit. Lit and unlit share one pipeline (unlit is a flag in the material's uniform),
+    // so switching only prepares the material again.
+    if !gfx.ghost_lit {
+        let state = if dark <= 0.0 { 0 } else if dark >= 1.0 { 2 } else { 1 };
+        if *ghost_state != Some(state) {
+            *ghost_state = Some(state);
+            if let Some(mut ghost) = cutaway.as_ref().and_then(|c| materials.get_mut(&c.ghost)) {
+                ghost.unlit = state != 1;
+                let colour = if state == 2 { Color::srgb(0.07, 0.08, 0.13) } else { Color::WHITE };
+                ghost.base_color = colour.with_alpha(0.16);
+            }
         }
-        if let Some(mut m) = materials.get_mut(&glow.lamps) {
+    }
+
+    let lamp_on = lamps_on(clock.hour);
+    if *lamps_were_on != Some(lamp_on) {
+        *lamps_were_on = Some(lamp_on);
+        for mut lamp in &mut lamps {
+            *lamp = if lamp_on { Visibility::Inherited } else { Visibility::Hidden };
+        }
+        if let Some(mut m) = glow.and_then(|g| materials.get_mut(&g.lamps)) {
             let k = if lamp_on { 1.0 } else { 0.0 };
             m.emissive = LinearRgba::new(160.0 * k, 96.0 * k, 34.0 * k, 1.0);
         }

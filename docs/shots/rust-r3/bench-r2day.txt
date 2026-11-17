@@ -1,0 +1,43 @@
+northeast --bench, release build, 3200 x 1800 physical pixels.
+GPU features: timestamps yes, timestamps inside passes yes, multi-draw indirect count yes, depth clip control yes
+3 counted rounds of 40 frames per variant, after 20 to settle. Medians in ms; GPU is the sum of top-level passes (nested ones are listed under their parent's name).
+
+01_central_street_noon (zoom 1, 12.5 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             22.5       27.0 21.5 21.7    15.5   main_opaque_pass_3d 9.68, main_transparent_pass_3d 4.09, upscaling 1.45, clustering 0.19
+  no MSAA                17.2       21.4 16.9 16.8    14.3   main_opaque_pass_3d 8.99, main_transparent_pass_3d 3.80, upscaling 1.22, clustering 0.19
+  MSAA x2                25.2       25.4 25.6 19.1    18.8   main_opaque_pass_3d 11.72, main_transparent_pass_3d 5.09, upscaling 1.59, clustering 0.23
+  no MSAA, FXAA          21.7       23.9 21.6 20.2    18.3   main_opaque_pass_3d 10.12, main_transparent_pass_3d 4.34, fxaa 2.09, fxaa/fxaa 1.73, upscaling 1.37, clustering 0.21
+  no sun shadows         18.3       20.4 17.5 17.9    12.6   main_opaque_pass_3d 7.68, main_transparent_pass_3d 3.04, upscaling 1.52, clustering 0.20
+  1-tap shadows          20.1       25.2 19.1 19.8    13.3   main_opaque_pass_3d 8.16, main_transparent_pass_3d 3.41, upscaling 1.59, clustering 0.18
+  ghost unlit            18.8       23.5 18.2 18.4    12.3   main_opaque_pass_3d 9.49, upscaling 1.40, main_transparent_pass_3d 1.20, clustering 0.19
+
+03_housing_noon (zoom 0.8, 13.5 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             25.2       25.6 21.5 26.6    17.4   main_opaque_pass_3d 15.20, upscaling 1.52, clustering 0.22, main_transparent_pass_3d 0.13
+  no MSAA                16.5       15.3 17.3 16.8    13.6   main_opaque_pass_3d 11.99, upscaling 1.28, clustering 0.19
+  MSAA x2                21.2       18.3 28.1 21.2    15.0   main_opaque_pass_3d 13.07, upscaling 1.49, clustering 0.19, main_transparent_pass_3d 0.12
+  no MSAA, FXAA          18.2       16.6 18.9 18.5    15.1   main_opaque_pass_3d 11.22, fxaa 2.19, fxaa/fxaa 1.88, upscaling 1.25, clustering 0.18
+  no sun shadows         16.6       16.4 21.8 16.2    11.2   main_opaque_pass_3d 9.37, upscaling 1.43, clustering 0.19, main_transparent_pass_3d 0.10
+  1-tap shadows          20.8       21.4 17.8 21.2    13.7   main_opaque_pass_3d 11.78, upscaling 1.50, clustering 0.19, main_transparent_pass_3d 0.12
+  ghost unlit            22.4       22.3 20.6 25.7    15.3   main_opaque_pass_3d 13.32, upscaling 1.51, clustering 0.19, main_transparent_pass_3d 0.12
+
+06_whole_town (zoom 0.14, 13.0 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             36.1       45.6 35.9 34.7    17.8   main_opaque_pass_3d 13.73, upscaling 1.41, clustering 0.25, main_transparent_pass_3d 0.14
+  no MSAA                24.6       24.4 26.9 24.1    14.8   main_opaque_pass_3d 11.24, upscaling 1.35, clustering 0.20, main_transparent_pass_3d 0.13
+  MSAA x2                32.4       29.6 34.2 32.5    14.4   main_opaque_pass_3d 12.34, upscaling 1.31, clustering 0.19, main_transparent_pass_3d 0.13
+  no MSAA, FXAA          29.5       25.7 30.3 31.1    19.2   main_opaque_pass_3d 11.84, fxaa 5.09, fxaa/fxaa 2.43, upscaling 1.40, clustering 0.20, main_transparent_pass_3d 0.13
+  no sun shadows         25.7       24.5 27.3 26.0    13.3   main_opaque_pass_3d 10.76, upscaling 1.34, clustering 0.17, main_transparent_pass_3d 0.11
+  1-tap shadows          33.5       33.0 35.5 32.3    15.7   main_opaque_pass_3d 11.66, upscaling 1.33, clustering 0.21, main_transparent_pass_3d 0.13
+  ghost unlit            35.9       41.6 37.1 34.1    18.9   main_opaque_pass_3d 14.68, upscaling 1.44, clustering 0.24, main_transparent_pass_3d 0.11
+
+10_shop_boards_close (zoom 2.2, 13.0 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             24.2       23.9 23.6 36.9    11.1   main_opaque_pass_3d 7.31, upscaling 1.30, main_transparent_pass_3d 0.21, clustering 0.16
+  no MSAA                19.0       19.4 16.5 24.0    13.9   main_opaque_pass_3d 10.48, upscaling 1.39, main_transparent_pass_3d 0.22, clustering 0.19
+  MSAA x2                26.2       27.7 23.4 41.3    13.6   main_opaque_pass_3d 8.98, upscaling 1.57, main_transparent_pass_3d 0.25, clustering 0.22
+  no MSAA, FXAA          21.0       24.7 20.8 20.5    16.1   main_opaque_pass_3d 7.32, fxaa 4.46, fxaa/fxaa 1.79, upscaling 1.34, clustering 0.98, main_transparent_pass_3d 0.21
+  no sun shadows         20.8       20.6 19.0 22.5     9.5   main_opaque_pass_3d 6.81, upscaling 1.26, main_transparent_pass_3d 0.17, clustering 0.16
+  1-tap shadows          23.2       22.0 23.8 24.3     9.1   main_opaque_pass_3d 6.58, upscaling 1.30, main_transparent_pass_3d 0.19, clustering 0.17
+  ghost unlit            23.2       23.6 21.4 23.9     8.8   main_opaque_pass_3d 7.08, upscaling 1.24, main_transparent_pass_3d 0.20, clustering 0.15

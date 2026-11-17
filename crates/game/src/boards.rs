@@ -14,6 +14,10 @@ use sim::scene::Board;
 // mip levels, anything finer turns into sparkle.
 const PX_PER_METRE: f32 = 40.0;
 
+/// A shop board on screen, so --bench can switch them off.
+#[derive(Component)]
+pub struct BoardMark;
+
 struct Fonts {
     han: fontdue::Font,
     latin: fontdue::Font,
@@ -148,6 +152,7 @@ pub fn spawn(
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]])
             .with_inserted_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]));
         commands.spawn((
+            BoardMark,
             Mesh3d(meshes.add(mesh)),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color_texture: Some(texture.clone()),

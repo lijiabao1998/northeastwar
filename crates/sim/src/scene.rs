@@ -46,6 +46,9 @@ pub struct Scene {
     /// The glowing heads of the street lamps (drawn unlit, bright after dark).
     pub lamp_glow: Soup,
     pub lamp_heads: Vec<[f32; 3]>,
+    /// Each post's lit heads as one light: between them, and how many heads it stands
+    /// for. Placed at one head instead, the pool under the other lost up to 40%.
+    pub lamp_posts: Vec<([f32; 3], usize)>,
     pub boards: Vec<Board>,
 }
 
@@ -179,6 +182,7 @@ fn lamps(city: &City, pal: &Palette, scene: &mut Scene) {
         let yaw = dir.y.atan2(dir.x);
         scene.props.boxed(*at, 0.0, [0.16, 8.2, 0.16], yaw, post);
         // Two arms over the road and the pavement, as on the real streets.
+        let mut lit = Vec::new();
         for side in [-1.0f32, 1.0] {
             let arm = at.add(dir.right().mul(side * 0.9));
             scene.props.boxed(arm, 8.0, [0.1, 0.1, 1.9], yaw, post);
@@ -186,8 +190,11 @@ fn lamps(city: &City, pal: &Palette, scene: &mut Scene) {
             scene.lamp_glow.boxed(head, 7.86, [0.34, 0.14, 0.7], yaw, pal.get("lamp_sodium"));
             if side > 0.0 || i % 2 == 0 {
                 scene.lamp_heads.push(world(head, 7.7));
+                lit.push(head);
             }
         }
+        let mid = P2::new(lit.iter().map(|p| p.x).sum::<f32>() / lit.len() as f32, lit.iter().map(|p| p.y).sum::<f32>() / lit.len() as f32);
+        scene.lamp_posts.push((world(mid, 7.7), lit.len()));
     }
 }
 
