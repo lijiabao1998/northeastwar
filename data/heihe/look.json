@@ -7,7 +7,12 @@
       "street-night-1": "Streets of Heihe 04.01.2026.jpg, Wikimedia Commons, CC0. A residential street on a January night: yellow walls with crimson balcony bands, white window frames, glazed balconies, blue and purple shop boards, pollarded trees, sodium lamps, thin packed snow on wet asphalt, brick pavement.",
       "street-night-2": "Streets of Heihe 04.01.2026 (2).jpg, Wikimedia Commons, CC0. Red brick pavement, white tile and red brick low buildings with roller shutters, salmon blocks with yellow bay bands, dirty snow along the kerb, white cars with blue plates.",
       "goods-street": "黑河市俄罗斯商品街.jpg, Wikimedia Commons, CC BY-SA 4.0. Tan tile blocks with cream bands and glazed balconies, a teal iron arch, globe lamps on black posts, steps up to raised shops.",
-      "mother": "黑河市，母亲雕塑2017.jpg, Wikimedia Commons, CC BY-SA 4.0. The Mother sculpture: green bronze on a tall dark red polished granite plinth with green characters; Blagoveshchensk across the river is low, brick-orange and white."
+      "mother": "黑河市，母亲雕塑2017.jpg, Wikimedia Commons, CC BY-SA 4.0. The Mother sculpture: green bronze on a tall dark red polished granite plinth with green characters; Blagoveshchensk across the river is low, brick-orange and white.",
+      "street-night-3": "Streets of Heihe 04.01.2026 (3).jpg, Wikimedia Commons, CC0. Ground-floor shops on a winter night: dark green and red quilted winter door curtains, red doorway banners, white air-conditioner units above the boards, whitewashed lower tree trunks.",
+      "street-night-4": "Streets of Heihe 04.01.2026 (4).jpg, Wikimedia Commons, CC0. Concrete utility poles with black-and-yellow warning stripes and overhead wires, teal and red enclosed motorised three-wheelers on the brick pavement.",
+      "pushkin": "普希金书店2017.jpg, Wikimedia Commons, CC BY-SA 4.0. Pushkin bronze statue on a dark red granite plinth in front of the Xinhua / Pushkin bookstore on Central Street, paired red round lamp-post medallions.",
+      "memorial": "黑河旅俄华侨纪念馆街景 2025-10-12.jpg, Wikimedia Commons, CC BY-SA 4.0. Rose-red facade with white quoins on Wangsu Street, whitewashed tree trunks with wooden tripod stakes, yellow kerb line on brick pavement.",
+      "river-wheel": "Blagoveshchensk, Russia --- Heihe, China (8789486307).jpg and Blagoveshchensk, Russia Heihe, China (8799506204).jpg, Wikimedia Commons, CC BY 2.0. The white Ferris wheel and steel lattice tower on the Heihe riverside embankment, and the red-roofed white tourist boat pavilion."
     }
   },
   "walls": {
@@ -30,7 +35,12 @@
     "glass_day": {"hex": "#5F7486", "from": "goods-street"},
     "glass_lit": {"hex": "#FFD9A0", "from": "street-night-1"},
     "shopfront": {"hex": "#2F3238", "from": "central-1"},
-    "shutter": {"hex": "#D8D8D4", "from": "street-night-2"}
+    "shutter": {"hex": "#D8D8D4", "from": "street-night-2"},
+    "memorial_rose": {"hex": "#C83E6B", "from": "memorial"},
+    "curtain_green": {"hex": "#253B2F", "from": "street-night-3"},
+    "curtain_maroon": {"hex": "#6E2226", "from": "street-night-3"},
+    "ac_white": {"hex": "#D8DBD8", "from": "street-night-3"},
+    "awning_teal": {"hex": "#1B626B", "from": "goods-street"}
   },
   "roofs": {
     "spire_red": {"hex": "#A6472E", "from": "central-1"},
@@ -50,7 +60,8 @@
     "snow_ground": {"hex": "#DCE2E8", "from": "street-night-2"},
     "snow_dirty": {"hex": "#C9C7C2", "from": "street-night-2"},
     "river_ice": {"hex": "#C4D3DE", "from": "mother"},
-    "river_ice_dark": {"hex": "#8FA7B8", "from": "mother"}
+    "river_ice_dark": {"hex": "#8FA7B8", "from": "mother"},
+    "tactile_yellow": {"hex": "#C9A538", "from": "central-2"}
   },
   "signs": {
     "boards": [
@@ -77,6 +88,19 @@
     "mother_plinth": {"hex": "#7A2F30", "from": "mother"},
     "far_bank_brick": {"hex": "#B46A4C", "from": "mother"},
     "far_bank_white": {"hex": "#DAD8D2", "from": "mother"},
-    "embankment": {"hex": "#CFCFCB", "from": "mother"}
+    "embankment": {"hex": "#CFCFCB", "from": "mother"},
+    "tree_lime": {"hex": "#E6E6E0", "from": "memorial"},
+    "tree_stake": {"hex": "#8C7355", "from": "memorial"},
+    "medallion_red": {"hex": "#B82928", "from": "central-1"},
+    "topiary_green": {"hex": "#2F4A2E", "from": "central-1"},
+    "bag_red": {"hex": "#B51F24", "from": "central-2"},
+    "bench_wood": {"hex": "#7A5234", "from": "central-2"},
+    "chimney_brick": {"hex": "#8B5A46", "from": "central-2"},
+    "trike_teal": {"hex": "#287C78", "from": "street-night-4"},
+    "camo_cover": {"hex": "#5E5B4A", "from": "street-night-2"},
+    "pole_concrete": {"hex": "#8E908E", "from": "street-night-4"},
+    "wire_dark": {"hex": "#26282B", "from": "street-night-4"},
+    "wheel_white": {"hex": "#E8ECF0", "from": "river-wheel"},
+    "rail_iron": {"hex": "#2B2E32", "from": "goods-street"}
   }
 }

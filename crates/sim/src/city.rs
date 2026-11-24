@@ -87,6 +87,8 @@ pub struct City {
     pub lamps: Vec<P2>,
     pub cars: Vec<P2>,
     pub landmarks: Vec<Landmark>,
+    pub heat: Vec<(P2, f32)>,
+    pub paths: Vec<Vec<P2>>,
     pub walk_x: (f32, f32),
     pub walk_south: f32,
 }
@@ -250,6 +252,17 @@ impl City {
                 city.landmarks.push(Landmark { kind: text(&l, "kind"), name_zh: text(&l, "name_zh"), at });
             }
         }
+        for h in root.get("heat").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+            if let Some(at) = p2(&h) {
+                city.heat.push((at, num(&h, "radius", 3.2)));
+            }
+        }
+        for p in root.get("paths").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+            let pts = line(Some(&p));
+            if pts.len() >= 4 {
+                city.paths.push(pts);
+            }
+        }
         Ok(city)
     }
 
@@ -265,6 +278,12 @@ impl City {
 
     pub fn road(&self, name: &str) -> Option<&Road> {
         self.roads.iter().find(|r| r.name == name)
+    }
+
+    /// True near a mapped shop entrance or doorway heat source.
+    pub fn near_heat(&self, p: P2) -> bool {
+        self.heat.iter().any(|(at, r)| p.dist(*at) <= *r)
+            || self.signs.iter().any(|s| s.shop && p.dist(s.at) <= 2.8)
     }
 }
 

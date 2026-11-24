@@ -56,6 +56,22 @@ impl Forces {
         self.root.pointer(&format!("/{part}/{key}")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32
     }
 
+    pub fn num_or(&self, part: &str, key: &str, default: f32) -> f32 {
+        self.root
+            .pointer(&format!("/{part}/{key}"))
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(default)
+    }
+
+    pub fn vehicle_num(&self, vehicle_key: &str, field: &str, default: f32) -> f32 {
+        self.root
+            .pointer(&format!("/vehicles/{vehicle_key}/{field}"))
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(default)
+    }
+
     /// A [low, high] pair.
     pub fn range(&self, part: &str, key: &str) -> (f32, f32) {
         let pair = self.root.pointer(&format!("/{part}/{key}")).and_then(|v| v.as_array());

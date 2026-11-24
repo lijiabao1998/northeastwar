@@ -64,6 +64,20 @@ fn piece_on(soup: &mut Soup, a: P2, dir: P2, out: P2, s0: f32, s1: f32, h0: f32,
     soup.quad([at(s0, h0), at(s1, h0), at(s1, h1), at(s0, h1)], world_dir(out), colour);
 }
 
+fn box_on(soup: &mut Soup, a: P2, dir: P2, out: P2, s0: f32, s1: f32, h0: f32, h1: f32, p0: f32, p1: f32, colour: Rgb) {
+    if s1 - s0 < 0.02 || h1 - h0 < 0.02 || p1 - p0 < 0.01 {
+        return;
+    }
+    let centre = a.add(dir.mul((s0 + s1) * 0.5)).add(out.mul((p0 + p1) * 0.5));
+    let yaw = dir.y.atan2(dir.x);
+    soup.boxed(centre, h0, [s1 - s0, h1 - h0, p1 - p0], yaw, colour);
+}
+
+fn ac_unit(soup: &mut Soup, pal: &Palette, a: P2, dir: P2, out: P2, cx: f32, h0: f32, p0: f32) {
+    box_on(soup, a, dir, out, cx - 0.38, cx + 0.38, h0, h0 + 0.48, p0, p0 + 0.28, pal.get("ac_white"));
+    piece_on(soup, a, dir, out, cx - 0.26, cx + 0.08, h0 + 0.07, h0 + 0.41, p0 + 0.29, pal.get("shopfront"));
+}
+
 /// Bays along a wall of this length: (count, first centre, spacing).
 fn bays(len: f32) -> (usize, f32, f32) {
     let usable = len - 1.2;
@@ -141,14 +155,62 @@ pub fn build(b: &Building, dress: Dress, pal: &Palette) -> Built {
             for k in 0..count {
                 let cx = first + k as f32 * step;
                 let half = step * 0.5 - 0.25;
-                let shut = dress.kind == Kind::LowBrick && hash01(b.id, 100 + (i * 37 + k) as u32) < 0.35;
+                let bay_key = (i * 37 + k) as u32;
+                let shut = dress.kind == Kind::LowBrick && hash01(b.id, 100 + bay_key) < 0.35;
                 if shut {
                     piece_on(&mut out.solid, a, dir, outw, cx - half, cx + half, 0.15, 2.9, 0.05, pal.get("shutter"));
+                    for slat in 0..7 {
+                        let sh = 0.35 + slat as f32 * 0.36;
+                        piece_on(&mut out.solid, a, dir, outw, cx - half + 0.04, cx + half - 0.04, sh, sh + 0.05, 0.06, pal.get("granite_dark"));
+                    }
                 } else {
                     piece_on(&mut out.solid, a, dir, outw, cx - half, cx + half, 0.0, 3.0, 0.04, pal.get("shopfront"));
-                    let lit = hash01(b.id, 200 + (i * 37 + k) as u32) < 0.7;
+                    let lit = hash01(b.id, 200 + bay_key) < 0.7;
                     let target = if lit { &mut out.lit } else { &mut out.glass };
-                    piece_on(target, a, dir, outw, cx - half + 0.15, cx + half - 0.15, 0.45, 2.75, 0.07, glass);
+                    piece_on(target, a, dir, outw, cx - half + 0.15, cx + half - 0.15, 0.45, 2.62, 0.07, glass);
+
+                    if k % 2 == 0 || count == 1 {
+                        let door_w = (half * 0.48).clamp(0.42, 0.62);
+                        let curtain = if hash01(b.id, 300 + bay_key) < 0.55 {
+                            pal.get("curtain_green")
+                        } else {
+                            pal.get("curtain_maroon")
+                        };
+                        piece_on(&mut out.solid, a, dir, outw, cx - door_w, cx + door_w, 0.22, 2.35, 0.08, curtain);
+                        let stitch = curtain.mix(pal.get("shopfront"), 0.35);
+                        piece_on(&mut out.solid, a, dir, outw, cx - door_w * 0.38 - 0.02, cx - door_w * 0.38 + 0.02, 0.24, 2.33, 0.095, stitch);
+                        piece_on(&mut out.solid, a, dir, outw, cx + door_w * 0.38 - 0.02, cx + door_w * 0.38 + 0.02, 0.24, 2.33, 0.095, stitch);
+                        piece_on(&mut out.glass, a, dir, outw, cx - 0.16, cx + 0.16, 1.45, 1.85, 0.10, glass);
+                        let couplet = pal.get("baroque_red");
+                        piece_on(&mut out.solid, a, dir, outw, cx - door_w - 0.11, cx - door_w - 0.01, 0.35, 2.32, 0.085, couplet);
+                        piece_on(&mut out.solid, a, dir, outw, cx + door_w + 0.01, cx + door_w + 0.11, 0.35, 2.32, 0.085, couplet);
+                        piece_on(&mut out.solid, a, dir, outw, cx - door_w - 0.11, cx + door_w + 0.11, 2.34, 2.52, 0.085, couplet);
+
+                        let s0 = cx - door_w - 0.25;
+                        let s1 = cx + door_w + 0.25;
+                        box_on(&mut out.solid, a, dir, outw, s0, s1, 0.0, 0.14, 0.0, 0.52, pal.get("granite_paving"));
+                        box_on(&mut out.solid, a, dir, outw, s0 + 0.06, s1 - 0.06, 0.14, 0.26, 0.0, 0.28, pal.get("granite_dark"));
+                        if matches!(dress.kind, Kind::TanTile | Kind::LowBrick) {
+                            let iron = pal.get("rail_iron");
+                            for rs in [s0 + 0.06, s1 - 0.06] {
+                                let p_bot = world(a.add(dir.mul(rs)).add(outw.mul(0.48)), 0.14);
+                                let p_top = world(a.add(dir.mul(rs)).add(outw.mul(0.06)), 0.26);
+                                let r_bot = world(a.add(dir.mul(rs)).add(outw.mul(0.48)), 0.82);
+                                let r_top = world(a.add(dir.mul(rs)).add(outw.mul(0.06)), 1.02);
+                                out.solid.beam(p_bot, r_bot, 0.045, iron);
+                                out.solid.beam(p_top, r_top, 0.045, iron);
+                                out.solid.beam(r_bot, r_top, 0.045, iron);
+                            }
+                        }
+                    }
+                    if matches!(dress.kind, Kind::TanTile | Kind::LowBrick) {
+                        let canopy = if dress.kind == Kind::TanTile { pal.get("awning_teal") } else { pal.get("baroque_red") };
+                        box_on(&mut out.solid, a, dir, outw, cx - half + 0.05, cx + half - 0.05, 2.62, 2.78, 0.0, 0.34, canopy);
+                        box_on(&mut out.solid, a, dir, outw, cx - half + 0.07, cx + half - 0.07, 2.78, 2.82, 0.02, 0.32, pal.get("snow"));
+                    }
+                    if hash01(b.id, 400 + bay_key) < 0.42 {
+                        ac_unit(&mut out.solid, pal, a, dir, outw, cx + half - 0.42, 2.12, 0.0);
+                    }
                 }
             }
         }
@@ -202,8 +264,14 @@ pub fn build(b: &Building, dress: Dress, pal: &Palette) -> Built {
                 let lit = hash01(b.id, 5000 + key) < 0.42;
                 let target = if lit { &mut out.lit } else { &mut out.glass };
                 piece_on(target, a, dir, outw, cx - w, cx + w, s, h, 0.15, glass);
-                // A glazing bar, so a window is not one blank pane.
+                // Glazing bars and snow-capped sill.
                 piece_on(&mut out.solid, a, dir, outw, cx - 0.035, cx + 0.035, s, h, 0.17, frame);
+                let trans_h = s + (h - s) * 0.65;
+                piece_on(&mut out.solid, a, dir, outw, cx - w, cx + w, trans_h - 0.03, trans_h + 0.03, 0.17, frame);
+                piece_on(&mut out.solid, a, dir, outw, cx - w - 0.10, cx + w + 0.10, s - 0.14, s - 0.05, 0.16, pal.get("snow"));
+                if !stair && s - base >= 0.72 && w >= 0.6 && hash01(b.id, 6000 + key) < 0.09 {
+                    ac_unit(&mut out.solid, pal, a, dir, outw, cx + w * 0.45, s - 0.62, 0.10);
+                }
             }
             // Pilasters between bays on Central Street.
             if matches!(dress.kind, Kind::CentralSalmon | Kind::CentralBaroque) && count > 1 {

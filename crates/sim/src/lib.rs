@@ -1,15 +1,19 @@
 //! The game's world and rules, with no renderer in sight. Anything that can
 //! be checked without a window lives here, and is checked.
 
+pub mod arsenal;
 pub mod city;
 pub mod cmab;
 pub mod cutaway;
 pub mod facade;
+pub mod figure;
 pub mod forces;
 pub mod geom;
+pub mod interior;
 pub mod look;
 pub mod scene;
 pub mod soup;
+pub mod survival;
 pub mod walk;
 
 use std::path::PathBuf;
@@ -459,5 +463,79 @@ mod tests {
         assert!(city.buildings.iter().any(|b| b.id >= cmab::ID_BASE), "load_heihe left CMAB out");
         let scene = scene::build(&city, &pal);
         assert_eq!(scene.blocks.len(), cn);
+    }
+
+    #[test]
+    fn heihe_has_its_landmarks_and_winter_props() {
+        let (city, pal) = heihe();
+        let expected_keys = [
+            "memorial_rose",
+            "curtain_green",
+            "curtain_maroon",
+            "ac_white",
+            "awning_teal",
+            "tactile_yellow",
+            "tree_lime",
+            "tree_stake",
+            "medallion_red",
+            "topiary_green",
+            "bag_red",
+            "bench_wood",
+            "chimney_brick",
+            "trike_teal",
+            "camo_cover",
+            "pole_concrete",
+            "wire_dark",
+            "wheel_white",
+            "rail_iron",
+        ];
+        for k in expected_keys {
+            assert!(pal.has(k), "missing R4 colour {k} in look.json");
+        }
+
+        let scene = scene::build(&city, &pal);
+        let chunks = scene.props.chunks(120.0);
+        assert!(chunks.len() >= 20, "expected >= 20 120m prop chunks, got {}", chunks.len());
+        let chunk_tris: usize = chunks.iter().map(|c| c.triangles()).sum();
+        assert_eq!(chunk_tris, scene.props.triangles(), "chunks must preserve every triangle");
+
+        let tris = scene.props.triangle_list();
+        let has_near = |cx: f32, cy: f32, max_r: f32, min_y: f32| -> bool {
+            tris.iter().any(|t| {
+                t.iter().any(|v| {
+                    let dx = v[0] - cx;
+                    let dy = -v[2] - cy;
+                    dx * dx + dy * dy <= max_r * max_r && v[1] > min_y
+                })
+            })
+        };
+
+        assert!(has_near(-159.3, -246.5, 10.0, 7.0), "missing Wenhua St teal arch");
+        assert!(has_near(-116.4, -156.4, 10.0, 7.0), "missing Hailan St teal arch");
+        assert!(has_near(105.0, -35.0, 22.0, 40.0), "missing riverside Ferris wheel");
+        assert!(has_near(75.0, -20.0, 8.0, 50.0), "missing riverside steel lattice TV tower");
+        assert!(has_near(-248.0, -286.0, 6.0, 28.0), "missing Central St brick chimney");
+        assert!(has_near(-48.0, 58.0, 15.0, 10.0), "missing riverside tourist boat pavilion");
+        assert!(has_near(165.0, -48.0, 24.0, 18.0), "missing cross-river cable car terminal");
+        assert!(
+            tris.iter().any(|t| t.iter().any(|v| {
+                let wy = -v[2];
+                wy > city.bank_y(v[0]) + 40.0 && v[1] > 18.0
+            })),
+            "missing Blagoveshchensk cathedral / arch / tower silhouettes across the river"
+        );
+
+        let rail_tris = tris
+            .iter()
+            .filter(|t| {
+                let c = geom::P2::new(
+                    (t[0][0] + t[1][0] + t[2][0]) / 3.0,
+                    -(t[0][2] + t[1][2] + t[2][2]) / 3.0,
+                );
+                let y = (t[0][1] + t[1][1] + t[2][1]) / 3.0;
+                y > 0.5 && y < 1.3 && geom::dist_to_polyline(c, &city.bank) < 2.5
+            })
+            .count();
+        assert!(rail_tris > 500, "expected continuous riverside balustrade, got {rail_tris} tris");
     }
 }

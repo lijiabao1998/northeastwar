@@ -14,6 +14,7 @@ pub struct StreetLamp;
 #[derive(Resource)]
 pub struct GlowMaterials {
     pub lamps: Handle<StandardMaterial>,
+    pub windows: Handle<StandardMaterial>,
 }
 
 pub const SUNRISE: f32 = 7.55;
@@ -22,6 +23,7 @@ const NOON_ELEVATION: f32 = 18.8;
 
 /// Elevation and azimuth of the sun in degrees. Azimuth is clockwise from north.
 pub fn sun(hour: f32) -> (f32, f32) {
+    let hour = hour.rem_euclid(24.0);
     let t = (hour - SUNRISE) / (SUNSET - SUNRISE);
     let elevation = if (0.0..=1.0).contains(&t) {
         NOON_ELEVATION * (t * std::f32::consts::PI).sin()
@@ -101,18 +103,33 @@ pub fn apply(
     mut ambient: ResMut<GlobalAmbientLight>,
     mut clear: ResMut<ClearColor>,
     mut lamps: Query<&mut Visibility, With<StreetLamp>>,
-    mut exposure: Single<&mut bevy::camera::Exposure>,
+    boards: Query<&MeshMaterial3d<StandardMaterial>, With<crate::boards::BoardMark>>,
+    (mut exposure, mut fog_q): (
+        Single<&mut bevy::camera::Exposure>,
+        Single<&mut bevy::pbr::DistanceFog, With<crate::Eye>>,
+    ),
     glow: Option<Res<GlowMaterials>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     (cutaway, gfx): (Option<Res<crate::Cutaway>>, Res<crate::graphics::Graphics>),
-    mut last: Local<f32>,
-    mut lamps_were_on: Local<Option<bool>>,
-    mut ghost_state: Local<Option<u8>>,
+    (mut last, mut lamps_were_on, mut blackout_was, mut ghost_state, mut last_fog): (
+        Local<f32>,
+        Local<Option<bool>>,
+        Local<Option<bool>>,
+        Local<Option<u8>>,
+        Local<f32>,
+    ),
 ) {
-    if (clock.hour - *last).abs() < 0.004 && *last != 0.0 {
+    let lamp_on = lamps_on(clock.hour) && !clock.blackout;
+    if (clock.hour - *last).abs() < 0.004
+        && *last != 0.0
+        && *lamps_were_on == Some(lamp_on)
+        && *blackout_was == Some(clock.blackout)
+        && (clock.fog - *last_fog).abs() < 0.01
+    {
         return;
     }
     *last = clock.hour;
+    *last_fog = clock.fog;
     let (elevation, azimuth) = sun(clock.hour);
     let dark = night(clock.hour);
     let (light, transform) = &mut *sun_light;
@@ -167,15 +184,50 @@ pub fn apply(
         }
     }
 
-    let lamp_on = lamps_on(clock.hour);
+    let lamp_on = lamps_on(clock.hour) && !clock.blackout;
     if *lamps_were_on != Some(lamp_on) {
         *lamps_were_on = Some(lamp_on);
         for mut lamp in &mut lamps {
             *lamp = if lamp_on { Visibility::Inherited } else { Visibility::Hidden };
         }
-        if let Some(mut m) = glow.and_then(|g| materials.get_mut(&g.lamps)) {
+        if let Some(mut m) = glow.as_ref().and_then(|g| materials.get_mut(&g.lamps)) {
             let k = if lamp_on { 1.0 } else { 0.0 };
             m.emissive = LinearRgba::new(160.0 * k, 96.0 * k, 34.0 * k, 1.0);
         }
+    }
+    if *blackout_was != Some(clock.blackout) {
+        *blackout_was = Some(clock.blackout);
+        if let Some(mut wm) = glow.as_ref().and_then(|g| materials.get_mut(&g.windows)) {
+            if clock.blackout {
+                wm.emissive = LinearRgba::BLACK;
+                wm.base_color = Color::srgb(0.04, 0.05, 0.08);
+            } else {
+                wm.emissive = LinearRgba::new(22.0, 14.5, 6.6, 1.0);
+                wm.base_color = Color::WHITE;
+            }
+        }
+        let board_em = if clock.blackout { LinearRgba::BLACK } else { LinearRgba::new(30.0, 30.0, 30.0, 1.0) };
+        for mat_h in &boards {
+            if let Some(mut bm) = materials.get_mut(&mat_h.0) {
+                bm.emissive = board_em;
+            }
+        }
+    }
+
+    if clock.fog < 0.01 {
+        fog_q.color = Color::NONE;
+        fog_q.falloff = bevy::pbr::FogFalloff::Linear { start: 900.0, end: 1200.0 };
+    } else {
+        let dens = clock.fog.clamp(0.0, 1.0);
+        // Scale fog luminance with ambient.brightness so day and blackout-night fog match sky exposure.
+        let lum = ambient.brightness * 0.65;
+        let r = 0.58 * (1.0 - dark) + 0.30 * dark;
+        let g = 0.68 * (1.0 - dark) + 0.38 * dark;
+        let b = 0.80 * (1.0 - dark) + 0.55 * dark;
+        fog_q.color = Color::linear_rgba(r * lum, g * lum, b * lum, dens * 0.58);
+        fog_q.falloff = bevy::pbr::FogFalloff::Linear {
+            start: 485.0 + (1.0 - dens) * 60.0,
+            end: 578.0 + (1.0 - dens) * 80.0,
+        };
     }
 }

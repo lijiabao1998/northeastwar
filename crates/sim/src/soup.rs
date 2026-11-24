@@ -166,6 +166,60 @@ impl Soup {
         self.idx.chunks(3).map(|t| [self.pos[t[0] as usize], self.pos[t[1] as usize], self.pos[t[2] as usize]]).collect()
     }
 
+    /// A square-section bar from 3D world point `a` to `b`, `thick` metres across.
+    pub fn beam(&mut self, a: [f32; 3], b: [f32; 3], thick: f32, colour: Rgb) {
+        let delta = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let len = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
+        if len < 1.0e-4 || thick <= 0.0 {
+            return;
+        }
+        let d = [delta[0] / len, delta[1] / len, delta[2] / len];
+        let up = if d[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+        let cross = |p: [f32; 3], q: [f32; 3]| [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+        let raw_u = cross(up, d);
+        let ul = (raw_u[0] * raw_u[0] + raw_u[1] * raw_u[1] + raw_u[2] * raw_u[2]).sqrt();
+        if ul < 1.0e-6 {
+            return;
+        }
+        let u = [raw_u[0] / ul, raw_u[1] / ul, raw_u[2] / ul];
+        let v = cross(d, u);
+        let r = thick * 0.5;
+        let ring = |p: [f32; 3]| -> [[f32; 3]; 4] {
+            let pt = |su: f32, sv: f32| [p[0] + u[0] * su * r + v[0] * sv * r, p[1] + u[1] * su * r + v[1] * sv * r, p[2] + u[2] * su * r + v[2] * sv * r];
+            [pt(-1.0, -1.0), pt(1.0, -1.0), pt(1.0, 1.0), pt(-1.0, 1.0)]
+        };
+        let ca = ring(a);
+        let cb = ring(b);
+        self.quad([ca[0], ca[1], cb[1], cb[0]], [-v[0], -v[1], -v[2]], colour);
+        self.quad([ca[1], ca[2], cb[2], cb[1]], u, colour);
+        self.quad([ca[2], ca[3], cb[3], cb[2]], v, colour);
+        self.quad([ca[3], ca[0], cb[0], cb[3]], [-u[0], -u[1], -u[2]], colour);
+        self.quad([ca[3], ca[2], ca[1], ca[0]], [-d[0], -d[1], -d[2]], colour);
+        self.quad([cb[0], cb[1], cb[2], cb[3]], d, colour);
+    }
+
+    /// Split into `cell` x `cell` metre buckets by triangle centroid so Bevy can frustum-cull off-screen geometry.
+    pub fn chunks(&self, cell: f32) -> Vec<Soup> {
+        let mut map: std::collections::BTreeMap<(i32, i32), Soup> = std::collections::BTreeMap::new();
+        let inv = if cell > 0.0 { 1.0 / (3.0 * cell) } else { 1.0 / 360.0 };
+        for t in self.idx.chunks_exact(3) {
+            let (i0, i1, i2) = (t[0] as usize, t[1] as usize, t[2] as usize);
+            let (p0, p1, p2) = (self.pos[i0], self.pos[i1], self.pos[i2]);
+            let cx = ((p0[0] + p1[0] + p2[0]) * inv).floor() as i32;
+            let cz = ((p0[2] + p1[2] + p2[2]) * inv).floor() as i32;
+            let bucket = map.entry((cx, cz)).or_default();
+            let base = bucket.pos.len() as u32;
+            for &i in &[i0, i1, i2] {
+                bucket.pos.push(self.pos[i]);
+                bucket.nor.push(self.nor[i]);
+                bucket.col.push(self.col[i]);
+                bucket.uv.push(self.uv[i]);
+            }
+            bucket.idx.extend_from_slice(&[base, base + 1, base + 2]);
+        }
+        map.into_values().filter(|s| s.triangles() > 0).collect()
+    }
+
     pub fn append(&mut self, other: &Soup) {
         let base = self.pos.len() as u32;
         self.pos.extend_from_slice(&other.pos);
@@ -205,5 +259,32 @@ mod tests {
             assert!(n[0] * stored[0] + n[1] * stored[1] + n[2] * stored[2] > 0.0);
         }
         assert_eq!(s.triangles(), 10);
+    }
+
+    #[test]
+    fn a_beam_faces_outward() {
+        let mut s = Soup::default();
+        s.beam([1.0, 2.0, 3.0], [5.0, 7.0, -2.0], 0.4, Rgb { r: 0.2, g: 0.5, b: 0.6 });
+        s.beam([0.0, 0.0, 0.0], [0.0, 4.0, 0.0], 0.3, Rgb { r: 0.8, g: 0.2, b: 0.2 });
+        for t in s.idx.chunks(3) {
+            let (a, b, c) = (s.pos[t[0] as usize], s.pos[t[1] as usize], s.pos[t[2] as usize]);
+            let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+            let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+            let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+            let stored = s.nor[t[0] as usize];
+            assert!(n[0] * stored[0] + n[1] * stored[1] + n[2] * stored[2] > 0.0);
+        }
+        assert_eq!(s.triangles(), 24);
+    }
+
+    #[test]
+    fn chunks_keep_every_triangle() {
+        let mut s = Soup::default();
+        s.boxed(P2::new(-180.0, 30.0), 0.0, [2.0, 2.0, 2.0], 0.0, Rgb { r: 1.0, g: 1.0, b: 1.0 });
+        s.boxed(P2::new(250.0, -200.0), 0.0, [2.0, 2.0, 2.0], 0.0, Rgb { r: 0.5, g: 0.5, b: 0.5 });
+        let parts = s.chunks(120.0);
+        assert_eq!(parts.len(), 2);
+        let total: usize = parts.iter().map(|p| p.triangles()).sum();
+        assert_eq!(total, s.triangles());
     }
 }
