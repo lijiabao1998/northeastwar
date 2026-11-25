@@ -2387,13 +2387,14 @@ pub fn sync_hud(
                 let pla_arm = s.tanks.iter().filter(|t| t.faction == Faction::Pla).count();
                 let ru_arm = s.tanks.iter().filter(|t| t.faction == Faction::Russia).count();
                 text.0 = format!(
-                    "{}\n民兵 {} 人 · 我方装甲 {} · 俄军装甲 {} · 废铁 {} · 煤 {} · 当前工事 [{} 铁{}煤{}]",
+                    "{}\n民兵 {} 人 · 我方装甲 {} · 俄军装甲 {} · 废铁 {} · 煤 {} · 柴 {} · 当前工事 [{} 铁{}煤{}]",
                     s.objective_zh,
                     s.militia.iter().filter(|m| m.hp > 0.0).count(),
                     pla_arm,
                     ru_arm,
                     s.inv.scrap,
                     s.inv.coal,
+                    s.inv.wood,
                     bar,
                     cs,
                     cc
@@ -2438,10 +2439,10 @@ pub fn sync_hud(
                     } else if s.body.sheltered {
                         "21:00停暖 挡风"
                     } else {
-                        "街头 -24°C"
+                        "街头"
                     };
                     let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
-                    text.0 = format!("体温 {:.1}°C  ·  {wx_tag}\n室外 -24°C ({state_tag}{fl_tag})", s.body.temp);
+                    text.0 = format!("体温 {:.1}°C  ·  {wx_tag}\n室外 {:+.0}°C ({state_tag}{fl_tag})", s.body.temp, s.outdoor_c());
                 }
                 color.0 = if s.body.temp < 34.4 {
                     Color::srgb(0.55, 0.80, 1.0)
@@ -2544,9 +2545,10 @@ pub fn sync_hud(
                 } else {
                     String::new()
                 };
+                let ill = if s.body.illness >= 5.0 { format!("   病 {:.0}", s.body.illness) } else { String::new() };
                 text.0 = format!(
-                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
-                    s.body.hp, s.body.hunger, s.body.thirst, s.body.fatigue, s.inv.bandage, s.inv.food, s.inv.water, s.inv.warmer, s.inv.molotov
+                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{ill}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{}/药{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
+                    s.body.hp, s.body.hunger, s.body.thirst, s.body.fatigue, s.inv.bandage, s.inv.medicine, s.inv.food, s.inv.water, s.inv.warmer, s.inv.molotov
                 );
             }
             HudRole::Sms => {

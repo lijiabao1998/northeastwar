@@ -301,6 +301,8 @@ pub struct Interior {
     pub floors: Vec<FloorState>,
     pub npcs: Vec<RoomNpc>,
     pub room_temp_c: f32,
+    /// Pieces of furniture left that can be broken up for the stove.
+    pub furniture: u32,
     pub curtains_closed: bool,
     pub discovered: bool,
     pub breach_alert: f32,
@@ -2109,6 +2111,14 @@ fn assemble_interior(
         room_temp_c: match kind {
             InteriorKind::BasementShelter => 4.0,
             _ => 17.5,
+        },
+        furniture: {
+            let l = crate::living::get();
+            let home = matches!(kind, InteriorKind::PlayerHome | InteriorKind::NeighbourHome);
+            let pieces = l.num("fuel", "furniture_ground_floor")
+                + if home { l.num("fuel", "furniture_home_extra") } else { 0.0 }
+                + l.num("fuel", "furniture_per_upper_floor") * (num_floors as f32 - 1.0).max(0.0);
+            pieces.round() as u32
         },
         curtains_closed: matches!(kind, InteriorKind::PlayerHome | InteriorKind::NeighbourHome),
         discovered: kind == InteriorKind::PlayerHome,

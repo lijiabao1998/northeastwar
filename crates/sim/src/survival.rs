@@ -32,9 +32,6 @@ pub const START_FATIGUE: f32 = 40.0;
 pub const FATIGUE_AWAKE_PER_H: f32 = 4.5;
 /// Tiredness lost per game hour asleep: 100 to 0 in about seven hours. Play.
 pub const FATIGUE_SLEEP_PER_H: f32 = 14.0;
-/// Hunger and thirst asleep, as a share of the rate sitting still awake. Play,
-/// until L2 counts water in litres and food in calories.
-pub const SLEEP_NEEDS: f32 = 0.35;
 /// Too wide awake to sleep below this.
 pub const SLEEP_MIN_FATIGUE: f32 = 20.0;
 /// No soldier may be nearer than this when you lie down, and one this near wakes
@@ -62,7 +59,10 @@ fn rand01(state: &mut u64, salt: u32) -> f32 {
 
 pub const START_TEMP: f32 = 36.8;
 pub const AMBIENT_C: f32 = -24.0;
-pub const DEATH_TEMP: f32 = 32.0;
+/// Core temperatures (docs/research/living.md, 6c): from 32 °C confused and
+/// clumsy, from 28 °C unconscious, which alone in the cold is the end.
+pub const CONFUSED_TEMP: f32 = 32.0;
+pub const DEATH_TEMP: f32 = 28.0;
 
 pub const SEARCH_SECONDS: f32 = 2.6;
 pub const SHOP_REACH: f32 = 3.4;
@@ -124,6 +124,7 @@ pub struct RolledLoot {
     pub coal: u32,
     pub molotov: u32,
     pub coat: bool,
+    pub medicine: u32,
 }
 
 pub fn roll_shop(kind: ShopKind, seed: i64) -> RolledLoot {
@@ -133,6 +134,7 @@ pub fn roll_shop(kind: ShopKind, seed: i64) -> RolledLoot {
     };
     match kind {
         ShopKind::Pharmacy => RolledLoot {
+            medicine: pick(5, 1, 2),
             bandage: pick(1, 2, 3),
             warmer: pick(2, 0, 2),
             water: pick(3, 0, 1),
@@ -189,6 +191,7 @@ const EMPTY_LOOT: RolledLoot = RolledLoot {
     coal: 0,
     molotov: 0,
     coat: false,
+    medicine: 0,
 };
 
 #[derive(Clone, Debug)]
@@ -206,6 +209,13 @@ pub struct Body {
     /// 0 rested, 100 unable to keep your eyes open.
     pub fatigue: f32,
     pub asleep: bool,
+    /// The air around you (°C): the room's, or the street's. Set by the world each step.
+    pub env_c: f32,
+    pub indoors: bool,
+    /// 0 well, 100 gravely ill: what weeks in rooms below 18 °C do.
+    pub illness: f32,
+    /// Hours left of the days after a chilling, when infections take hold.
+    pub chilled_h: f32,
 }
 
 impl Default for Body {
@@ -223,6 +233,10 @@ impl Default for Body {
             move_scale: 1.0,
             fatigue: START_FATIGUE,
             asleep: false,
+            env_c: -18.0,
+            indoors: false,
+            illness: 0.0,
+            chilled_h: 0.0,
         }
     }
 }
@@ -242,28 +256,41 @@ impl Body {
         self.sheltered = sheltered;
         self.on_ice = on_ice;
         self.heated = hour < HEAT_OFF_HOUR || near_fire_barrel;
+        let living = crate::living::get();
 
+        // Heat goes with how far below comfort the air around you is: 1 at -18 °C,
+        // the first evening's street; more in the small hours, less by a thaw.
+        let cold = ((living.num("body", "cold_comfort_c") - self.env_c) / living.num("body", "cold_span_c")).max(0.0);
         let mut exposed = if near_fire_barrel {
             0.0
+        } else if self.indoors {
+            // Out of the wind, dressed and wrapped up, the body makes up for a cold
+            // room down to a few degrees: people lived for weeks in 3 °C flats. Below
+            // that it loses heat as on the street, more slowly.
+            let room_cold = ((living.num("body", "indoor_comfort_c") - self.env_c) / living.num("body", "cold_span_c")).max(0.0);
+            if self.heated && sheltered { 0.0 } else { 0.7 * room_cold }
         } else if sheltered {
-            if self.heated { 0.0 } else { 0.22 }
+            if self.heated { 0.0 } else { 0.22 * cold }
         } else if on_ice {
-            1.75
+            1.75 * cold
         } else {
-            1.0
+            cold
         };
         if gait == Gait::Run {
             exposed *= 1.25;
         }
-        if clock::night_cold(hour) {
-            exposed *= 1.3;
+        if self.illness > 40.0 {
+            exposed *= 1.2;
         }
         if self.asleep {
             // Lying under whatever covers you lose heat more slowly than standing. Play.
             exposed *= 0.6;
         }
-        if self.hunger < 25.0 {
+        // Hunger lowers the heat a body makes: weakness from about day 12 without food.
+        if self.hunger < 40.0 {
             exposed *= 1.25;
+        } else if self.hunger < 70.0 {
+            exposed *= 1.15;
         }
         exposed *= (1.0 - self.coat_bonus).max(0.2);
 
@@ -275,7 +302,9 @@ impl Body {
         }
         self.temp = self.temp.clamp(DEATH_TEMP - 0.1, 37.2);
 
-        let mut scale = if self.temp < 34.2 {
+        let mut scale = if self.temp < CONFUSED_TEMP {
+            0.5
+        } else if self.temp < 34.2 {
             0.70
         } else if self.temp < 35.0 {
             0.86
@@ -284,12 +313,23 @@ impl Body {
         };
         if self.thirst < 20.0 {
             scale *= 0.85;
+        } else if self.thirst < 50.0 {
+            // About 5% of body water lost, day 3 without drinking: impaired.
+            scale *= 0.92;
         }
         if self.hp < 40.0 {
             scale *= 0.85;
         }
         if self.fatigue >= 95.0 {
             scale *= 0.92;
+        }
+        if self.hunger < 40.0 {
+            scale *= 0.9;
+        } else if self.hunger < 70.0 {
+            scale *= 0.95;
+        }
+        if self.illness > 70.0 {
+            scale *= 0.85;
         }
         self.move_scale = scale;
 
@@ -302,14 +342,20 @@ impl Body {
         }
 
         let hours = dt * TIME_SCALE / 3600.0;
+        // Resting loss is the baseline; walking and running in the cold lose more.
         let thirst_mul = match gait {
-            Gait::Still if sheltered => 0.85,
-            Gait::Run => 1.20,
-            _ => 1.0,
+            Gait::Still => 1.0,
+            Gait::Walk => living.num("body", "water_walk_mul"),
+            Gait::Run => living.num("body", "water_run_mul"),
         };
-        let rest = if self.asleep { SLEEP_NEEDS } else { 1.0 };
-        self.hunger = (self.hunger - hours * 7.5 * rest).max(0.0);
-        self.thirst = (self.thirst - hours * 10.5 * thirst_mul * rest).max(0.0);
+        let rest = if self.asleep { living.num("body", "sleep_needs_mul") } else { 1.0 };
+        // Water and food by the day: the thirst meter is the water you can lose
+        // before you collapse, the hunger meter the calories you can go without
+        // before you collapse.
+        let thirst_per_h = living.num("body", "water_loss_l_per_day") / 24.0 * 100.0 / living.num("body", "water_reserve_l");
+        let hunger_per_h = living.kcal_per_day(self.env_c) / 24.0 * 100.0 / living.num("body", "food_reserve_kcal");
+        self.hunger = (self.hunger - hours * hunger_per_h * rest).max(0.0);
+        self.thirst = (self.thirst - hours * thirst_per_h * thirst_mul * rest).max(0.0);
         self.fatigue = if self.asleep {
             (self.fatigue - hours * FATIGUE_SLEEP_PER_H).max(0.0)
         } else {
@@ -317,9 +363,42 @@ impl Body {
         };
 
         if self.thirst <= 0.0 {
-            self.hp = (self.hp - 1.2 * dt).max(0.0);
+            self.hp = (self.hp - living.num("body", "thirst_collapse_hp_per_h") * hours).max(0.0);
             if self.hp <= 0.0 {
                 return Some(("你渴死了。", "You died of thirst."));
+            }
+        }
+        if self.hunger <= 0.0 {
+            self.hp = (self.hp - living.num("body", "starve_hp_per_h") * hours).max(0.0);
+            if self.hp <= 0.0 {
+                return Some(("你饿死了。", "You starved to death."));
+            }
+        }
+
+        // Illness builds in air below 18 °C, faster the colder (the risk of a
+        // respiratory infection compounds about 4% for each degree), and much faster
+        // for days after a chilling; it goes when you are warm.
+        if self.temp < 35.0 {
+            self.chilled_h = living.num("body", "chill_after_h");
+        }
+        self.chilled_h = (self.chilled_h - hours).max(0.0);
+        let below = living.num("body", "illness_below_c") - self.env_c;
+        let mut grow = if below > 0.0 && !near_fire_barrel && !(self.indoors && self.heated) {
+            let risk = living.num("body", "illness_risk_per_c").powf(below) - 1.0;
+            let chill = if self.chilled_h > 0.0 { living.num("body", "chill_risk_mul") } else { 1.0 };
+            living.num("body", "illness_per_h") * risk * chill
+        } else {
+            -living.num("body", "illness_recover_per_h")
+        };
+        if self.hunger < 50.0 || self.thirst < 30.0 {
+            grow *= if grow > 0.0 { 1.5 } else { 0.5 };
+        }
+        self.illness = (self.illness + grow * hours).clamp(0.0, 100.0);
+        if self.illness > 70.0 {
+            let harm = if self.illness >= 100.0 { 2.0 } else { 0.3 };
+            self.hp = (self.hp - harm * hours).max(0.0);
+            if self.hp <= 0.0 {
+                return Some(("你病死了。冷屋子里的咳嗽变成了肺炎。", "You died of illness. The cough in the cold room became pneumonia."));
             }
         }
         if self.bleeding {
@@ -347,6 +426,9 @@ impl Body {
 pub struct Inventory {
     pub food: u32,
     pub water: u32,
+    /// Broken-up furniture, ready for the stove.
+    pub wood: u32,
+    pub medicine: u32,
     pub bandage: u32,
     pub warmer: u32,
     pub scrap: u32,
@@ -615,9 +697,13 @@ pub fn weather_at(seed: u64, hour: f32) -> (Weather, f32) {
     let block = (hour / 3.0).floor() as i64;
     let r = hash01(block ^ (seed as i64), 0x57EA);
     let t = clock::time_of_day(hour);
+    let living = crate::living::get();
+    // Snow falls in about half the blocks of a day with snow, and only below freezing.
+    let snow_p = living.snow_share(hour) * 0.5;
+    let freezing = living.outdoor_c(seed, hour) < 0.5;
     if r < 0.06 && !(10.0..20.0).contains(&t) {
         (Weather::RiverFog, 0.92)
-    } else if r < 0.18 {
+    } else if freezing && r < 0.06 + snow_p {
         (Weather::Flurries, 0.25 + 0.1 * hash01(block ^ (seed as i64), 0x57EB))
     } else {
         (Weather::Clear, 0.0)
@@ -1073,6 +1159,9 @@ pub struct WorldSim {
     /// How many 07:00s the run has passed.
     pub mornings: u32,
     pub sleeping: bool,
+    /// A loud noise you made (furniture broken up): how far it carries, for how long.
+    pub noise_m: f32,
+    pub noise_t: f32,
     /// Hours of the clock slept since lying down.
     pub slept_hours: f32,
     pub woke: Option<WakeReason>,
@@ -1272,6 +1361,8 @@ impl WorldSim {
             dawn_survived: false,
             mornings: 0,
             sleeping: false,
+            noise_m: 0.0,
+            noise_t: 0.0,
             slept_hours: 0.0,
             woke: None,
             dead: false,
@@ -1479,6 +1570,35 @@ impl WorldSim {
         out
     }
 
+    /// The temperature in the street now (°C).
+    pub fn outdoor_c(&self) -> f32 {
+        crate::living::get().outdoor_c(self.seed, self.hour)
+    }
+
+    /// Stove time one pot of melted snow costs (play seconds).
+    fn melt_fuel_s(&self) -> f32 {
+        crate::living::get().num("fuel", "melt_fuel_h") * 3600.0 / TIME_SCALE
+    }
+
+    /// Each morning other people have taken some of what was left in the shops.
+    fn others_take_from_shops(&mut self) {
+        let share = crate::living::get().shops_taken(self.mornings);
+        let day = self.mornings as i64;
+        let seed = self.seed as i64;
+        for (ii, intr) in self.interiors.iter_mut().enumerate() {
+            if matches!(intr.kind, InteriorKind::PlayerHome | InteriorKind::NeighbourHome | InteriorKind::BasementShelter) {
+                continue;
+            }
+            let ground = intr.loots.iter_mut();
+            let upper = intr.floors.iter_mut().flat_map(|f| f.loots.iter_mut());
+            for l in ground.chain(upper) {
+                if !l.searched && hash01(seed ^ (ii as i64 * 7919 + l.id as i64 * 104_729 + day * 15_485_863), 0x5E0F) < share {
+                    l.searched = true;
+                }
+            }
+        }
+    }
+
     /// Metres to the nearest Russian soldier or vehicle that is still alive.
     pub fn nearest_enemy_m(&self) -> f32 {
         let men = self.squads.iter().flat_map(|sq| sq.men.iter()).filter(|m| m.hp > 0.0).map(|m| m.at.dist(self.player_at));
@@ -1563,6 +1683,7 @@ impl WorldSim {
         self.player_shoot_cd = (self.player_shoot_cd - dt).max(0.0);
         self.player_vault_t = (self.player_vault_t - dt).max(0.0);
         self.radio_cd = (self.radio_cd - dt).max(0.0);
+        self.noise_t = (self.noise_t - dt).max(0.0);
         self.gunfire_reveal_timer = (self.gunfire_reveal_timer - dt).max(0.0);
         if self.inv.unlocked_primaries == 0 && self.inv.has_rifle {
             self.inv.unlock_primary(PrimaryWeapon::Ak74m);
@@ -1639,6 +1760,7 @@ impl WorldSim {
                 let (m, d) = clock::date_of(self.hour);
                 self.say(&format!("{m}月{d}日，天亮了。第 {mornings} 个早晨。"), &format!("Morning {mornings}."));
             }
+            self.others_take_from_shops();
         }
 
         // 2. Player movement, visited street cells & snow footprints.
@@ -1702,17 +1824,15 @@ impl WorldSim {
         }
         self.tracks.retain(|t| t.age < 180.0);
 
+        self.body.indoors = indoors;
+        self.body.env_c = match self.active_interior {
+            Some(i) => self.interiors[i].room_temp_c,
+            None => self.outdoor_c(),
+        };
         if let Some((czh, cen)) = self.body.tick(dt, self.hour, self.player_gait, sheltered, on_ice, near_barrel) {
             self.kill_player(czh, cen);
             out.sms_arrived = std::mem::take(&mut self.pending_sms_chime);
             return out;
-        }
-        if let Some(i_idx) = self.active_interior {
-            let rtemp = self.interiors[i_idx].room_temp_c;
-            // After heating cutoff, broken-window freezing rooms chill harder than an intact unheated hall.
-            if rtemp < -2.0 && !near_barrel {
-                self.body.temp = (self.body.temp - 0.0022 * (-rtemp / 18.0).clamp(0.1, 1.4) * (1.0 - self.body.coat_bonus) * dt).max(DEATH_TEMP - 0.1);
-            }
         }
         if self.body.temp < 34.2 && !self.warned_cold {
             self.warned_cold = true;
@@ -1953,6 +2073,19 @@ impl WorldSim {
 
     fn step_interiors_state(&mut self, input: &SimInput, dt: f32, out: &mut TickOutput) {
         let heat_on = self.hour < HEAT_OFF_HOUR;
+        let t_out = self.outdoor_c();
+        let living = crate::living::get();
+        let game_h = dt * TIME_SCALE / 3600.0;
+        let central_c = living.num("building", "central_heat_c");
+        let cool_tau = living.num("building", "cool_tau_h");
+        let above = living.num("building", "above_outdoor_c");
+        let broken_mul = living.num("building", "broken_window_mul");
+        let open_mul = living.num("building", "open_door_mul");
+        let basement_c = living.num("building", "basement_c");
+        let basement_tau = living.num("building", "basement_tau_h");
+        let stove_c = living.num("building", "stove_room_c");
+        let stove_rise = living.num("building", "stove_basement_rise_c");
+        let stove_tau = living.num("building", "stove_tau_h");
         let pat = self.player_at;
         let wish_moving = input.wish_move.len() > 0.05;
         let on_ground = self.player_floor == 0;
@@ -2019,22 +2152,22 @@ impl WorldSim {
                 + intr.floors.iter().filter(|f| f.front_wall_breached).count() as f32 * 1.4
                 + if intr.any_structural_damage() { 0.8 } else { 0.0 };
             let open_n = intr.open_doors_count() as f32;
-            let target_t = if intr.kind == InteriorKind::BasementShelter {
-                4.5 + if intr.stove_fuel_s > 0.0 { 11.5 } else { 0.0 }
-            } else if intr.stove_fuel_s > 0.0 {
-                19.0 - broken_n * 5.0
+            // A room heads for its balance temperature: a few degrees above the
+            // street for a closed flat among other flats, the ground's for a basement,
+            // the stove's or the radiators' while they run. Cooling takes days in a
+            // whole building; broken windows and open doors make it quicker and colder.
+            let burning = intr.stove_fuel_s > 0.0;
+            let leak = 1.0 + broken_n * broken_mul + open_n * open_mul;
+            let (balance, tau_h) = if intr.kind == InteriorKind::BasementShelter {
+                if burning { (basement_c + stove_rise, stove_tau) } else { (basement_c, basement_tau / leak) }
+            } else if burning {
+                (stove_c - broken_n * 5.0, stove_tau)
             } else if heat_on && broken_n < 0.5 {
-                18.0
+                (central_c, stove_tau)
             } else {
-                -18.0
+                (t_out + above / leak, cool_tau / leak)
             };
-            let rate = if intr.room_temp_c < target_t {
-                if intr.stove_fuel_s > 0.0 { 0.065 } else if heat_on { 0.040 } else { 0.012 }
-            } else {
-                let base = if intr.kind == InteriorKind::BasementShelter { 0.0004 } else { 0.0024 };
-                base + broken_n * 0.045 + open_n * 0.025
-            };
-            intr.room_temp_c += (target_t - intr.room_temp_c) * (rate * dt).min(1.0);
+            intr.room_temp_c += (balance - intr.room_temp_c) * (game_h / tau_h.max(0.05)).min(1.0);
         }
 
         self.active_interior = active_idx;
@@ -2122,19 +2255,32 @@ impl WorldSim {
                 let d_back = intr.back_door.as_ref().map(|b| b.at.dist(pat)).unwrap_or(f32::MAX);
 
                 if d_stove <= 2.4 {
+                    let living = crate::living::get();
+                    let play_s_per_h = 3600.0 / TIME_SCALE;
                     if self.inv.coal > 0 {
                         self.inv.coal -= 1;
-                        intr.stove_fuel_s += 105.0;
-                        self.say("点燃室内煤炉！暖气顺着屋子散开，可撑过凌晨严寒。", "Coal stove lit! Room warming up.");
+                        intr.stove_fuel_s += living.num("fuel", "coal_unit_burn_h") * play_s_per_h;
+                        self.say("添了一块煤，炉子旺起来了。", "Coal on the stove. It catches.");
+                    } else if self.inv.wood > 0 {
+                        self.inv.wood -= 1;
+                        intr.stove_fuel_s += living.num("fuel", "wood_unit_burn_h") * play_s_per_h;
+                        self.say("把劈开的木头塞进炉膛。", "Wood into the stove.");
+                    } else if intr.furniture > 0 {
+                        intr.furniture -= 1;
+                        self.inv.wood += living.num("fuel", "wood_per_piece") as u32;
+                        self.noise_m = living.num("fuel", "break_noise_m");
+                        self.noise_t = 3.0;
+                        out.door_breach_thud = true;
+                        self.say("把一件家具砸开当柴烧（动静不小）。再按 T 添进炉子。", "You smash a piece of furniture for firewood. Loud. T again to feed the stove.");
                     } else {
-                        self.say("没有煤炭生炉！去五金店或街边废墟找煤（或搜家中储物柜）。", "No coal for the stove.");
+                        self.say("没有煤，也没有能烧的家具了。去别的屋子找。", "No coal and nothing left here to burn.");
                     }
                 } else if let Some(w) = win_near {
                     if self.inv.scrap > 0 {
                         self.inv.scrap -= 1;
                         w.boarded = true;
                         out.door_action = true;
-                        self.say("用木板废铁封死破窗！挡住了-24°C穿堂冷风。", "Boarded up the shattered window!");
+                        self.say("用木板废铁封死破窗，挡住了穿堂冷风。", "Boarded up the shattered window!");
                     } else {
                         self.say("封窗需要废铁 1 份。", "Need 1 scrap to board window.");
                     }
@@ -2267,7 +2413,11 @@ impl WorldSim {
     }
 
     fn handle_items(&mut self, input: &SimInput) {
-        if input.use_bandage && (self.body.bleeding || self.body.hp < 100.0) {
+        if input.use_bandage && !self.body.bleeding && self.body.illness > 10.0 && self.inv.medicine > 0 {
+            self.inv.medicine -= 1;
+            self.body.illness = (self.body.illness - crate::living::get().num("body", "medicine_cures")).max(0.0);
+            self.say("吃了药。烧退了一些。", "You take the medicine. The fever eases a little.");
+        } else if input.use_bandage && (self.body.bleeding || self.body.hp < 100.0) {
             if self.inv.bandage > 0 {
                 self.inv.bandage -= 1;
                 self.body.bleeding = false;
@@ -2279,12 +2429,16 @@ impl WorldSim {
         }
         if input.use_food && self.inv.food > 0 {
             self.inv.food -= 1;
-            self.body.hunger = (self.body.hunger + 45.0).min(100.0);
+            let living = crate::living::get();
+            let gain = living.num("body", "food_item_kcal") * 100.0 / living.num("body", "food_reserve_kcal");
+            self.body.hunger = (self.body.hunger + gain).min(100.0);
             self.say("啃了几口冻干粮，肚子里有了热气。", "You eat cold rations standing up.");
         }
         if input.use_water && self.inv.water > 0 {
             self.inv.water -= 1;
-            self.body.thirst = (self.body.thirst + 50.0).min(100.0);
+            let living = crate::living::get();
+            let gain = living.num("body", "water_item_l") * 100.0 / living.num("body", "water_reserve_l");
+            self.body.thirst = (self.body.thirst + gain).min(100.0);
             self.say("水冰得牙疼，总算缓过来了。", "Ice-cold water.");
         }
         if input.use_warmer && self.inv.warmer > 0 {
@@ -2646,6 +2800,7 @@ impl WorldSim {
                 self.inv.scrap += rolled.scrap + u32::from(back);
                 self.inv.coal += rolled.coal + u32::from(back && matches!(self.interiors[i_idx].kind, InteriorKind::Hardware | InteriorKind::BasementShelter));
                 self.inv.molotov += rolled.molotov;
+                self.inv.medicine += rolled.medicine;
                 if matches!(self.interiors[i_idx].kind, InteriorKind::BasementShelter) && back && lid % 2 == 0 {
                     self.inv.rpg += 1;
                     self.inv.hj12 += 1;
@@ -2757,11 +2912,13 @@ impl WorldSim {
 
         if pf == 0
             && self.interiors[i_idx].stove_at.is_some_and(|p| p.dist(pat) <= 2.4)
-            && self.interiors[i_idx].stove_fuel_s >= 15.0
+            && self.interiors[i_idx].stove_fuel_s >= self.melt_fuel_s()
             && input.interact_just_pressed
         {
-            self.interiors[i_idx].stove_fuel_s = (self.interiors[i_idx].stove_fuel_s - 15.0).max(0.0);
-            self.body.thirst = (self.body.thirst + 40.0).min(100.0);
+            let living = crate::living::get();
+            self.interiors[i_idx].stove_fuel_s = (self.interiors[i_idx].stove_fuel_s - self.melt_fuel_s()).max(0.0);
+            let per_l = 100.0 / living.num("body", "water_reserve_l");
+            self.body.thirst = (self.body.thirst + living.num("fuel", "melt_litres") * per_l).min(100.0);
             self.say("在煤炉上融化清洁积雪煮成热水，喝下去润喉解渴！", "Melted snow over coal stove for drinking water!");
             return true;
         }
@@ -2778,10 +2935,11 @@ impl WorldSim {
             return true;
         }
         if intr.stove_at.is_some_and(|p| p.dist(pat) <= 2.4) {
-            if intr.stove_fuel_s >= 15.0 {
-                self.prompt = format!("煤炉燃烧中（余火 {:.0}s · 按 E 化雪喝水 · 按 T 添 1 煤）", intr.stove_fuel_s);
+            let hours_left = intr.stove_fuel_s * TIME_SCALE / 3600.0;
+            if intr.stove_fuel_s >= self.melt_fuel_s() {
+                self.prompt = format!("炉火还能烧 {hours_left:.1} 小时 · 按 E 化雪喝水 · 按 T 添煤或柴（屋里还有 {} 件家具）", intr.furniture);
             } else if intr.stove_fuel_s > 0.0 {
-                self.prompt = format!("煤炉余烬中（{:.0}s · 按 T 添 1 煤）", intr.stove_fuel_s);
+                self.prompt = format!("炉火快灭了（{hours_left:.1} 小时）· 按 T 添煤或柴（屋里还有 {} 件家具）", intr.furniture);
             } else {
                 self.prompt = "铁皮煤炉：按 T 消耗 1 煤点燃取暖".into();
             }
@@ -4267,7 +4425,10 @@ impl WorldSim {
         let sight_angle = forces.num_or("infantry_group", "view_half_angle_deg", 100.0);
         let walk_spd = forces.num_or("infantry_group", "walk_mps", 1.3);
         let rush_spd = forces.num_or("infantry_group", "rush_mps", 3.1);
-        let hearing_r = forces.hearing(self.player_gait);
+        let mut hearing_r = forces.hearing(self.player_gait);
+        if self.noise_t > 0.0 {
+            hearing_r = hearing_r.max(self.noise_m);
+        }
         let challenge_s = forces.num_or("infantry_group", "challenge_s", 1.6);
         let lose_s = forces.num_or("infantry_group", "lose_sight_s", 4.0);
         let search_s = forces.num_or("infantry_group", "search_s", 45.0);
@@ -6036,7 +6197,10 @@ mod tests {
         assert!(!sim.body.bleeding);
         assert!(sim.body.hp > 65.0);
         assert!(sim.body.temp > 35.5);
-        assert!(sim.body.hunger > 75.0);
+        // One ration is a day's worth of the reserve's calories, not a full belly.
+        let l = crate::living::get();
+        let ration = l.num("body", "food_item_kcal") * 100.0 / l.num("body", "food_reserve_kcal");
+        assert!(sim.body.hunger > 40.0 + ration * 0.9, "{}", sim.body.hunger);
     }
 
     #[test]
@@ -8188,5 +8352,148 @@ mod tests {
         assert!(!run(3.0), "no gun on a soldier 3 m from you");
         let shelled_far = run(60.0);
         assert!(shelled_far, "with you 60 m away it fires");
+    }
+
+    /// Runs the rooms alone for `hours` of the clock, as the world would.
+    fn run_rooms(sim: &mut WorldSim, hours: f32) {
+        let dt = 1.0;
+        let steps = (hours * 3600.0 / TIME_SCALE / dt) as usize;
+        let mut out = TickOutput::default();
+        for _ in 0..steps {
+            sim.hour += dt * TIME_SCALE / 3600.0;
+            sim.step_interiors_state(&SimInput::default(), dt, &mut out);
+        }
+    }
+
+    #[test]
+    fn a_flat_cools_over_days_not_hours() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let mut sim = WorldSim::new(&city);
+        sim.player_at = P2::new(-900.0, -900.0);
+        let home = sim.interiors.iter().position(|i| i.kind == InteriorKind::PlayerHome).unwrap();
+        let cellar = sim.interiors.iter().position(|i| i.kind == InteriorKind::BasementShelter).unwrap();
+        sim.hour = HEAT_OFF_HOUR;
+        sim.interiors[home].room_temp_c = 18.0;
+        run_rooms(&mut sim, 10.0);
+        let morning = sim.interiors[home].room_temp_c;
+        assert!(morning > 8.0, "a closed flat is still cool, not frozen, the morning after: {morning}");
+        run_rooms(&mut sim, 62.0);
+        let third_day = sim.interiors[home].room_temp_c;
+        assert!(third_day < 0.0 && third_day > sim.outdoor_c(), "three days on it is below freezing, still above the street: {third_day}");
+        let b = crate::living::get().num("building", "basement_c");
+        assert!((sim.interiors[cellar].room_temp_c - b).abs() < 2.0, "the basement holds near {b}: {}", sim.interiors[cellar].room_temp_c);
+    }
+
+    #[test]
+    fn the_stove_burns_coal_then_wood_then_the_furniture() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(22, 0);
+        let home = sim.interiors.iter().position(|i| i.kind == InteriorKind::PlayerHome).unwrap();
+        sim.player_at = sim.interiors[home].stove_at.unwrap();
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+        assert_eq!(sim.active_interior, Some(home));
+        sim.inv.coal = 1;
+        sim.inv.wood = 0;
+        let t = SimInput { fortify_or_stove: true, ..Default::default() };
+        let l = crate::living::get();
+        let per_h = 3600.0 / TIME_SCALE;
+        let f0 = sim.interiors[home].stove_fuel_s;
+        sim.tick(&city, &ground, &forces, &t, 0.05);
+        let f1 = sim.interiors[home].stove_fuel_s;
+        assert!((f1 - f0 - l.num("fuel", "coal_unit_burn_h") * per_h).abs() < 1.0, "a coal: {f0} -> {f1}");
+        let pieces = sim.interiors[home].furniture;
+        assert!(pieces > 0);
+        sim.tick(&city, &ground, &forces, &t, 0.05);
+        assert_eq!(sim.interiors[home].furniture, pieces - 1, "no coal: break up a piece");
+        assert_eq!(sim.inv.wood, l.num("fuel", "wood_per_piece") as u32);
+        assert!(sim.noise_t > 0.0 && sim.noise_m > 10.0, "and it is heard");
+        let f2 = sim.interiors[home].stove_fuel_s;
+        sim.tick(&city, &ground, &forces, &t, 0.05);
+        assert!(sim.interiors[home].stove_fuel_s > f2 + l.num("fuel", "wood_unit_burn_h") * per_h * 0.9, "then the wood goes in");
+    }
+
+    fn body_for_hours(body: &mut Body, hours: f32, env_c: f32) -> Option<&'static str> {
+        body.env_c = env_c;
+        body.indoors = true;
+        let steps = (hours * 3600.0 / TIME_SCALE) as usize;
+        for _ in 0..steps {
+            if let Some((_, en)) = body.tick(1.0, 40.0, Gait::Still, true, false, false) {
+                return Some(en);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn water_and_food_last_days_not_hours() {
+        let mut dry = Body::default();
+        assert!(body_for_hours(&mut dry, 96.0, 14.0).is_none(), "four days without water: alive");
+        assert!(dry.thirst > 0.0 && dry.thirst < 30.0, "impaired, near collapse (day 5): {}", dry.thirst);
+        assert!(body_for_hours(&mut dry, 72.0, 14.0).is_none(), "collapsed but alive on day 7: hp {}", dry.hp);
+        let died = body_for_hours(&mut dry, 48.0, 14.0);
+        assert_eq!(died, Some("You died of thirst."), "about eight days without water is the end");
+
+        let mut warm = Body::default();
+        let mut cold = Body::default();
+        body_for_hours(&mut warm, 24.0, 18.0);
+        body_for_hours(&mut cold, 24.0, 0.0);
+        assert!(cold.hunger < warm.hunger, "a cold room burns more food: {} vs {}", cold.hunger, warm.hunger);
+        assert!(warm.hunger > 80.0, "a day without food is hunger, not collapse: {}", warm.hunger);
+    }
+
+    #[test]
+    fn cold_rooms_make_you_ill_and_medicine_helps() {
+        let mut body = Body::default();
+        body.thirst = 100.0;
+        body.hunger = 100.0;
+        let mut ill_after = 0.0;
+        for _ in 0..7 {
+            body.thirst = 100.0;
+            body.hunger = 100.0;
+            body_for_hours(&mut body, 24.0, 4.0);
+            ill_after = body.illness;
+        }
+        assert!(ill_after > 25.0, "a week in a 4 °C room: {ill_after}");
+        let mut warm = Body::default();
+        warm.illness = 30.0;
+        body_for_hours(&mut warm, 24.0, 20.0);
+        assert!(warm.illness < 30.0, "a warm room lets it go: {}", warm.illness);
+
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.player_at = P2::new(-900.0, -900.0);
+        sim.body.illness = 50.0;
+        sim.inv.medicine = 1;
+        sim.tick(&city, &ground, &forces, &SimInput { use_bandage: true, ..Default::default() }, 0.05);
+        assert!(sim.body.illness < 20.0 && sim.inv.medicine == 0, "{}", sim.body.illness);
+    }
+
+    #[test]
+    fn others_empty_the_shops_but_not_your_home() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let mut sim = WorldSim::new(&city);
+        let left = |sim: &WorldSim, homes: bool| -> usize {
+            sim.interiors
+                .iter()
+                .filter(|i| homes == matches!(i.kind, InteriorKind::PlayerHome | InteriorKind::NeighbourHome | InteriorKind::BasementShelter))
+                .flat_map(|i| i.loots.iter())
+                .filter(|l| !l.searched)
+                .count()
+        };
+        let shops0 = left(&sim, false);
+        let homes0 = left(&sim, true);
+        for m in 1..=5 {
+            sim.mornings = m;
+            sim.others_take_from_shops();
+        }
+        let shops5 = left(&sim, false);
+        assert!(shops0 > 10 && shops5 * 2 < shops0, "five mornings take more than half: {shops0} -> {shops5}");
+        assert!(shops5 > 0, "but not everything");
+        assert_eq!(left(&sim, true), homes0);
     }
 }

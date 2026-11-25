@@ -11,6 +11,7 @@ pub mod figure;
 pub mod forces;
 pub mod geom;
 pub mod interior;
+pub mod living;
 pub mod look;
 pub mod scene;
 pub mod soup;
