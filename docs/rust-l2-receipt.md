@@ -70,6 +70,7 @@
     - cold rooms make you ill and medicine helps;
     - others empty the shops but not your home.
   - Two older tests changed with the rules: a ration now feeds by calories, and the thirst timeline is the new one.
+- Two mistakes the night bot's probe found (below), fixed with tests in the same files: a room of 10 °C or more counted as a fire for illness too, so nobody fell ill in a 12–16 °C room; and the shops on the street, searched under their signs, never emptied (0 of 65 after three mornings).
 - `cargo build -p northeast --release` builds. `--interior-shots` pictures are in `docs/shots/rust-l2/`:
   - the stove's new prompt;
   - noon on 18 January at −18 °C from the climate;
@@ -78,7 +79,7 @@
 
 | shelter | lasted | room after the first night | body low | illness high | fuel used | left at the end |
 |---|---|---|---|---|---|---|
-| basement | all 14 days | 12–17 °C (stove) | 36.8 °C | 0 | all the coal and wood; furniture down to 5 | no food or water; melting snow |
+| basement | all 14 days | 12–17 °C (stove) | 36.8 °C | 15 | all the coal and wood; furniture down to 5 | no food or water; melting snow |
 | home | all 14 days | −12 to +9 °C (windows broken in the night) | 35.2–35.5 °C | 65–67 | about 40 pieces of furniture | no food or water; melting snow; 45 pieces of furniture |
 
 Before this round the same plan died on the second day, of thirst. Now what wears it down is slower:

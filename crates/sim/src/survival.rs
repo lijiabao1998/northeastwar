@@ -383,7 +383,11 @@ impl Body {
         }
         self.chilled_h = (self.chilled_h - hours).max(0.0);
         let below = living.num("body", "illness_below_c") - self.env_c;
-        let mut grow = if below > 0.0 && !near_fire_barrel && !(self.indoors && self.heated) {
+        let by_street_fire = near_fire_barrel && !self.indoors;
+        let mut grow = if by_street_fire {
+            // Warm on one side, the street's air on the other: no better, no worse.
+            0.0
+        } else if below > 0.0 {
             let risk = living.num("body", "illness_risk_per_c").powf(below) - 1.0;
             let chill = if self.chilled_h > 0.0 { living.num("body", "chill_risk_mul") } else { 1.0 };
             living.num("body", "illness_per_h") * risk * chill
@@ -1595,6 +1599,11 @@ impl WorldSim {
                 if !l.searched && hash01(seed ^ (ii as i64 * 7919 + l.id as i64 * 104_729 + day * 15_485_863), 0x5E0F) < share {
                     l.searched = true;
                 }
+            }
+        }
+        for (di, door) in self.doors.iter_mut().enumerate() {
+            if !door.searched && hash01(seed ^ (di as i64 * 6007 + day * 15_485_863), 0x5E10) < share {
+                door.searched = true;
             }
         }
     }
@@ -8462,6 +8471,17 @@ mod tests {
         body_for_hours(&mut warm, 24.0, 20.0);
         assert!(warm.illness < 30.0, "a warm room lets it go: {}", warm.illness);
 
+        // 14 °C warms the body (the world passes it as a fire) but is below 18 °C.
+        let mut cool = Body::default();
+        cool.env_c = 14.0;
+        cool.indoors = true;
+        for _ in 0..(24 * 7 * 240) {
+            cool.thirst = 100.0;
+            cool.hunger = 100.0;
+            cool.tick(1.0, 40.0, Gait::Still, true, false, true);
+        }
+        assert!(cool.illness > 5.0, "a week at 14 °C wears you down: {}", cool.illness);
+
         let (city, _) = crate::load_heihe().unwrap();
         let forces = load_forces();
         let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
@@ -8487,11 +8507,14 @@ mod tests {
         };
         let shops0 = left(&sim, false);
         let homes0 = left(&sim, true);
+        let doors0 = sim.doors.iter().filter(|d| !d.searched).count();
         for m in 1..=5 {
             sim.mornings = m;
             sim.others_take_from_shops();
         }
         let shops5 = left(&sim, false);
+        let doors5 = sim.doors.iter().filter(|d| !d.searched).count();
+        assert!(doors0 > 10 && doors5 * 2 < doors0, "the shops on the street empty too: {doors0} -> {doors5}");
         assert!(shops0 > 10 && shops5 * 2 < shops0, "five mornings take more than half: {shops0} -> {shops5}");
         assert!(shops5 > 0, "but not everything");
         assert_eq!(left(&sim, true), homes0);
