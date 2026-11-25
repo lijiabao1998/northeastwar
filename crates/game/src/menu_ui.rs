@@ -843,7 +843,7 @@ fn drive_menus(
                         if let Some(m) = map.as_deref_mut() {
                             m.open = false;
                         }
-                    } else if p.sim.dead || p.sim.dawn_survived {
+                    } else if p.sim.dead {
                         queue.0.push(MenuAction::ReturnToStart);
                     } else {
                         *screen = MenuScreen::Paused;
@@ -953,11 +953,7 @@ fn drive_menus(
         }
     }
     if *screen == MenuScreen::Paused {
-        let total_h = clock.hour.max(0.0) as u32;
-        let day = 17 + total_h / 24;
-        let h = total_h % 24;
-        let m = ((clock.hour.max(0.0) - total_h as f32) * 60.0) as u32;
-        let clk = format!("2031年1月{day}日 {h:02}:{m:02}  ·  黑河");
+        let clk = format!("2031年{}  ·  黑河", sim::clock::label(clock.hour));
         for mut t in &mut labels.2 {
             if t.0 != clk {
                 t.0 = clk.clone();

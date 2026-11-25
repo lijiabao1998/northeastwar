@@ -6,6 +6,7 @@
 
 pub use crate::arsenal::{AtWeapon, Faction, PrimaryWeapon, VehicleKind};
 use crate::city::City;
+use crate::clock;
 use crate::figure::AnimState;
 use crate::forces::{exposure, Forces, Gait, Light, TIME_SCALE};
 use crate::geom::{hash01, nearest_on_segment, P2};
@@ -19,6 +20,40 @@ pub const CROSSING_HOUR: f32 = 17.0 + 36.0 / 60.0;
 pub const BLACKOUT_HOUR: f32 = 19.5;
 pub const HEAT_OFF_HOUR: f32 = 21.0;
 pub const DAWN_HOUR: f32 = 31.0;
+/// Tiredness at 16:00 on the first day: up since about 07:00 (nine hours at
+/// FATIGUE_AWAKE_PER_H).
+pub const START_FATIGUE: f32 = 40.0;
+/// Tiredness gained per game hour awake: 0 to 100 in a little over 22 hours. Play.
+pub const FATIGUE_AWAKE_PER_H: f32 = 4.5;
+/// Tiredness lost per game hour asleep: 100 to 0 in about seven hours. Play.
+pub const FATIGUE_SLEEP_PER_H: f32 = 14.0;
+/// Hunger and thirst asleep, as a share of the rate sitting still awake. Play,
+/// until L2 counts water in litres and food in calories.
+pub const SLEEP_NEEDS: f32 = 0.35;
+/// Too wide awake to sleep below this.
+pub const SLEEP_MIN_FATIGUE: f32 = 20.0;
+/// No soldier may be nearer than this when you lie down, and one this near wakes
+/// you (boots on the stairs, voices under the window).
+pub const SLEEP_QUIET_M: f32 = 30.0;
+pub const SLEEP_WAKE_M: f32 = 18.0;
+/// While asleep the client runs the world this many play seconds per real second:
+/// an hour of the clock in two seconds. A step costs about 0.7 ms (days_bot,
+/// November 2026), so this is eight steps a frame at 60 frames a second.
+pub const SLEEP_PLAY_SPEED: f32 = 120.0;
+
+/// The seed a run gets unless it is given one (WorldSim::with_seed).
+pub const DEFAULT_SEED: u64 = 0x1701_2031;
+
+/// A roll in [0, 1) from the run's generator (splitmix64), mixed with `salt` so two
+/// rolls taken for different purposes at the same moment differ.
+fn rand01(state: &mut u64, salt: u32) -> f32 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state ^ (salt as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    (z >> 40) as f32 / (1u64 << 24) as f32
+}
 
 pub const START_TEMP: f32 = 36.8;
 pub const AMBIENT_C: f32 = -24.0;
@@ -163,6 +198,9 @@ pub struct Body {
     pub on_ice: bool,
     pub heated: bool,
     pub move_scale: f32,
+    /// 0 rested, 100 unable to keep your eyes open.
+    pub fatigue: f32,
+    pub asleep: bool,
 }
 
 impl Default for Body {
@@ -178,6 +216,8 @@ impl Default for Body {
             on_ice: false,
             heated: true,
             move_scale: 1.0,
+            fatigue: START_FATIGUE,
+            asleep: false,
         }
     }
 }
@@ -210,8 +250,12 @@ impl Body {
         if gait == Gait::Run {
             exposed *= 1.25;
         }
-        if hour > hm(19, 0) {
+        if clock::night_cold(hour) {
             exposed *= 1.3;
+        }
+        if self.asleep {
+            // Lying under whatever covers you lose heat more slowly than standing. Play.
+            exposed *= 0.6;
         }
         if self.hunger < 25.0 {
             exposed *= 1.25;
@@ -239,6 +283,9 @@ impl Body {
         if self.hp < 40.0 {
             scale *= 0.85;
         }
+        if self.fatigue >= 95.0 {
+            scale *= 0.92;
+        }
         self.move_scale = scale;
 
         if self.temp <= DEATH_TEMP {
@@ -252,8 +299,14 @@ impl Body {
             Gait::Run => 1.20,
             _ => 1.0,
         };
-        self.hunger = (self.hunger - hours * 7.5).max(0.0);
-        self.thirst = (self.thirst - hours * 10.5 * thirst_mul).max(0.0);
+        let rest = if self.asleep { SLEEP_NEEDS } else { 1.0 };
+        self.hunger = (self.hunger - hours * 7.5 * rest).max(0.0);
+        self.thirst = (self.thirst - hours * 10.5 * thirst_mul * rest).max(0.0);
+        self.fatigue = if self.asleep {
+            (self.fatigue - hours * FATIGUE_SLEEP_PER_H).max(0.0)
+        } else {
+            (self.fatigue + hours * FATIGUE_AWAKE_PER_H).min(100.0)
+        };
 
         if self.thirst <= 0.0 {
             self.hp = (self.hp - 1.2 * dt).max(0.0);
@@ -493,10 +546,11 @@ pub fn in_arc(facing_yaw: f32, from: P2, to: P2, half_angle_deg: f32) -> bool {
 
 /// Light condition around point `p` for patrol and drone vision.
 pub fn light_at(city: &City, hour: f32, blackout: bool, revealed: bool, p: P2, fire_barrels: &[P2]) -> Light {
-    if hour < hm(16, 30) {
+    let (sun, _) = clock::sun_at(hour);
+    if sun > clock::DAY_SUN_DEG {
         return Light::Day;
     }
-    if hour < hm(17, 15) {
+    if sun > clock::NIGHT_SUN_DEG {
         return Light::Dusk;
     }
     if revealed || fire_barrels.iter().any(|b| p.dist(*b) <= 9.0) {
@@ -538,6 +592,55 @@ pub fn scheduled_weather(hour: f32) -> (Weather, f32) {
         (Weather::RiverFog, 0.92)
     } else {
         (Weather::Flurries, 0.25)
+    }
+}
+
+/// The weather at `hour`. The first night keeps its script; after it, each three
+/// hours rolls its own from the run's seed (not from its random stream, so the
+/// weather does not shift when something else rolls). Heihe's winter is dry and
+/// clear: snow about one block in eight, river fog only at night and in the
+/// morning. Play numbers until L2 brings the climate table.
+pub fn weather_at(seed: u64, hour: f32) -> (Weather, f32) {
+    if hour < DAWN_HOUR {
+        return scheduled_weather(hour);
+    }
+    let block = (hour / 3.0).floor() as i64;
+    let r = hash01(block ^ (seed as i64), 0x57EA);
+    let t = clock::time_of_day(hour);
+    if r < 0.06 && !(10.0..20.0).contains(&t) {
+        (Weather::RiverFog, 0.92)
+    } else if r < 0.18 {
+        (Weather::Flurries, 0.25 + 0.1 * hash01(block ^ (seed as i64), 0x57EB))
+    } else {
+        (Weather::Clear, 0.0)
+    }
+}
+
+/// Why you woke up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WakeReason {
+    Rested,
+    ByHand,
+    Noise,
+    Enemy,
+    Cold,
+    Thirst,
+    Hunger,
+    Hurt,
+}
+
+impl WakeReason {
+    pub fn text(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Rested => ("睡够了，醒了。", "You wake up rested."),
+            Self::ByHand => ("你起来了。", "You get up."),
+            Self::Noise => ("一声响把你惊醒了。", "A noise wakes you."),
+            Self::Enemy => ("有脚步声，很近。你醒了。", "Footsteps, close. You are awake."),
+            Self::Cold => ("冻醒了。屋里太冷。", "The cold wakes you. The room is too cold."),
+            Self::Thirst => ("渴醒了。", "Thirst wakes you."),
+            Self::Hunger => ("饿醒了。", "Hunger wakes you."),
+            Self::Hurt => ("疼醒了。", "Pain wakes you."),
+        }
     }
 }
 
@@ -940,6 +1043,8 @@ pub struct SimInput {
     pub fortify_or_stove: bool,
     pub floor_delta: i8,
     pub clock_running: bool,
+    /// Lie down to sleep, or get up.
+    pub toggle_sleep: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -953,7 +1058,14 @@ pub struct WorldSim {
     pub weather_override: Option<Weather>,
     pub resistance_active: bool,
     pub neighbours_rescued: bool,
+    /// True once the first night is over (07:00 on 18 January). The run goes on.
     pub dawn_survived: bool,
+    /// How many 07:00s the run has passed.
+    pub mornings: u32,
+    pub sleeping: bool,
+    /// Hours of the clock slept since lying down.
+    pub slept_hours: f32,
+    pub woke: Option<WakeReason>,
     pub dead: bool,
     pub death_zh: &'static str,
     pub death_en: &'static str,
@@ -1023,6 +1135,10 @@ pub struct WorldSim {
 
     pub sim_time: f32,
     next_id: u32,
+    /// The run's seed, and the state of its random generator (rand01). Rolls used to
+    /// come from the entity counter, so making one more entity changed every later roll.
+    pub seed: u64,
+    rng: u64,
     spawn_wait: f32,
     fpv_cd: f32,
     events_fired: u32,
@@ -1142,6 +1258,10 @@ impl WorldSim {
             resistance_active: false,
             neighbours_rescued: false,
             dawn_survived: false,
+            mornings: 0,
+            sleeping: false,
+            slept_hours: 0.0,
+            woke: None,
             dead: false,
             death_zh: "",
             death_en: "",
@@ -1211,6 +1331,8 @@ impl WorldSim {
 
             sim_time: 0.0,
             next_id: 100,
+            seed: DEFAULT_SEED,
+            rng: DEFAULT_SEED,
             spawn_wait: 6.0,
             fpv_cd: 90.0,
             events_fired: 0,
@@ -1230,8 +1352,15 @@ impl WorldSim {
     }
 
     fn next_rand(&mut self, salt: u32) -> f32 {
-        self.next_id = self.next_id.wrapping_add(1);
-        hash01(self.next_id as i64, salt)
+        rand01(&mut self.rng, salt)
+    }
+
+    /// The same world, with its random generator started from `seed`.
+    pub fn with_seed(city: &City, seed: u64) -> Self {
+        let mut sim = Self::new(city);
+        sim.seed = seed;
+        sim.rng = seed;
+        sim
     }
 
     fn say(&mut self, zh: &str, en: &str) {
@@ -1307,10 +1436,113 @@ impl WorldSim {
         self.player_gait = Gait::Still;
     }
 
+    /// One step of the world. Asleep, you do nothing and the step watches for what
+    /// wakes you; the client runs these steps fast (SLEEP_PLAY_SPEED).
     pub fn tick(&mut self, city: &City, ground: &Ground, forces: &Forces, input: &SimInput, dt: f32) -> TickOutput {
+        if input.toggle_sleep && !self.dead {
+            if self.sleeping {
+                self.wake(WakeReason::ByHand);
+            } else {
+                self.try_sleep();
+            }
+        }
+        if !self.sleeping {
+            return self.tick_world(city, ground, forces, input, dt);
+        }
+        let still = SimInput { clock_running: input.clock_running, ..Default::default() };
+        let hp_before = self.body.hp;
+        let out = self.tick_world(city, ground, forces, &still, dt);
+        if self.dead {
+            self.sleeping = false;
+            self.body.asleep = false;
+        } else if self.sleeping {
+            if input.clock_running {
+                self.slept_hours += dt.clamp(0.0, 0.25) * TIME_SCALE / 3600.0;
+            }
+            if let Some(why) = self.wake_reason(&out, hp_before) {
+                self.wake(why);
+            }
+        }
+        out
+    }
+
+    /// Metres to the nearest Russian soldier or vehicle that is still alive.
+    pub fn nearest_enemy_m(&self) -> f32 {
+        let men = self.squads.iter().flat_map(|sq| sq.men.iter()).filter(|m| m.hp > 0.0).map(|m| m.at.dist(self.player_at));
+        // An engine carries further than boots.
+        let tanks = self
+            .tanks
+            .iter()
+            .filter(|t| t.hp > 0.0 && t.faction == Faction::Russia)
+            .map(|t| t.at.dist(self.player_at) / 2.0);
+        men.chain(tanks).fold(f32::MAX, f32::min)
+    }
+
+    fn try_sleep(&mut self) {
+        if self.active_interior.is_none() {
+            self.say("得先进屋才能睡。", "Get indoors before you sleep.");
+        } else if self.challenged || self.under_fire_for > 0.0 || self.nearest_enemy_m() < SLEEP_QUIET_M {
+            self.say("外面有动静，睡不着。", "There is movement outside. You can't sleep.");
+        } else if self.body.fatigue < SLEEP_MIN_FATIGUE {
+            self.say("还不困。", "You are not tired.");
+        } else {
+            self.sleeping = true;
+            self.body.asleep = true;
+            self.slept_hours = 0.0;
+            self.woke = None;
+            self.flashlight_on = false;
+            self.say("躺下了。有动静就会醒。再按 J 起来。", "You lie down. Any noise will wake you. J to get up.");
+        }
+    }
+
+    fn wake(&mut self, why: WakeReason) {
+        self.sleeping = false;
+        self.body.asleep = false;
+        self.woke = Some(why);
+        let (zh, en) = why.text();
+        let h = self.slept_hours;
+        self.say(&format!("{zh}（睡了 {h:.1} 小时）"), &format!("{en} (slept {h:.1} h)"));
+    }
+
+    fn wake_reason(&self, out: &TickOutput, hp_before: f32) -> Option<WakeReason> {
+        if out.player_hit || self.body.hp < hp_before - 0.001 {
+            return Some(WakeReason::Hurt);
+        }
+        if self.challenged || self.nearest_enemy_m() < SLEEP_WAKE_M {
+            return Some(WakeReason::Enemy);
+        }
+        let near = |p: P2, r: f32| p.dist(self.player_at) < r;
+        if out.door_breach_thud
+            || out.glass_break
+            || out.shout_stoy
+            // A gun fired anywhere in the city sets tank_cannon; only one close by wakes you.
+            || (out.tank_cannon && self.tanks.iter().any(|t| t.hp > 0.0 && near(t.at, 300.0)))
+            || out.slab_collapse
+            || out.mortar_whistle
+            || out.explosions.iter().any(|e| near(e.at, 150.0))
+            || out.tracers.iter().any(|t| near(P2::new(t.from[0], -t.from[2]), 80.0))
+        {
+            return Some(WakeReason::Noise);
+        }
+        if self.body.temp < 35.2 {
+            return Some(WakeReason::Cold);
+        }
+        if self.body.thirst < 8.0 {
+            return Some(WakeReason::Thirst);
+        }
+        if self.body.hunger < 5.0 {
+            return Some(WakeReason::Hunger);
+        }
+        if self.body.fatigue <= 0.0 {
+            return Some(WakeReason::Rested);
+        }
+        None
+    }
+
+    fn tick_world(&mut self, city: &City, ground: &Ground, forces: &Forces, input: &SimInput, dt: f32) -> TickOutput {
         let mut out = TickOutput::default();
-        if self.dead || self.dawn_survived {
-            self.player_anim = if self.dead { AnimState::Dead } else { AnimState::Idle };
+        if self.dead {
+            self.player_anim = AnimState::Dead;
             return out;
         }
         let dt = dt.clamp(0.0, 0.25);
@@ -1359,14 +1591,14 @@ impl WorldSim {
         // 1. Clock, weather & timeline milestones.
         if input.clock_running {
             let step = dt * TIME_SCALE / 3600.0;
-            self.hour = (self.hour + step).min(DAWN_HOUR);
+            self.hour += step;
             self.hours_alive += step;
         }
         let (target_w, target_fog) = match self.weather_override {
             Some(Weather::Clear) => (Weather::Clear, 0.0),
             Some(Weather::Flurries) => (Weather::Flurries, 0.35),
             Some(Weather::RiverFog) => (Weather::RiverFog, 0.92),
-            None => scheduled_weather(self.hour),
+            None => weather_at(self.seed, self.hour),
         };
         self.weather = target_w;
         if self.weather_override.is_some() {
@@ -1381,12 +1613,18 @@ impl WorldSim {
         }
 
         self.step_timeline();
-        if self.hour >= DAWN_HOUR && !self.dawn_survived {
-            self.dawn_survived = true;
-            self.say("天亮了。你还活着。", "Dawn. You are still alive.");
-            self.objective_zh = "07:00 天亮了。你熬过了这一夜。按 Enter 再来一局。".into();
-            out.sms_arrived = std::mem::take(&mut self.pending_sms_chime);
-            return out;
+        let mornings = if self.hour >= DAWN_HOUR { 1 + ((self.hour - DAWN_HOUR) / 24.0).floor() as u32 } else { 0 };
+        if mornings > self.mornings {
+            self.mornings = mornings;
+            if mornings == 1 {
+                self.dawn_survived = true;
+                self.say("天亮了。你还活着。", "Dawn. You are still alive.");
+                self.objective_zh = "熬过了第一夜。天亮了，他们看得更远：白天少上街。\n在屋里找吃的喝的、生炉子；困了就在屋里按 J 睡，有动静会醒。".into();
+                self.objective_en = "You lived through the first night. By day they see further: keep off the streets.\nFind food and water indoors, keep a stove going; sleep indoors with J, noise will wake you.".into();
+            } else {
+                let (m, d) = clock::date_of(self.hour);
+                self.say(&format!("{m}月{d}日，天亮了。第 {mornings} 个早晨。"), &format!("Morning {mornings}."));
+            }
         }
 
         // 2. Player movement, visited street cells & snow footprints.
@@ -4315,8 +4553,7 @@ impl WorldSim {
                                         .then_some((self.player_at, player_floor))
                                 });
                             if let Some((tgt_p, tgt_f)) = throw_tgt {
-                                self.next_id += 1;
-                                if hash01(self.next_id as i64, 59) < 0.25 {
+                                if rand01(&mut self.rng, 59) < 0.25 {
                                     s.grenade_cd = 16.0;
                                     thrown_this_squad = true;
                                     enemy_grenades.push((s.at, tgt_p, tgt_f));
@@ -4343,8 +4580,7 @@ impl WorldSim {
                                 s.in_cover = s.floor == 0 && cur_cov < 0.8;
                                 if s.shot_cd <= 0.0 {
                                     s.shot_cd = 1.2;
-                                    self.next_id += 1;
-                                    let roll = hash01(self.next_id as i64, 41);
+                                    let roll = rand01(&mut self.rng, 41);
                                     let m_cov = Self::static_cover_mul(barricades_ref, craters_ref, wrecks_ref, sandbag_mul, m_at);
                                     let p = forces.hit_chance(s.at.dist(m_at)) * m_cov;
                                     let hit = roll < p;
@@ -4372,8 +4608,7 @@ impl WorldSim {
                             s.in_cover = s.floor == 0 && cur_cov < 0.8;
                             if s.shot_cd <= 0.0 {
                                 let (gap_lo, gap_hi) = forces.range("rifle", "burst_gap_s");
-                                self.next_id += 1;
-                                s.shot_cd = gap_lo + hash01(self.next_id as i64, 7) * (gap_hi - gap_lo).max(0.05);
+                                s.shot_cd = gap_lo + rand01(&mut self.rng, 7) * (gap_hi - gap_lo).max(0.05);
                                 let dist = s.at.dist(self.player_at);
                                 let mut chance = forces.hit_chance(dist);
                                 if self.player_gait != Gait::Still {
@@ -4387,9 +4622,8 @@ impl WorldSim {
                                 if light == Light::NightDark && !s.optics {
                                     chance *= forces.num_or("rifle", "dark_mul", 0.5);
                                 }
-                                self.next_id += 1;
-                                let r_hit = hash01(self.next_id as i64, 13);
-                                let r_dmg = hash01(self.next_id as i64, 29);
+                                let r_hit = rand01(&mut self.rng, 13);
+                                let r_dmg = rand01(&mut self.rng, 29);
                                 if r_hit < chance {
                                     let (w_lo, w_hi) = forces.range("rifle", "wound_hp");
                                     let dmg = w_lo + r_dmg * (w_hi - w_lo);
@@ -7326,5 +7560,180 @@ mod tests {
         }
         assert!(!sim.militia[0].downed && sim.militia[0].hp >= 50.0, "healthy teammate must revive downed militia");
         assert!(rescued_code, "revive must broadcast TEAMMATE RESCUED over radio");
+    }
+
+    /// A short scripted run: walk away from the spawn, then stand.
+    fn scripted(sim: &mut WorldSim, city: &City, ground: &Ground, forces: &Forces, steps: usize) {
+        for i in 0..steps {
+            let wish_move = if i < steps / 2 { P2::new(0.3, -1.0) } else { P2::default() };
+            let inp = SimInput { wish_move, clock_running: true, ..Default::default() };
+            sim.tick(city, ground, forces, &inp, 0.25);
+            if sim.dead {
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn the_same_seed_plays_the_same_run() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let run = |seed: u64| {
+            let mut sim = WorldSim::with_seed(&city, seed);
+            sim.hour = hm(19, 40);
+            scripted(&mut sim, &city, &ground, &forces, 2400);
+            let men: Vec<(i32, i32)> = sim
+                .squads
+                .iter()
+                .flat_map(|sq| sq.men.iter())
+                .map(|m| ((m.at.x * 100.0) as i32, (m.at.y * 100.0) as i32))
+                .collect();
+            (sim.hour.to_bits(), sim.player_at.x.to_bits(), sim.player_at.y.to_bits(), sim.body.hp.to_bits(), sim.dead, men, sim.rng)
+        };
+        let a = run(7);
+        let b = run(7);
+        assert_eq!(a, b, "two runs from one seed must match step for step");
+        assert_ne!(a.6, run(8).6, "another seed must give another random stream");
+    }
+
+    #[test]
+    fn the_clock_runs_past_dawn_and_the_run_goes_on() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = DAWN_HOUR - 0.02;
+        let inp = SimInput { clock_running: true, ..Default::default() };
+        for _ in 0..60 {
+            sim.tick(&city, &ground, &forces, &inp, 0.25);
+        }
+        assert!(sim.dawn_survived && !sim.dead);
+        assert_eq!(sim.mornings, 1);
+        assert!(sim.hour > DAWN_HOUR, "the clock must not stop at 07:00: {}", sim.hour);
+        let t = sim.sim_time;
+        sim.tick(&city, &ground, &forces, &inp, 0.25);
+        assert!(sim.sim_time > t, "the world keeps running after dawn");
+        assert!(clock::label(sim.hour).starts_with("1月18日 07:0"), "{}", clock::label(sim.hour));
+
+        // The next morning is counted too.
+        sim.hour = DAWN_HOUR + 24.0 - 0.01;
+        for _ in 0..10 {
+            sim.tick(&city, &ground, &forces, &inp, 0.25);
+        }
+        assert_eq!(sim.mornings, 2);
+        assert_eq!(clock::date_of(sim.hour), (1, 19));
+    }
+
+    #[test]
+    fn light_and_weather_follow_the_days() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let away = P2::new(-9999.0, -9999.0);
+        // The first evening is as it was.
+        assert_eq!(light_at(&city, hm(16, 20), false, false, away, &[]), Light::Day);
+        assert_eq!(light_at(&city, hm(16, 50), false, false, away, &[]), Light::Dusk);
+        assert_eq!(light_at(&city, hm(17, 30), true, false, away, &[]), Light::NightDark);
+        // And the next day has a morning and a noon.
+        assert_eq!(light_at(&city, 24.0 + hm(2, 0), true, false, away, &[]), Light::NightDark);
+        assert_eq!(light_at(&city, 24.0 + hm(6, 30), true, false, away, &[]), Light::Dusk);
+        assert_eq!(light_at(&city, 24.0 + hm(12, 0), true, false, away, &[]), Light::Day);
+        // Two months on, the evening is light at 17:00.
+        assert_eq!(light_at(&city, 24.0 * 60.0 + hm(17, 0), true, false, away, &[]), Light::Day);
+
+        // The first night's weather is the script; the days after roll from the seed.
+        assert_eq!(weather_at(1, hm(21, 0)), scheduled_weather(hm(21, 0)));
+        let days: Vec<Weather> = (0..400).map(|b| weather_at(1, DAWN_HOUR + b as f32 * 3.0).0).collect();
+        let clear = days.iter().filter(|w| **w == Weather::Clear).count();
+        assert!(clear > 260 && clear < 400, "mostly clear and cold: {clear} of 400");
+        assert!(days.contains(&Weather::Flurries));
+        assert_eq!(weather_at(1, 40.0), weather_at(1, 40.0));
+    }
+
+    #[test]
+    fn you_sleep_indoors_until_rested_and_noise_wakes_you() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = 24.0 + hm(10, 0);
+        sim.mornings = 1;
+        sim.dawn_survived = true;
+        sim.body.fatigue = 90.0;
+
+        // Not in the street.
+        let toggle = SimInput { toggle_sleep: true, clock_running: true, ..Default::default() };
+        sim.player_at = P2::new(-140.0, -240.0);
+        sim.tick(&city, &ground, &forces, &toggle, 0.05);
+        assert!(!sim.sleeping, "no sleeping in the street");
+
+        // In the basement shelter, with the stove going and nobody about.
+        let idx = sim.interiors.iter().position(|i| i.kind == InteriorKind::BasementShelter).unwrap();
+        sim.player_at = sim.interiors[idx].stove_at.unwrap();
+        sim.interiors[idx].stove_fuel_s = 1.0e6;
+        sim.interiors[idx].room_temp_c = 15.0;
+        sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.05);
+        assert!(sim.active_interior == Some(idx));
+        sim.squads.clear();
+        sim.tanks.clear();
+        sim.tick(&city, &ground, &forces, &toggle, 0.05);
+        assert!(sim.sleeping, "{}", sim.subtitle_zh);
+
+        let start = sim.hour;
+        let inp = SimInput { clock_running: true, ..Default::default() };
+        let mut steps = 0;
+        while sim.sleeping && steps < 40_000 {
+            sim.squads.clear();
+            sim.tanks.clear();
+            sim.spawn_wait = 1.0e6;
+            sim.tick(&city, &ground, &forces, &inp, 0.25);
+            steps += 1;
+        }
+        assert!(!sim.dead, "{}", sim.death_en);
+        assert_eq!(sim.woke, Some(WakeReason::Rested), "woke by {:?} after {:.1} h", sim.woke, sim.hour - start);
+        let slept = sim.hour - start;
+        assert!((5.5..7.5).contains(&slept), "a night's sleep is six or seven hours: {slept}");
+        assert!(sim.body.thirst > 50.0 && sim.body.hunger > 50.0, "asleep you need less: {} {}", sim.body.thirst, sim.body.hunger);
+
+        // A soldier on the stairs wakes you.
+        sim.body.fatigue = 80.0;
+        sim.tick(&city, &ground, &forces, &toggle, 0.05);
+        assert!(sim.sleeping);
+        sim.spawn_wait = 1.0e6;
+        let mut sq = Squad {
+            id: 1,
+            state: SquadState::Patrol,
+            route_idx: 0,
+            wp_idx: 0,
+            wp_dir: 1,
+            men: Vec::new(),
+            meter: 0.0,
+            last_seen: P2::default(),
+            lost_for: 0.0,
+            timer: 0.0,
+            ignore_for: 0.0,
+            held_at: P2::default(),
+            shouted: false,
+            hostile: false,
+            stuck_t: 0.0,
+            last_lead_at: P2::default(),
+        };
+        sq.men.push(Soldier {
+            id: 2,
+            at: sim.player_at.add(P2::new(6.0, 0.0)),
+            floor: 0,
+            facing: 0.0,
+            hp: 100.0,
+            optics: false,
+            shot_cd: 9.0,
+            speed: 0.0,
+            phase: 0.0,
+            in_cover: false,
+            vault_t: 0.0,
+            grenade_cd: 9.0,
+        });
+        sim.squads.push(sq);
+        sim.tick(&city, &ground, &forces, &inp, 0.25);
+        assert!(!sim.sleeping);
+        assert!(matches!(sim.woke, Some(WakeReason::Enemy) | Some(WakeReason::Noise) | Some(WakeReason::Hurt)), "{:?}", sim.woke);
     }
 }

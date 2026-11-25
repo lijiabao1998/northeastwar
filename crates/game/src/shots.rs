@@ -878,10 +878,13 @@ struct InteriorPlan {
     frames: u32,
 }
 
-const INTERIOR_NAMES: [&str; 3] = [
+const INTERIOR_NAMES: [&str; 6] = [
     "01_shop_interior_lit",
     "02_blackout_ambush_indoor",
     "03_player_home_stove",
+    "04_day2_noon_street",
+    "05_basement_asleep",
+    "06_march_five_pm",
 ];
 
 fn retarget_interior(mut commands: Commands, seed: Option<Res<InteriorPlanSeed>>) {
@@ -1066,7 +1069,7 @@ fn configure_interior_scene(
             clock.fog = sim.fog_density;
             (pat, 1.15, tracers)
         }
-        _ => {
+        2 => {
             // 03: 21:30 PlayerHome safehouse post-heating-cutoff with lit coal stove orange glow, closed curtains, barricaded steel door.
             let room_i = sim
                 .interiors
@@ -1109,6 +1112,71 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = sim.fog_density;
+            (pat, 1.55, Vec::new())
+        }
+        3 | 5 => {
+            // 04: noon on 18 January, the morning after; 06: 17:00 on 3 March, the
+            // evenings long by then. The clock no longer stops at 07:00.
+            let pat = P2::new(-262.0, -322.0);
+            // Step over 07:00 once, so the morning's own text is on screen.
+            sim.hour = sim::survival::DAWN_HOUR + 0.001;
+            let still = sim::survival::SimInput { clock_running: true, ..Default::default() };
+            sim.tick(&heihe.city, &heihe.ground, forces, &still, 0.05);
+            sim.sms = None;
+            sim.hour = if idx == 3 { 24.0 + hm(12, 30) } else { 24.0 * 45.0 + hm(17, 0) };
+            sim.blackout = true;
+            sim.weather_override = Some(Weather::Clear);
+            sim.weather = Weather::Clear;
+            sim.fog_density = 0.0;
+            sim.player_at = pat;
+            sim.player_facing = 1.9;
+            sim.player_anim = AnimState::Idle;
+            sim.squads.clear();
+            sim.tanks.clear();
+
+            clock.hour = sim.hour;
+            clock.speed = 1.0;
+            clock.blackout = true;
+            clock.fog = 0.0;
+            (pat, 1.0, Vec::new())
+        }
+        _ => {
+            // 05: asleep in the basement shelter at 22:00 on 18 January.
+            let room_i = sim
+                .interiors
+                .iter()
+                .position(|it| it.kind == InteriorKind::BasementShelter)
+                .unwrap_or(0);
+            let stove_p = sim.interiors[room_i].stove_at.unwrap_or_else(|| sim.interiors[room_i].to_world(0.5, sim.interiors[room_i].depth * 0.7));
+            let pat = stove_p.lerp(sim.interiors[room_i].to_world(0.0, sim.interiors[room_i].split_v + 0.8), 0.55);
+            {
+                let intr = &mut sim.interiors[room_i];
+                intr.curtains_closed = true;
+                intr.stove_fuel_s = 60.0;
+                intr.room_temp_c = 12.0;
+            }
+            sim.hour = 24.0 + hm(22, 0);
+            sim.mornings = 1;
+            sim.dawn_survived = true;
+            sim.blackout = true;
+            sim.weather_override = Some(Weather::Clear);
+            sim.weather = Weather::Clear;
+            sim.fog_density = 0.0;
+            sim.player_at = pat;
+            sim.player_anim = AnimState::Idle;
+            sim.active_interior = Some(room_i);
+            sim.cutaway_interior = Some(room_i);
+            sim.current_room_temp = Some(12.0);
+            sim.active_interior_name = sim.interiors[room_i].name.clone();
+            sim.body.sheltered = true;
+            sim.sleeping = true;
+            sim.body.asleep = true;
+            sim.slept_hours = 2.4;
+
+            clock.hour = sim.hour;
+            clock.speed = 1.0;
+            clock.blackout = true;
+            clock.fog = 0.0;
             (pat, 1.55, Vec::new())
         }
     }

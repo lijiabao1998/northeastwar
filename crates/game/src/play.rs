@@ -1086,7 +1086,7 @@ pub fn step_play(
         }
     }
 
-    if (play.sim.dead || play.sim.dawn_survived) && keys.just_pressed(KeyCode::Enter) {
+    if play.sim.dead && keys.just_pressed(KeyCode::Enter) {
         let scen = scenario.map(|s| s.0).unwrap_or(0);
         let p_mut = &mut *play;
         crate::menu_ui::apply_scenario(
@@ -1116,7 +1116,7 @@ pub fn step_play(
         let next = (idx + dir).clamp(0, (SPEED_LEVELS.len() - 1) as i32) as usize;
         SPEED_LEVELS[next]
     };
-    if !play.sim.dead && !play.sim.dawn_survived && !map_open {
+    if !play.sim.dead && !map_open {
         if keys.just_pressed(KeyCode::Tab) {
             let idx = SPEED_LEVELS
                 .iter()
@@ -1152,7 +1152,7 @@ pub fn step_play(
             play.sim.interiors[i].num_floors > 1
                 && play.sim.player_at.dist(play.sim.interiors[i].stairwell_world()) <= 2.4
         });
-    if !play.sim.dead && !play.sim.dawn_survived && !map_open {
+    if !play.sim.dead && !map_open {
         if keys.just_pressed(KeyCode::KeyP) || (!near_stairs && keys.just_pressed(KeyCode::Space)) {
             play.paused = !play.paused;
         }
@@ -1207,7 +1207,7 @@ pub fn step_play(
     let map_militia_cmd = map.as_mut().and_then(|m| m.pending_militia_order.take());
     let frame_dt = time.delta_secs().clamp(0.0, 0.1);
 
-    if play.paused && !play.sim.dead && !play.sim.dawn_survived {
+    if play.paused && !play.sim.dead {
         if wish.len() > 0.05 {
             let next_pan = eye_q.0.cam_pan.add(wish.norm().mul(28.0 * frame_dt));
             eye_q.0.cam_pan = P2::new(next_pan.x.clamp(-90.0, 90.0), next_pan.y.clamp(-90.0, 90.0));
@@ -1270,6 +1270,7 @@ pub fn step_play(
         fortify_or_stove: !map_open && keys.just_pressed(KeyCode::KeyT),
         floor_delta,
         clock_running: true,
+        toggle_sleep: !map_open && keys.just_pressed(KeyCode::KeyJ),
     };
 
     let was_danger = play.sim.challenged
@@ -1277,9 +1278,17 @@ pub fn step_play(
         || play.sim.fpv.is_some()
         || play.sim.lancet.is_some()
         || play.sim.tank_lock_warning;
-    let sim_dt = frame_dt * clock.speed.max(1.0);
-    let steps = (sim_dt / 0.05).ceil().clamp(1.0, 20.0) as usize;
-    let sub_dt = sim_dt / steps as f32;
+    // Asleep, the world runs fast in long steps (the sim watches for what wakes you
+    // at every one); awake, at the chosen speed in short ones.
+    let asleep = play.sim.sleeping || input.toggle_sleep;
+    let (sim_dt, steps) = if asleep {
+        let sim_dt = frame_dt.max(1.0 / 240.0) * sim::survival::SLEEP_PLAY_SPEED;
+        (sim_dt, (sim_dt / 0.25).ceil().clamp(1.0, 16.0) as usize)
+    } else {
+        let sim_dt = frame_dt * clock.speed.max(1.0);
+        (sim_dt, (sim_dt / 0.05).ceil().clamp(1.0, 20.0) as usize)
+    };
+    let sub_dt = (sim_dt / steps as f32).min(0.25);
 
     let mut fx = sim::survival::TickOutput::default();
     {
@@ -1310,7 +1319,7 @@ pub fn step_play(
             fx.glass_break |= out.glass_break;
             fx.tank_cannon |= out.tank_cannon;
             fx.slab_collapse |= out.slab_collapse;
-            if state.sim.dead || state.sim.dawn_survived {
+            if state.sim.dead || (asleep && !state.sim.sleeping) {
                 break;
             }
         }
@@ -1325,11 +1334,10 @@ pub fn step_play(
         || fx.player_hit
         || fx.tank_cannon
         || fx.slab_collapse
-        || play.sim.dead
-        || play.sim.dawn_survived;
+        || play.sim.dead;
     if !was_danger && now_danger && clock.speed > 1.0 {
         clock.speed = 1.0;
-        if !play.sim.dead && !play.sim.dawn_survived {
+        if !play.sim.dead {
             play.sim.subtitle_zh = "发现险情，时间自动恢复 1x".into();
             play.sim.subtitle_ttl = play.sim.subtitle_ttl.max(3.5);
         }
@@ -1790,7 +1798,7 @@ pub fn sync_actors(
     for (mut tf, mut vis, kind) in &mut lights_q {
         match kind {
             IndoorLightKind::Room => {
-                if let Some(intr) = active_intr.filter(|it| !play.sim.blackout && play.sim.hour < 19.5 && it.kind != sim::interior::InteriorKind::BasementShelter) {
+                if let Some(intr) = active_intr.filter(|it| !play.sim.blackout && play.sim.hour < sim::survival::BLACKOUT_HOUR && it.kind != sim::interior::InteriorKind::BasementShelter) {
                     let c = intr.to_world(0.0, intr.depth * 0.48);
                     tf.translation = Vec3::new(c.x, light_base_y + 2.7, -c.y);
                     *vis = Visibility::Inherited;
@@ -2342,7 +2350,7 @@ pub fn sync_hud(
 ) {
     let s = &play.sim;
     let active = play.started && *menu == MenuScreen::Playing;
-    let show_speed = interactive.play && active && !s.dead && !s.dawn_survived;
+    let show_speed = interactive.play && active && !s.dead && !s.sleeping;
     for mut v in &mut speed_bar_q {
         *v = if show_speed { Visibility::Inherited } else { Visibility::Hidden };
     }
@@ -2373,7 +2381,7 @@ pub fn sync_hud(
     for (role, mut text, mut color, mut vis) in &mut q {
         match role {
             HudRole::Objective => {
-                *vis = if active && !s.dead && !s.dawn_survived { Visibility::Inherited } else { Visibility::Hidden };
+                *vis = if active && !s.dead && !s.sleeping { Visibility::Inherited } else { Visibility::Hidden };
                 let bar = s.selected_barricade.label();
                 let (cs, cc) = s.selected_barricade.cost();
                 let pla_arm = s.tanks.iter().filter(|t| t.faction == Faction::Pla).count();
@@ -2484,7 +2492,7 @@ pub fn sync_hud(
                 };
             }
             HudRole::RadioFeed => {
-                if active && !s.dead && !s.dawn_survived {
+                if active && !s.dead && !s.sleeping {
                     if let Some(rf) = &s.radio_feed {
                         text.0 = format!("【{}】 {}  ·  {}", rf.unit, rf.code_en, rf.text_zh);
                         color.0 = if rf.urgent {
@@ -2509,7 +2517,7 @@ pub fn sync_hud(
                 }
             }
             HudRole::Stats => {
-                *vis = if active && !s.dead && !s.dawn_survived { Visibility::Inherited } else { Visibility::Hidden };
+                *vis = if active && !s.dead && !s.sleeping { Visibility::Inherited } else { Visibility::Hidden };
                 let bleed = if s.body.bleeding { "  [流血]" } else { "" };
                 let coat = if s.body.coat_bonus > 0.0 { "  [厚棉袄]" } else { "" };
                 let gun = if s.inv.has_rifle {
@@ -2537,8 +2545,8 @@ pub fn sync_hud(
                     String::new()
                 };
                 text.0 = format!(
-                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
-                    s.body.hp, s.body.hunger, s.body.thirst, s.inv.bandage, s.inv.food, s.inv.water, s.inv.warmer, s.inv.molotov
+                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
+                    s.body.hp, s.body.hunger, s.body.thirst, s.body.fatigue, s.inv.bandage, s.inv.food, s.inv.water, s.inv.warmer, s.inv.molotov
                 );
             }
             HudRole::Sms => {
@@ -2550,15 +2558,23 @@ pub fn sync_hud(
                 }
             }
             HudRole::Death => {
-                if active && s.dawn_survived {
-                    text.0 = "天亮了。你还活着。\n2031年1月18日 07:00  ·  黑河第一夜\n\n按 Enter 再来一局   或按 Esc 返回主菜单".into();
+                if active && s.sleeping && !s.dead {
+                    text.0 = format!(
+                        "睡着了\n2031年{}  ·  已睡 {:.1} 小时\n\n有动静会醒   按 J 起来",
+                        sim::clock::label(s.hour),
+                        s.slept_hours
+                    );
                     *vis = Visibility::Inherited;
                 } else if active && s.dead {
                     let h = s.hours_alive as u32;
                     let m = ((s.hours_alive - h as f32) * 60.0) as u32;
-                    let clk_h = (s.hour as u32) % 24;
-                    let clk_m = ((s.hour - (s.hour as u32) as f32) * 60.0) as u32;
-                    text.0 = format!("{}\n{}\n\n{clk_h:02}:{clk_m:02}  ·  撑了 {h} 小时 {m} 分\n\n按 Enter 重新开始   或按 Esc 返回主菜单", s.death_zh, s.death_en);
+                    let lasted = if h >= 24 { format!("{} 天 {} 小时", h / 24, h % 24) } else { format!("{h} 小时 {m} 分") };
+                    text.0 = format!(
+                        "{}\n{}\n\n2031年{}  ·  撑了 {lasted}\n\n按 Enter 重新开始   或按 Esc 返回主菜单",
+                        s.death_zh,
+                        s.death_en,
+                        sim::clock::label(s.hour)
+                    );
                     *vis = Visibility::Inherited;
                 } else {
                     *vis = Visibility::Hidden;

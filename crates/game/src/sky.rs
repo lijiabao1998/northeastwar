@@ -1,6 +1,7 @@
-//! The light of 17 January at 50.25° north. The sun never climbs above
+//! The light of Heihe, 50.25° north. On 17 January the sun never climbs above
 //! nineteen degrees, it is down before four in the afternoon, and after that
-//! the street belongs to sodium lamps and lit windows.
+//! the street belongs to sodium lamps and lit windows. The sun comes from the
+//! sim's calendar (`sim::clock::sun_at`), so the days lengthen as a run goes on.
 
 use crate::Clock;
 use bevy::prelude::*;
@@ -17,23 +18,13 @@ pub struct GlowMaterials {
     pub windows: Handle<StandardMaterial>,
 }
 
-pub const SUNRISE: f32 = 7.55;
-pub const SUNSET: f32 = 15.85;
+/// The sun's height at noon on 17 January; the light was set against it, and a
+/// higher sun later in the year is as bright as this one.
 const NOON_ELEVATION: f32 = 18.8;
 
 /// Elevation and azimuth of the sun in degrees. Azimuth is clockwise from north.
 pub fn sun(hour: f32) -> (f32, f32) {
-    let hour = hour.rem_euclid(24.0);
-    let t = (hour - SUNRISE) / (SUNSET - SUNRISE);
-    let elevation = if (0.0..=1.0).contains(&t) {
-        NOON_ELEVATION * (t * std::f32::consts::PI).sin()
-    } else {
-        // Below the horizon: how far, for the length of dusk.
-        let away = if hour > SUNSET { hour - SUNSET } else { SUNRISE - hour };
-        -(away * 9.0).min(40.0)
-    };
-    let azimuth = 125.0 + 110.0 * t.clamp(-0.3, 1.3);
-    (elevation, azimuth)
+    sim::clock::sun_at(hour)
 }
 
 /// True when the cut-away glass is drawn unlit (in full day and full night); in

@@ -459,18 +459,14 @@ fn tick(
     }
     // [ and ] turn the clock by hand, to look at the city in any light.
     if keys.pressed(KeyCode::BracketRight) {
-        clock.hour = (clock.hour + time.delta_secs() * 2.0).clamp(0.0, 31.0);
+        clock.hour += time.delta_secs() * 2.0;
     }
     if keys.pressed(KeyCode::BracketLeft) {
-        clock.hour = (clock.hour - time.delta_secs() * 2.0).clamp(0.0, 31.0);
+        clock.hour = (clock.hour - time.delta_secs() * 2.0).max(0.0);
     }
 }
 
 fn hud(clock: Res<Clock>, player: Single<&Player>, heihe: Res<Heihe>, mut text: Single<&mut Text, With<ClockText>>) {
-    let total_h = clock.hour.max(0.0) as u32;
-    let day = 17 + total_h / 24;
-    let h = total_h % 24;
-    let m = ((clock.hour.max(0.0) - total_h as f32) * 60.0) as u32;
     // The nearest named street, so you know where in Heihe you are.
     let mut street = "";
     let mut best = 40.0;
@@ -483,7 +479,13 @@ fn hud(clock: Res<Clock>, player: Single<&Player>, heihe: Res<Heihe>, mut text: 
     }
     let ice = if heihe.ground.on_ice(player.at) { "黑龙江冰面" } else { street };
     let spd = if clock.speed > 1.05 { format!("  [{}x加速]", clock.speed as u32) } else { String::new() };
-    let line = format!("2031年1月{day}日  黑河\n{h:02}:{m:02}{spd}  {ice}    北 ↗");
+    let (date, time) = {
+        let full = sim::clock::label(clock.hour);
+        let mut parts = full.splitn(2, ' ');
+        (parts.next().unwrap_or("").to_string(), parts.next().unwrap_or("").to_string())
+    };
+    let day_n = sim::clock::day_index(clock.hour) + 1;
+    let line = format!("2031年{date}  第{day_n}天  黑河\n{time}{spd}  {ice}    北 ↗");
     // Only when it changes: setting the text lays it out again.
     if text.0 != line {
         text.0 = line;

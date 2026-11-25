@@ -3,6 +3,7 @@
 
 pub mod arsenal;
 pub mod city;
+pub mod clock;
 pub mod cmab;
 pub mod cutaway;
 pub mod facade;
