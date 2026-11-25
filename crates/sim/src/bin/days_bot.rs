@@ -21,6 +21,8 @@ fn main() {
     let forces = Forces::from_json(&std::fs::read_to_string(sim::data_dir().join("russia/forces.json")).unwrap()).unwrap();
     let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
     let end_hour = DAWN_HOUR + 24.0 * (days - 1.0);
+    // Stove time a pot of melted snow costs (play seconds), as the sim reckons it.
+    let melt_s = sim::living::get().num("fuel", "melt_fuel_h") * 3600.0 / sim::forces::TIME_SCALE;
 
     println!("| shelter | seed | result | when | mornings | slept h | woke by | coal / wood / furniture / food / water left | room min / max °C | body min °C | illness max | ms per game hour |");
     println!("|---|---|---|---|---|---|---|---|---|---|---|---|");
@@ -63,7 +65,7 @@ fn main() {
                     if sim.body.thirst < 70.0 {
                         if sim.inv.water > 0 {
                             inp.use_water = true;
-                        } else if room.stove_fuel_s >= 30.0 {
+                        } else if room.stove_fuel_s >= melt_s {
                             inp.interact_just_pressed = true;
                         } else {
                             // No water: light the stove to melt snow.
@@ -71,7 +73,7 @@ fn main() {
                         }
                     }
                     let has_fuel = sim.inv.coal > 0 || sim.inv.wood > 0 || room.furniture > 0;
-                    if (want_fire || room.room_temp_c < 8.0) && room.stove_fuel_s <= 1.0 && has_fuel {
+                    if (want_fire || room.room_temp_c < 8.0) && room.stove_fuel_s < melt_s && has_fuel {
                         inp.fortify_or_stove = true;
                     }
                     if !sim.body.bleeding && sim.body.illness > 30.0 && sim.inv.medicine > 0 {

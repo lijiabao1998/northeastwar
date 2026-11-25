@@ -61,7 +61,7 @@
 
 ## Checked
 
-- `cargo test -p sim`: 118 pass, 8 of them new:
+- `cargo test -p sim`: 120 pass, 10 of them new:
   - `living`: Heihe in January and April; departures last and stay in bounds; colder needs more food.
   - `survival`:
     - a flat cools over days, not hours: still above 8 °C the morning after, below freezing but above the street on the third day, the basement near +5 °C;
@@ -70,7 +70,11 @@
     - cold rooms make you ill and medicine helps;
     - others empty the shops but not your home.
   - Two older tests changed with the rules: a ration now feeds by calories, and the thirst timeline is the new one.
-- Two mistakes the night bot's probe found (below), fixed with tests in the same files: a room of 10 °C or more counted as a fire for illness too, so nobody fell ill in a 12–16 °C room; and the shops on the street, searched under their signs, never emptied (0 of 65 after three mornings).
+- The night bot (below) found four mistakes, fixed in two later commits with tests:
+  - A room of 10 °C or more counted as a fire. That warmed the body at the fire barrel's rate, stopped illness (nobody fell ill in a 12–16 °C room), and lit you up for the patrols like a fire beside you. Now a warm room warms you as a heated doorway does; illness goes by the air; and only an open fire lights you. Test: `a_warm_room_warms_slowly_and_does_not_light_you_up`.
+  - The shops on the street, searched under their signs, never emptied: 0 of 65 after three mornings. Now 31, 41, then 53 are empty after mornings 1 to 3. The test is in `others_empty_the_shops_but_not_your_home`.
+  - A vehicle that came to rest within 3.4 m of a wreck (another vehicle killed beside it) could move in no direction, and turning round did not free it. Now only a move towards a wreck is blocked. Test: `a_vehicle_beside_a_wreck_can_drive_away`.
+  - `days_bot` pressed E to melt snow when the fire had 30 s left; a pot needs about 151 s. It now uses the sim's own figure.
 - `cargo build -p northeast --release` builds. `--interior-shots` pictures are in `docs/shots/rust-l2/`:
   - the stove's new prompt;
   - noon on 18 January at −18 °C from the climate;
@@ -88,6 +92,45 @@ Before this round the same plan died on the second day, of thirst. Now what wear
 - the food a shelter holds, about two weeks.
 
 Nothing in the plan goes out for more; L3's sweeps and searches will come to it.
+
+## The night bot on these rules
+
+The agent's harness (`out/read/bot4`, not in the repository) played the night with 8 plans × 5 seeds, plus the rally-then-home plan. It ran on the L2 rules as committed in ebaa29b, without the fixes above. It then kept the indoor plans going to 07:00 on 21 January with `days_bot`'s upkeep, and ran its probes. Its table is `out/read/bot4/runs/table.md`.
+
+**The first night, against the run before L2:**
+
+| plan | now | before L2 |
+|---|---|---|
+| A, standing outside | dies 19:22 to armour, all 5 | the same |
+| B home; D, H scavenge then home | alive, 36.9 °C at 07:00 | alive, 35.3 °C, after a hand warmer and 4 coal |
+| C basement | alive, 36.9 °C | the same |
+| E fight | dies 18:33–18:36 | 18:36–18:42 |
+| F, a heated doorway | **alive at 07:00**, 34.2 °C | 4 of 5 died of thirst at 03:26; 1 was shelled by PLA armour |
+| G scavenge late | dies 18:15–19:48 to armour | 18:14–20:52 |
+| I rally, then home | alive, 36.9 °C | alive, 36.2 °C |
+
+- F lives because thirst is now 1.3 L a day: it is at 87 by dawn. The PLA "hold the gun near you" rule held: F2 was searched three times and never shelled.
+- The home needs no fire on the first night. It is still about 11 °C at 07:00, a room that warms the body.
+- The probes are unchanged:
+  - no blind Lancet or FPV;
+  - the same armour sight, combat and challenge results;
+  - no sight through walls.
+- A soldier now crosses wire in 12 s and loses 9 hp; before, every one died in it.
+- Vehicles on road 13 turn round from both ends.
+
+**Three more days, 25 runs:** all of B, C, D, H and I, 5 seeds each, are alive at 07:00 on 21 January. None was challenged or hit.
+- The home falls from 18 °C to 8 °C in about 17 hours. One coal (about 4 hours of fire) brings it back, so a day costs one coal; 85 pieces of furniture are untouched.
+- The basement held 13–16 °C for three days on the one coal it burned on the first night.
+- The street varies by seed from the 20th: the coldest low was −35.1 °C, the mildest −25.9 °C.
+- The basement sleeper was woken 9–11 times by Russians passing close. The home sleeper always woke rested.
+
+**What that says.** Indoors, nothing wears a careful player down for weeks:
+- a coal a day;
+- a whole block's furniture to burn (85 pieces, about 620 hours of fire);
+- hunger from 98 to 90 in three days;
+- water under 1.5 bottles a day.
+
+That is what the research gives for a stocked flat. What wore people down in occupied cities, besides cold, was the occupation: sweeps, searches, detention. That is L3. The 15 pieces of furniture per upper floor are also play, and those floors are other people's flats, which L4 gives owners.
 
 ## Not done
 

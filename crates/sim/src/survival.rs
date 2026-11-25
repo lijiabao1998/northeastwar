@@ -216,6 +216,8 @@ pub struct Body {
     pub illness: f32,
     /// Hours left of the days after a chilling, when infections take hold.
     pub chilled_h: f32,
+    /// In a room at 10 °C or more: it warms you slowly, as a heated doorway does.
+    pub warm_room: bool,
 }
 
 impl Default for Body {
@@ -237,6 +239,7 @@ impl Default for Body {
             indoors: false,
             illness: 0.0,
             chilled_h: 0.0,
+            warm_room: false,
         }
     }
 }
@@ -255,7 +258,7 @@ impl Body {
     ) -> Option<(&'static str, &'static str)> {
         self.sheltered = sheltered;
         self.on_ice = on_ice;
-        self.heated = hour < HEAT_OFF_HOUR || near_fire_barrel;
+        self.heated = hour < HEAT_OFF_HOUR || near_fire_barrel || (self.indoors && self.warm_room);
         let living = crate::living::get();
 
         // Heat goes with how far below comfort the air around you is: 1 at -18 °C,
@@ -1574,6 +1577,16 @@ impl WorldSim {
         out
     }
 
+    /// True beside an open fire (a barrel, a burning Molotov), not just in a warm room.
+    pub fn near_fire(&self) -> bool {
+        self.fire_barrels.iter().any(|b| b.dist(self.player_at) <= 3.5)
+    }
+
+    /// The light the player stands in, as patrols and drones see it.
+    pub fn player_light(&self, city: &City) -> Light {
+        light_at(city, self.hour, self.blackout, self.near_fire(), self.player_at, &self.fire_barrels)
+    }
+
     /// The temperature in the street now (°C).
     pub fn outdoor_c(&self) -> f32 {
         crate::living::get().outdoor_c(self.seed, self.hour)
@@ -1819,8 +1832,8 @@ impl WorldSim {
         let indoors = self.active_interior.is_some();
         let sheltered = city.near_heat(self.player_at) || indoors;
         let on_ice = !indoors && ground.on_ice(self.player_at);
-        let near_barrel = self.fire_barrels.iter().any(|b| b.dist(self.player_at) <= 3.5)
-            || self.active_interior.is_some_and(|i| self.interiors[i].room_temp_c >= 10.0);
+        let near_barrel = self.near_fire();
+        self.body.warm_room = self.active_interior.is_some_and(|i| self.interiors[i].room_temp_c >= 10.0);
 
         if !sheltered && self.player_at.dist(self.last_player_track) >= 1.6 {
             let dir = self.player_at.sub(self.last_player_track).norm();
@@ -1866,7 +1879,7 @@ impl WorldSim {
         self.step_militia(ground, forces, dt, &mut out);
 
         // 6. Russian infantry squads (spawn after 17:36 crossing), sight, challenge & combat.
-        let light = light_at(city, self.hour, self.blackout, near_barrel, self.player_at, &self.fire_barrels);
+        let light = self.player_light(city);
         self.step_squads(city, ground, forces, light, dt, &mut out);
         self.step_grenades(forces, dt, &mut out);
         if self.dead {
@@ -5892,7 +5905,9 @@ impl WorldSim {
                 if d.len() > 0.5 {
                     let want = tat.add(d.norm().mul(v_spd * dt));
                     let next_pos = ground.step(tat, want, 0.85);
-                    let blocked_wreck = self.wrecks.iter().any(|w| w.at.dist(next_pos) < 3.4);
+                    // Blocked only by a move that gets closer to a wreck: one parked beside
+                    // a wreck (another vehicle died next to it) can still drive away.
+                    let blocked_wreck = self.wrecks.iter().any(|w| w.at.dist(next_pos) < 3.4 && w.at.dist(next_pos) < w.at.dist(tat));
                     let moves = !blocked_wreck && next_pos.dist(tat) > 0.05 * dt;
                     // Progress is what counts: sliding along a wall moves it a little
                     // every step and gets it nowhere.
@@ -8518,5 +8533,61 @@ mod tests {
         assert!(shops0 > 10 && shops5 * 2 < shops0, "five mornings take more than half: {shops0} -> {shops5}");
         assert!(shops5 > 0, "but not everything");
         assert_eq!(left(&sim, true), homes0);
+    }
+
+    #[test]
+    fn a_warm_room_warms_slowly_and_does_not_light_you_up() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(23, 0);
+        sim.blackout = true;
+        let home = sim.interiors.iter().position(|i| i.kind == InteriorKind::PlayerHome).unwrap();
+        sim.player_at = sim.interiors[home].stove_at.unwrap();
+        sim.interiors[home].room_temp_c = 15.0;
+        sim.interiors[home].curtains_closed = true;
+        sim.body.temp = 35.0;
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+        assert_eq!(sim.active_interior, Some(home));
+        assert!(sim.body.warm_room && !sim.near_fire());
+        assert_ne!(sim.player_light(&city), Light::NightLit, "a warm room in the blackout is not a lit one");
+        let t0 = sim.body.temp;
+        for _ in 0..40 {
+            sim.interiors[home].room_temp_c = 15.0;
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.25);
+        }
+        let gained = sim.body.temp - t0;
+        assert!(gained > 0.05 && gained < 0.25, "warms as a heated doorway does, not as a fire: +{gained}");
+        sim.add_fire(sim.player_at, f32::INFINITY);
+        assert_eq!(sim.player_light(&city), Light::NightLit, "a fire beside you lights you up");
+    }
+
+    #[test]
+    fn a_vehicle_beside_a_wreck_can_drive_away() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(19, 0);
+        sim.squads.clear();
+        sim.tanks.clear();
+        sim.player_at = P2::new(-600.0, -600.0);
+        let (a, dir) = open_street(&city, &ground, 40.0);
+        let wreck_ti = russian_tank_at(&mut sim, &forces, a.sub(dir.mul(0.5)));
+        let dead = sim.tanks.remove(wreck_ti);
+        sim.push_wreck(dead);
+        let ti = russian_tank_at(&mut sim, &forces, a);
+        sim.tanks[ti].waypoints = vec![a, a.add(dir.mul(30.0))];
+        sim.tanks[ti].wp_idx = 1;
+        let id = sim.tanks[ti].id;
+        for _ in 0..40 {
+            sim.squads.clear();
+            sim.tanks.retain(|t| t.id == id);
+            sim.spawn_wait = 1.0e6;
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+        }
+        let moved = sim.tanks[0].at.dist(a);
+        assert!(moved > 3.0, "it drives off the wreck: {moved} m");
     }
 }
