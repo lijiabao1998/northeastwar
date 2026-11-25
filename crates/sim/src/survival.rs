@@ -20,6 +20,11 @@ pub const CROSSING_HOUR: f32 = 17.0 + 36.0 / 60.0;
 pub const BLACKOUT_HOUR: f32 = 19.5;
 pub const HEAT_OFF_HOUR: f32 = 21.0;
 pub const DAWN_HOUR: f32 = 31.0;
+/// How long a Molotov's fire and a thermobaric rocket's burn on the street, in play
+/// seconds (a minute and a half is about 20 minutes of the clock). Play.
+pub const MOLOTOV_FIRE_S: f32 = 90.0;
+pub const THERMOBARIC_FIRE_S: f32 = 45.0;
+
 /// Tiredness at 16:00 on the first day: up since about 07:00 (nine hours at
 /// FATIGUE_AWAKE_PER_H).
 pub const START_FATIGUE: f32 = 40.0;
@@ -290,6 +295,9 @@ impl Body {
 
         if self.temp <= DEATH_TEMP {
             self.hp = 0.0;
+            if sheltered {
+                return Some(("你冻死在屋里。没有火，屋里和街上一样冷。", "You froze to death indoors. Without a fire the room was as cold as the street."));
+            }
             return Some(("你冻死在黑河的街上。", "You froze to death on a street in Heihe."));
         }
 
@@ -848,6 +856,8 @@ pub struct TankUnit {
     pub cannon_cd: f32,
     pub mg_cd: f32,
     pub salvo_left: u8,
+    /// Seconds it has wanted to move and could not.
+    pub stuck_t: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1090,6 +1100,8 @@ pub struct WorldSim {
     pub drops: Vec<LootDrop>,
     pub barricades: Vec<Barricade>,
     pub fire_barrels: Vec<P2>,
+    /// Seconds each fire in `fire_barrels` has left (infinite for a barrel).
+    fire_ttl: Vec<f32>,
     pub tracks: Vec<SnowTrack>,
     pub craters: Vec<Crater>,
     pub wrecks: Vec<VehicleWreck>,
@@ -1286,6 +1298,7 @@ impl WorldSim {
             drops: Vec::new(),
             barricades: Vec::new(),
             fire_barrels: Vec::new(),
+            fire_ttl: Vec::new(),
             tracks: Vec::new(),
             craters: Vec::new(),
             wrecks: Vec::new(),
@@ -1580,6 +1593,7 @@ impl WorldSim {
             c.ttl -= dt;
         }
         self.smoke_clouds.retain(|c| c.ttl > 0.0);
+        self.step_fires(dt);
         for w in &mut self.wrecks {
             w.smoke_ttl = (w.smoke_ttl - dt).max(0.0);
         }
@@ -1732,7 +1746,7 @@ impl WorldSim {
 
         // 7. Recon drone, 82mm mortar strikes, FPV drone & multi-wave Russian tank invasion.
         self.step_drone_and_mortars(city, forces, light, dt, &mut out);
-        self.step_tanks(city, ground, forces, dt, &mut out);
+        self.step_tanks(city, ground, forces, light, dt, &mut out);
         if self.dead {
             return out;
         }
@@ -1809,6 +1823,36 @@ impl WorldSim {
             at,
             radius: radius.clamp(1.8, 3.8),
         });
+    }
+
+    fn add_fire(&mut self, at: P2, ttl: f32) {
+        self.fire_ttl.resize(self.fire_barrels.len(), f32::INFINITY);
+        self.fire_barrels.push(at);
+        self.fire_ttl.push(ttl);
+    }
+
+    /// Burn the fires down; a barrel goes out when it is knocked over.
+    fn step_fires(&mut self, dt: f32) {
+        // Fires put in from outside (the picture scenes) burn like barrels.
+        self.fire_ttl.resize(self.fire_barrels.len(), f32::INFINITY);
+        let knocked: Vec<P2> = self
+            .barricades
+            .iter()
+            .filter(|b| b.kind == BarricadeKind::FireBarrel && (b.shoved || b.hp <= 0.0))
+            .map(|b| b.at)
+            .collect();
+        let mut i = 0;
+        while i < self.fire_barrels.len() {
+            self.fire_ttl[i] -= dt;
+            let at = self.fire_barrels[i];
+            let out = self.fire_ttl[i] <= 0.0 || (self.fire_ttl[i].is_infinite() && knocked.iter().any(|k| k.dist(at) < 0.6));
+            if out {
+                self.fire_barrels.remove(i);
+                self.fire_ttl.remove(i);
+            } else {
+                i += 1;
+            }
+        }
     }
 
     fn push_wreck(&mut self, dead: TankUnit) {
@@ -2955,7 +2999,7 @@ impl WorldSim {
                 let yaw = want.sub(self.player_at).y.atan2(want.sub(self.player_at).x);
                 let pos = ground.step(self.player_at, want, 0.4);
                 if self.selected_barricade == BarricadeKind::FireBarrel {
-                    self.fire_barrels.push(pos);
+                    self.add_fire(pos, f32::INFINITY);
                     self.say("点起了一个防寒火桶（附近可取暖，也会在夜里暴露位置）。", "Lit a fire barrel.");
                 } else {
                     self.say(&format!("架设了路障：{}", self.selected_barricade.label()), "Barricade placed.");
@@ -3353,7 +3397,7 @@ impl WorldSim {
                     self.tanks[ti].hp -= chosen_at.direct_tank_dmg();
                 }
                 if chosen_at == AtWeapon::RpoShmel {
-                    self.fire_barrels.push(impact);
+                    self.add_fire(impact, THERMOBARIC_FIRE_S);
                 }
                 self.explode_at_floor(
                     impact,
@@ -3465,7 +3509,7 @@ impl WorldSim {
                 let top_attack = self.player_floor >= 1 && self.tanks.iter().any(|t| t.faction == Faction::Russia && t.at.dist(drop) <= 6.0);
                 let dmg = if top_attack { 150.0 } else { 75.0 };
                 self.explode_at_floor(drop, 0, 6.0, dmg, 0.0, false, forces, true, out);
-                self.fire_barrels.push(drop);
+                self.add_fire(drop, MOLOTOV_FIRE_S);
                 if top_attack {
                     self.say("从高楼俯掷燃烧瓶命中坦克引擎盖（2×顶攻伤害）！", "Top-attack Molotov hit tank engine deck (2x damage)!");
                 } else {
@@ -4507,7 +4551,11 @@ impl WorldSim {
                     }
                 }
                 SquadState::Engage => {
-                    any_engaged = true;
+                    // Engaged with you only while it can see you (a fight with the
+                    // militia elsewhere is not one).
+                    if seen_player {
+                        any_engaged = true;
+                    }
                     g.hostile = true;
                     if seen_player && self.hour >= hm(19, 30) && self.fpv_cd <= 0.0 && self.pending_fpvs.is_empty() && self.fpv.is_none() {
                         queue_spotted_fpv = true;
@@ -4781,6 +4829,9 @@ impl WorldSim {
             }
         }
         let bleed_p = forces.num_or("rifle", "bleed_p", 0.85);
+        if !hits_on_player.is_empty() {
+            any_engaged = true;
+        }
         for (dmg, from, from_floor, to, hit) in hits_on_player {
             out.tracers.push(TracerFx {
                 from: [from.x, from_floor as f32 * FLOOR_H + 1.35, -from.y],
@@ -5300,10 +5351,11 @@ impl WorldSim {
             cannon_cd: 2.0,
             mg_cd: 1.5,
             salvo_left: 0,
+            stuck_t: 0.0,
         });
     }
 
-    fn step_tanks(&mut self, city: &City, ground: &Ground, forces: &Forces, dt: f32, out: &mut TickOutput) {
+    fn step_tanks(&mut self, city: &City, ground: &Ground, forces: &Forces, light: Light, dt: f32, out: &mut TickOutput) {
         let _ = city;
         let waves: [(f32, u16, &[VehicleKind], P2, &str, &str); 7] = [
             (
@@ -5424,7 +5476,7 @@ impl WorldSim {
                     match b.kind {
                         BarricadeKind::Concrete if d_b < 2.8 => {
                             blocked_by_barricade = true;
-                            b.hp = (b.hp - if kind.is_heavy_armor() { 55.0 } else { 28.0 } * dt).max(0.0);
+                            b.hp = (b.hp - (if kind.is_heavy_armor() { 55.0 } else { 28.0 }) * dt).max(0.0);
                             if b.hp <= 0.0 {
                                 b.shoved = true;
                             }
@@ -5454,6 +5506,8 @@ impl WorldSim {
                             }
                         }
                         BarricadeKind::Trench | BarricadeKind::TarpDugout => {}
+                        // Further than 2.8 m these wait for the vehicle to reach them.
+                        BarricadeKind::Concrete | BarricadeKind::DeadCar | BarricadeKind::BarbedWire => {}
                         _ if d_b < 4.2 => {
                             b.shoved = true;
                             b.hp = 0.0;
@@ -5555,14 +5609,23 @@ impl WorldSim {
                 }
             } else {
                 let pd = tat.dist(self.player_at);
+                // A crew finds a person by the same light as a soldier with a night
+                // sight: 55 m in the dark, less standing still, less in fog, further
+                // when you fire. No sourced figure for Russian vehicle thermals yet,
+                // so this is play. Indoors it finds you only once infantry have.
+                let fog_mul = (1.0 - self.fog_density.clamp(0.0, 1.0) * forces.num_or("infantry_group", "fog_sight_penalty_optics", 0.35)).max(0.0);
+                let mut see_m = forces.sight(light, true) * exposure(self.player_gait, self.body.sheltered) * fog_mul;
+                if self.gunfire_reveal_timer > 0.0 {
+                    see_m = see_m.max(forces.num_or("infantry_group", "gunfire_reveal_m", 78.0) * fog_mul);
+                }
+                let seen_by_infantry = self.under_fire_for > 0.2;
+                let player_exposed = if self.active_interior.is_some() { seen_by_infantry } else { pd <= see_m || seen_by_infantry };
                 if pd <= v_range
+                    && player_exposed
                     && best_target.as_ref().is_none_or(|b| pd < b.5)
                     && clear_veh_los(tat, self.player_at)
                 {
-                    let player_exposed = self.active_interior.is_none() || self.under_fire_for > 0.2 || pd <= 45.0;
-                    if player_exposed {
-                        best_target = Some((self.player_at, player_floor, true, None, None, pd));
-                    }
+                    best_target = Some((self.player_at, player_floor, true, None, None, pd));
                 }
                 for (mi, m) in self.militia.iter().enumerate() {
                     if m.hp <= 0.0 || m.downed {
@@ -5651,7 +5714,18 @@ impl WorldSim {
                     let want = tat.add(d.norm().mul(v_spd * dt));
                     let next_pos = ground.step(tat, want, 0.85);
                     let blocked_wreck = self.wrecks.iter().any(|w| w.at.dist(next_pos) < 3.4);
-                    if !blocked_wreck && next_pos.dist(tat) > 0.05 * dt {
+                    if blocked_wreck || next_pos.dist(tat) <= 0.05 * dt {
+                        // A wreck in the way or a wall the route cuts through: back up
+                        // the way it came rather than wait for the rest of the night.
+                        self.tanks[ti].stuck_t += dt;
+                        if self.tanks[ti].stuck_t > 3.0 {
+                            let t = &mut self.tanks[ti];
+                            t.stuck_t = 0.0;
+                            t.wp_dir = -t.wp_dir;
+                            t.wp_idx = (t.wp_idx as isize + t.wp_dir).clamp(0, t.waypoints.len() as isize - 1) as usize;
+                        }
+                    } else {
+                        self.tanks[ti].stuck_t = 0.0;
                         self.tanks[ti].hull_yaw = d.y.atan2(d.x);
                         self.tanks[ti].at = next_pos;
                         let dir = d.norm();
@@ -5726,6 +5800,9 @@ impl WorldSim {
         out: &mut TickOutput,
     ) {
         out.explosions.push(ExplosionFx { at, radius });
+        // Cover as it was before this blast: its own crater must not shelter anyone from it.
+        let player_defilade = self.defilade_blast_mul(self.player_at);
+        let militia_defilade: Vec<f32> = self.militia.iter().map(|m| self.defilade_blast_mul(m.at)).collect();
         self.shatter_windows_near(at, 18.0, out);
         if target_floor == 0 && radius >= 4.5 && !self.interiors.iter().any(|it| it.contains(at)) {
             self.push_crater(at, radius * 0.42);
@@ -5763,7 +5840,7 @@ impl WorldSim {
                 player_floor != target_floor && self.interiors[i].is_slab_intact(player_floor.max(target_floor), at)
             });
             let indoor_mul = self.active_interior.map(|i| self.interiors[i].blocks_mortar(self.player_at));
-            let concrete_mul = self.defilade_blast_mul(self.player_at);
+            let concrete_mul = player_defilade;
             let dmg = if shielded_by_slab {
                 0.0
             } else if use_mortar_table {
@@ -5774,8 +5851,14 @@ impl WorldSim {
                 };
                 raw * concrete_mul
             } else if d < radius {
-                let cover = if player_floor == target_floor && self.body.sheltered { 0.45 } else { 1.0 };
-                raw_dmg * cover * concrete_mul
+                let same_room = self.active_interior.is_some_and(|i| self.interiors[i].contains(at));
+                let shelter = match indoor_mul {
+                    Some(walls) if !same_room => walls,
+                    _ if player_floor == target_floor && self.body.sheltered => 0.45,
+                    _ => 1.0,
+                };
+                let falloff = (1.0 - (d / radius.max(0.5)) * 0.5).clamp(0.3, 1.0);
+                raw_dmg * shelter * falloff * concrete_mul
             } else {
                 0.0
             };
@@ -5798,7 +5881,7 @@ impl WorldSim {
             let m_at = self.militia[mi].at;
             let m_floor = self.militia[mi].floor;
             if m_floor == target_floor && m_at.dist(at) <= radius * 0.78 {
-                let bmul = self.defilade_blast_mul(m_at);
+                let bmul = militia_defilade.get(mi).copied().unwrap_or(1.0);
                 let falloff = (1.0 - (m_at.dist(at) / radius.max(0.5)) * 0.5).clamp(0.3, 1.0);
                 self.damage_militia(mi, raw_dmg.max(60.0) * bmul * falloff);
             }
@@ -7735,5 +7818,260 @@ mod tests {
         sim.tick(&city, &ground, &forces, &inp, 0.25);
         assert!(!sim.sleeping);
         assert!(matches!(sim.woke, Some(WakeReason::Enemy) | Some(WakeReason::Noise) | Some(WakeReason::Hurt)), "{:?}", sim.woke);
+    }
+
+    fn russian_tank_at(sim: &mut WorldSim, forces: &Forces, at: P2) -> usize {
+        let before = sim.tanks.len();
+        sim.spawn_tank_wave_at(VehicleKind::T72B3, at, forces);
+        let mine = sim.tanks.pop().unwrap();
+        sim.tanks.truncate(before);
+        sim.tanks.push(mine);
+        let ti = sim.tanks.len() - 1;
+        sim.tank_wave_mask = u16::MAX;
+        let t = &mut sim.tanks[ti];
+        t.at = at;
+        t.waypoints = vec![at];
+        t.wp_idx = 0;
+        t.cannon_cd = 0.0;
+        t.mg_cd = 0.0;
+        ti
+    }
+
+    #[test]
+    fn a_fight_elsewhere_does_not_put_you_under_fire() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(21, 0);
+        sim.blackout = true;
+        let idx = sim.interiors.iter().position(|i| i.kind == InteriorKind::BasementShelter).unwrap();
+        sim.player_at = sim.interiors[idx].stove_at.unwrap();
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+        assert_eq!(sim.active_interior, Some(idx));
+        sim.squads.clear();
+        sim.tanks.clear();
+        sim.spawn_wait = 1.0e6;
+        // A squad 300 m away, fighting someone else.
+        let far = sim.player_at.add(P2::new(300.0, 0.0));
+        let mut sq = test_squad(far);
+        sq.state = SquadState::Engage;
+        sq.last_seen = far.add(P2::new(20.0, 0.0));
+        sim.squads.push(sq);
+        let hp = sim.body.hp;
+        sim.tank_wave_mask = u16::MAX;
+        for _ in 0..1200 {
+            sim.tanks.clear();
+            sim.squads[0].state = SquadState::Engage;
+            sim.squads[0].lost_for = 0.0;
+            sim.spawn_wait = 1.0e6;
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.25);
+        }
+        assert_eq!(sim.under_fire_for, 0.0, "nobody has seen you");
+        assert!(sim.lancet.as_ref().is_none_or(|l| l.target.dist(sim.player_at) > 20.0), "no Lancet comes for you");
+        assert!(sim.body.hp >= hp, "and nothing hits you: {} -> {}", hp, sim.body.hp);
+    }
+
+    /// A point on Central Street and a direction with a clear view (and clear
+    /// ground) for `len` metres.
+    fn open_street(city: &City, ground: &Ground, len: f32) -> (P2, P2) {
+        let interiors = WorldSim::new(city).interiors;
+        for dy in [0.0f32, 6.0, -6.0, 12.0, -12.0] {
+            let p = P2::new(-262.0, -322.0 + dy);
+            for k in 0..64 {
+                let a = k as f32 / 64.0 * std::f32::consts::TAU;
+                let d = P2::new(a.cos(), a.sin());
+                let far = p.add(d.mul(len));
+                let walk = ground.step(p, far, 0.85);
+                if ground.clear_line_with_interiors(&interiors, p, far, false) && walk.dist(far) < 0.5 {
+                    return (p, d);
+                }
+            }
+        }
+        panic!("no open line {len} m long near Central Street");
+    }
+
+    fn test_squad(at: P2) -> Squad {
+        Squad {
+            id: 77,
+            state: SquadState::Patrol,
+            route_idx: 0,
+            wp_idx: 0,
+            wp_dir: 1,
+            men: vec![Soldier {
+                id: 78,
+                at,
+                floor: 0,
+                facing: 0.0,
+                hp: 100.0,
+                optics: false,
+                shot_cd: 9.0,
+                speed: 0.0,
+                phase: 0.0,
+                in_cover: false,
+                vault_t: 0.0,
+                grenade_cd: 9.0,
+            }],
+            meter: 0.0,
+            last_seen: at,
+            lost_for: 0.0,
+            timer: 0.0,
+            ignore_for: 0.0,
+            held_at: at,
+            shouted: false,
+            hostile: false,
+            stuck_t: 0.0,
+            last_lead_at: at,
+        }
+    }
+
+    #[test]
+    fn armour_sees_by_the_light_and_not_into_rooms() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let (a, dir) = open_street(&city, &ground, 82.0);
+        let setup = |tank_m: f32| {
+            let mut sim = WorldSim::new(&city);
+            sim.hour = hm(22, 0);
+            sim.blackout = true;
+            sim.squads.clear();
+            sim.tanks.clear();
+            sim.player_at = a.add(dir.mul(10.0));
+            let ti = russian_tank_at(&mut sim, &forces, a.add(dir.mul(10.0 + tank_m)));
+            (sim, ti)
+        };
+        let run = |sim: &mut WorldSim| {
+            let mut aimed = false;
+            let id = sim.tanks[0].id;
+            for _ in 0..80 {
+                sim.squads.clear();
+                sim.tanks.retain(|t| t.id == id);
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput::default(), 0.125);
+                aimed |= sim.tanks.iter().any(|t| t.locked_target.is_some_and(|(p, _)| p.dist(sim.player_at) < 1.0));
+            }
+            aimed
+        };
+        let (mut far, _) = setup(70.0);
+        assert!(!run(&mut far), "a still figure 70 m away in the blackout is not seen");
+        assert!(far.body.hp >= 99.9);
+        let (mut near, _) = setup(20.0);
+        assert!(run(&mut near) || near.body.hp < 100.0, "at 20 m it is");
+
+        // Indoors, never seen: the crew does not shoot into the room.
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(22, 0);
+        sim.blackout = true;
+        sim.squads.clear();
+        sim.tanks.clear();
+        let idx = sim.interiors.iter().position(|i| i.kind == InteriorKind::PlayerHome).unwrap();
+        sim.player_at = sim.interiors[idx].front_door.inside;
+        let outside = sim.interiors[idx].front_door.outside;
+        let away = outside.sub(sim.player_at).norm();
+        russian_tank_at(&mut sim, &forces, outside.add(away.mul(18.0)));
+        assert!(!run(&mut sim), "a crew that cannot see you does not lock you");
+        assert!(sim.body.hp >= 99.9, "{}", sim.body.hp);
+    }
+
+    #[test]
+    fn concrete_holds_a_tank_for_seconds_not_one_tick() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(19, 0);
+        sim.squads.clear();
+        sim.tanks.clear();
+        sim.player_at = P2::new(-600.0, -600.0);
+        let at = P2::new(-262.0, -322.0);
+        let ti = russian_tank_at(&mut sim, &forces, at);
+        for (k, kind) in [BarricadeKind::Concrete, BarricadeKind::DeadCar, BarricadeKind::BarbedWire].into_iter().enumerate() {
+            sim.barricades.push(Barricade { at: at.add(P2::new(3.4, k as f32 * 0.01)), kind, yaw: 0.0, shoved: false, hp: kind.max_hp() });
+        }
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+        assert!(sim.barricades.iter().all(|b| !b.shoved), "3.4 m away nothing is flattened yet");
+        // Up against the concrete, a heavy tank takes 55 hp a second off it.
+        sim.barricades.retain(|b| b.kind == BarricadeKind::Concrete);
+        sim.barricades[0].at = at.add(P2::new(2.0, 0.0));
+        let id = sim.tanks[ti].id;
+        for _ in 0..20 {
+            sim.tanks.retain(|t| t.id == id);
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+        }
+        let b = &sim.barricades[0];
+        assert!(!b.shoved && (b.hp - (240.0 - 110.0)).abs() < 12.0, "two seconds against it: {} hp left", b.hp);
+    }
+
+    #[test]
+    fn fires_burn_down_and_a_knocked_barrel_goes_out() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let mut sim = WorldSim::new(&city);
+        sim.add_fire(P2::new(0.0, 0.0), MOLOTOV_FIRE_S);
+        sim.add_fire(P2::new(5.0, 0.0), f32::INFINITY);
+        sim.barricades.push(Barricade { at: P2::new(5.0, 0.0), kind: BarricadeKind::FireBarrel, yaw: 0.0, shoved: false, hp: 40.0 });
+        sim.step_fires(MOLOTOV_FIRE_S - 1.0);
+        assert_eq!(sim.fire_barrels.len(), 2);
+        sim.step_fires(2.0);
+        assert_eq!(sim.fire_barrels, vec![P2::new(5.0, 0.0)], "the Molotov has burnt out");
+        sim.barricades[0].shoved = true;
+        sim.step_fires(0.1);
+        assert!(sim.fire_barrels.is_empty(), "the knocked-over barrel is out");
+    }
+
+    #[test]
+    fn a_blast_falls_off_and_the_basement_walls_take_it() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let hurt_at = |d: f32| {
+            let mut sim = WorldSim::new(&city);
+            sim.player_at = P2::new(-600.0, -600.0);
+            let mut out = TickOutput::default();
+            sim.explode_at_floor(sim.player_at.add(P2::new(d, 0.0)), 0, 6.0, 40.0, 0.0, false, &forces, false, &mut out);
+            100.0 - sim.body.hp
+        };
+        let close = hurt_at(0.5);
+        let edge = hurt_at(5.5);
+        assert!(close > 35.0 && edge < close * 0.6, "close {close}, edge {edge}");
+
+        let mut sim = WorldSim::new(&city);
+        let idx = sim.interiors.iter().position(|i| i.kind == InteriorKind::BasementShelter).unwrap();
+        sim.player_at = sim.interiors[idx].stove_at.unwrap();
+        sim.active_interior = Some(idx);
+        let outside = sim.interiors[idx].front_door.outside;
+        let mut out = TickOutput::default();
+        let d = outside.dist(sim.player_at);
+        sim.explode_at_floor(outside, 0, d + 1.0, 60.0, 0.0, false, &forces, false, &mut out);
+        assert!(sim.body.hp > 85.0, "the basement walls take most of a Lancet in the street: {}", sim.body.hp);
+    }
+
+    #[test]
+    fn a_vehicle_blocked_by_a_wreck_turns_back() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(19, 0);
+        sim.squads.clear();
+        sim.tanks.clear();
+        sim.player_at = P2::new(-600.0, -600.0);
+        let (a, dir) = open_street(&city, &ground, 62.0);
+        let ti = russian_tank_at(&mut sim, &forces, a);
+        sim.tanks[ti].waypoints = vec![a, a.add(dir.mul(60.0))];
+        sim.tanks[ti].wp_idx = 1;
+        // A wreck 6 m up the road.
+        let wreck_ti = russian_tank_at(&mut sim, &forces, a.add(dir.mul(6.0)));
+        let dead = sim.tanks.remove(wreck_ti);
+        sim.push_wreck(dead);
+        let id = sim.tanks[0].id;
+        let mut turned = false;
+        for _ in 0..80 {
+            sim.squads.clear();
+            sim.tanks.retain(|t| t.id == id);
+            sim.spawn_wait = 1.0e6;
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+            turned |= sim.tanks[0].wp_dir == -1;
+        }
+        assert!(turned, "after three seconds against the wreck it turns round");
     }
 }
