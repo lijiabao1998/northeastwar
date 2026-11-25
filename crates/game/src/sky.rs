@@ -102,11 +102,12 @@ pub fn apply(
     glow: Option<Res<GlowMaterials>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     (cutaway, gfx): (Option<Res<crate::Cutaway>>, Res<crate::graphics::Graphics>),
-    (mut last, mut lamps_were_on, mut blackout_was, mut ghost_state, mut last_fog): (
+    (mut last, mut lamps_were_on, mut blackout_was, mut ghost_state, mut last_fog, mut last_cloud): (
         Local<f32>,
         Local<Option<bool>>,
         Local<Option<bool>>,
         Local<Option<u8>>,
+        Local<f32>,
         Local<f32>,
     ),
 ) {
@@ -116,11 +117,13 @@ pub fn apply(
         && *lamps_were_on == Some(lamp_on)
         && *blackout_was == Some(clock.blackout)
         && (clock.fog - *last_fog).abs() < 0.01
+        && (clock.overcast - *last_cloud).abs() < 0.01
     {
         return;
     }
     *last = clock.hour;
     *last_fog = clock.fog;
+    *last_cloud = clock.overcast;
     let (elevation, azimuth) = sun(clock.hour);
     let dark = night(clock.hour);
     let (light, transform) = &mut *sun_light;
@@ -149,6 +152,15 @@ pub fn apply(
     ambient.brightness = 1_400.0 * (1.6f32 / 1_400.0).powf(dark);
     exposure.ev100 = 10.7 - 6.3 * dark;
     clear.0 = Color::srgb(0.56, 0.68, 0.84).mix(&Color::srgb(0.015, 0.02, 0.05), dark);
+    // Under rain cloud the sun is a fifth as bright and casts almost no shadow; the
+    // light comes from the whole grey sky, and the eye opens a little for it.
+    let cloud = clock.overcast.clamp(0.0, 1.0);
+    if cloud > 0.0 {
+        light.illuminance *= 1.0 - 0.8 * cloud;
+        ambient.color = ambient.color.mix(&Color::srgb(0.72, 0.74, 0.78), cloud);
+        exposure.ev100 -= 0.7 * cloud * (1.0 - dark);
+        clear.0 = clear.0.mix(&Color::srgb(0.60, 0.62, 0.66).mix(&Color::srgb(0.015, 0.02, 0.05), dark), cloud);
+    }
 
     // The lamps are hidden by day rather than dimmed to nothing: a light of zero
     // intensity is still clustered and still shaded in every pixel it reaches, which

@@ -878,7 +878,7 @@ struct InteriorPlan {
     frames: u32,
 }
 
-const INTERIOR_NAMES: [&str; 8] = [
+const INTERIOR_NAMES: [&str; 14] = [
     "01_shop_interior_lit",
     "02_blackout_ambush_indoor",
     "03_player_home_stove",
@@ -887,6 +887,12 @@ const INTERIOR_NAMES: [&str; 8] = [
     "06_march_five_pm",
     "07_curfew_order",
     "08_days_passing",
+    "09_april_thaw_street",
+    "10_may_river_open",
+    "11_july_noon_street",
+    "12_july_rain_river",
+    "13_october_street",
+    "14_november_freeze_up",
 ];
 
 fn retarget_interior(mut commands: Commands, seed: Option<Res<InteriorPlanSeed>>) {
@@ -1214,6 +1220,54 @@ fn configure_interior_scene(
             clock.blackout = true;
             clock.fog = 0.0;
             (pat, 1.0, Vec::new())
+        }
+        8..=13 => {
+            // The seasons, on Zhongyang Street and on the bank: 20 April (the snow
+            // gone, the ice still in), 15 May (the river open, the first leaves),
+            // 10 July at noon, 12 July in the rain, 5 October (the leaves turned),
+            // 25 November (a week after freeze-up). Days counted from 17 January.
+            let street = P2::new(-262.0, -322.0);
+            let spawn = heihe.city.spawn;
+            let bank = P2::new(spawn.x, heihe.city.bank_y(spawn.x) - 7.0);
+            let (day, at_hour, weather, pat, zoom) = match idx {
+                8 => (93.0, hm(13, 0), Weather::Clear, street, 1.0),
+                9 => (118.0, hm(11, 0), Weather::Clear, bank, 0.75),
+                10 => (174.0, hm(12, 30), Weather::Clear, street, 1.0),
+                11 => (176.0, hm(15, 0), Weather::Rain, bank, 0.75),
+                12 => (261.0, hm(14, 0), Weather::Clear, street, 1.0),
+                _ => (312.0, hm(13, 0), Weather::Clear, bank, 0.75),
+            };
+            sim.hour = sim::survival::DAWN_HOUR + 0.001;
+            let still = sim::survival::SimInput { clock_running: true, ..Default::default() };
+            sim.tick(&heihe.city, &heihe.ground, forces, &still, 0.05);
+            sim.sms = None;
+            sim.hour = 24.0 * day + at_hour;
+            sim.mornings = day as u32;
+            sim.assault_over = true;
+            sim.order_posted = true;
+            sim.active_interior = None;
+            sim.cutaway_interior = None;
+            sim.passing = false;
+            sim.sleeping = false;
+            sim.body.asleep = false;
+            sim.blackout = true;
+            sim.weather_override = Some(weather);
+            sim.weather = weather;
+            sim.fog_density = 0.0;
+            sim.tracks.clear();
+            sim.player_floor = 0;
+            sim.player_at = pat;
+            sim.player_facing = 1.9;
+            sim.player_anim = AnimState::Idle;
+            sim.squads.clear();
+            sim.tanks.clear();
+            sim.subtitle_ttl = 0.0;
+
+            clock.hour = sim.hour;
+            clock.speed = 1.0;
+            clock.blackout = true;
+            clock.fog = 0.0;
+            (pat, zoom, Vec::new())
         }
         _ => {
             // 05: asleep in the basement shelter at 22:00 on 18 January.

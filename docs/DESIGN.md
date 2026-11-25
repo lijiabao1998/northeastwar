@@ -81,7 +81,7 @@ Order revised on 25 November, after the owner set one month to four years as the
 
 1. L1's second half: save and load, game states, on-screen text out of the world state. Save and load done on 25 November (`docs/rust-l1b-receipt.md`).
 2. **Days that pass at a glance:** routines, the day-level model and what stops it, checked against the real-time sim. Done on 25 November (`crates/sim/src/routine.rs`, same receipt); choosing a routine and going out as part of one are still to come.
-3. **The seasons:** the thaw and the river, spring, summer, autumn and the next winter, in the rules and on screen.
+3. **The seasons:** the thaw and the river, spring, summer, autumn and the next winter, in the rules and on screen. Done on 25 November (`docs/rust-seasons-receipt.md`): the river's ice, snow and rain in the rules; the town redrawn in each season's colours, read from photographs (`docs/research/seasons-look.md`). Summer clothing and heat, wet roads and grey water under cloud are still to come.
 4. L3's second part, L4, then L5 stretched from months to years.
 5. L6, endings, and the war's own course over four years, from new research on long occupations (Crimea and Donbas since 2014, Melitopol since 2022).
 

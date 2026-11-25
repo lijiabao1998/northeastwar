@@ -1338,6 +1338,7 @@ pub fn step_play(
         clock.hour = state.sim.hour;
         clock.blackout = state.sim.blackout;
         clock.fog = state.sim.fog_density;
+        clock.overcast = overcast(state.sim.weather);
         return;
     }
 
@@ -1414,6 +1415,7 @@ pub fn step_play(
     clock.hour = play.sim.hour;
     clock.blackout = play.sim.blackout;
     clock.fog = play.sim.fog_density;
+    clock.overcast = overcast(play.sim.weather);
 
     if fx.footstep {
         audio_q.footstep = Some(input.sprinting);
@@ -2360,6 +2362,12 @@ pub fn sync_actors(
     prune_pool(&mut commands, &mut pools.danger_rings, &seen_danger);
 }
 
+/// Rain falls from a sky that hides the sun. The winter's flurries and river fog
+/// keep the light they were drawn with.
+fn overcast(w: Weather) -> f32 {
+    if w == Weather::Rain { 1.0 } else { 0.0 }
+}
+
 pub fn sync_fx(
     mut commands: Commands,
     time: Res<Time>,
@@ -2380,7 +2388,9 @@ pub fn sync_fx(
             commands.entity(e).despawn();
         }
     }
-    let show_snow = play.as_deref().is_some_and(|p| p.started && !matches!(p.sim.weather, Weather::Clear | Weather::Rain));
+    let show_snow = play.as_deref().is_some_and(|p| p.started && !matches!(p.sim.weather, Weather::Clear));
+    // The same flakes, in summer rain: long streaks that fall several times faster and straight.
+    let rain = play.as_deref().is_some_and(|p| p.sim.weather == Weather::Rain);
     let paused = play.as_deref().is_some_and(|p| p.paused);
     let px = player.at.x;
     let pz = -player.at.y;
@@ -2390,10 +2400,15 @@ pub fn sync_fx(
             continue;
         }
         *vis = Visibility::Inherited;
+        tf.scale = if rain { Vec3::new(0.35, 7.0, 0.35) } else { Vec3::ONE };
         if !paused {
-            sp.offset.y -= sp.speed * dt;
-            sp.offset.x += (time.elapsed_secs() * 1.4 + sp.phase).sin() * 0.9 * dt;
-            sp.offset.z += 0.65 * dt;
+            if rain {
+                sp.offset.y -= sp.speed * 4.0 * dt;
+            } else {
+                sp.offset.y -= sp.speed * dt;
+                sp.offset.x += (time.elapsed_secs() * 1.4 + sp.phase).sin() * 0.9 * dt;
+                sp.offset.z += 0.65 * dt;
+            }
             if sp.offset.y < 0.1 {
                 sp.offset.y = 22.0;
             }
@@ -2471,7 +2486,8 @@ pub fn sync_hud(
             HudRole::TopRight => {
                 *vis = if active && !s.dead { Visibility::Inherited } else { Visibility::Hidden };
                 let wx_tag = match s.weather {
-                    Weather::Clear => "晴冷",
+                    Weather::Clear if s.outdoor_c() < 0.0 => "晴冷",
+                    Weather::Clear => "晴",
                     Weather::Flurries => "小雪飘扬",
                     Weather::RiverFog => "江雾弥漫",
                     Weather::Rain => "下雨",
