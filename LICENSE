@@ -12,5 +12,4 @@ The Noto fonts under assets/fonts/ are not covered by this proprietary
 license. They are licensed under the SIL Open Font License 1.1. See
 assets/fonts/OFL.txt.
 
-Godot Engine is licensed under the MIT License. This project is not
-affiliated with the Godot Engine authors.
+Bevy Engine is dual-licensed under the MIT License and Apache License 2.0. This project is not affiliated with the Bevy Engine authors.
