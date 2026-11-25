@@ -1,0 +1,70 @@
+northeast --bench, release build, 3200 x 1800 physical pixels.
+Settings (graphics.rs): MSAA Off, shadows Gaussian, ghost unlit, lamps one per post.
+GPU features: timestamps yes, timestamps inside passes yes, multi-draw indirect count yes, depth clip control yes
+3 counted rounds of 40 frames per variant, after 20 to settle. Medians in ms. main: First to Last on the main thread; render: the render thread's Render schedule (encoding, submitting, presenting); GPU: the sum of top-level passes by GPU timestamps (MSAA resolves and the swap chain are outside them).
+
+01_central_street_noon (zoom 1, 12.5 h)
+  variant              frame          per round   main render    GPU   GPU passes
+  as set                18.7     18.3 19.4 18.9    2.7   17.9   16.4   main_opaque_pass_3d 13.65, main_transparent_pass_3d 1.47, upscaling 0.92, clustering 0.22
+  MSAA x4               19.6     19.3 20.6 19.0    2.7   18.6   14.5   main_opaque_pass_3d 11.70, main_transparent_pass_3d 1.47, upscaling 0.92, clustering 0.21
+  hard shadows          15.0     14.7 17.8 14.9    2.9   14.0   12.9   main_opaque_pass_3d 10.21, main_transparent_pass_3d 1.46, upscaling 0.85, clustering 0.20
+  lamps hidden          16.6     16.3 16.3 17.0    3.0   15.7   14.3   main_opaque_pass_3d 11.45, main_transparent_pass_3d 1.48, upscaling 0.92, clustering 0.22
+  near plane 1 m        16.9     17.0 17.3 16.9    3.0   16.0   14.3   main_opaque_pass_3d 11.46, main_transparent_pass_3d 1.49, upscaling 0.92, clustering 0.22
+  ghost lit             19.7     19.7 21.1 19.1    3.1   18.6   17.6   main_opaque_pass_3d 11.45, main_transparent_pass_3d 5.04, upscaling 0.88, clustering 0.21
+  buildings merged      24.6     24.1 26.4 25.6    2.9   23.5   19.8   main_opaque_pass_3d 18.72, upscaling 1.07, clustering 0.20
+  half width+height      8.4       6.9 9.0 15.8    3.9    7.3    4.8   main_opaque_pass_3d 3.82, main_transparent_pass_3d 0.40, upscaling 0.25, clustering 0.22
+
+03_housing_noon (zoom 0.8, 13.5 h)
+  variant              frame          per round   main render    GPU   GPU passes
+  as set                24.0     21.6 25.6 24.0    3.3   22.0   20.9   main_opaque_pass_3d 18.98, upscaling 1.49, clustering 0.22, main_transparent_pass_3d 0.15
+  MSAA x4               23.0     26.5 22.6 22.8    3.0   21.8   17.4   main_opaque_pass_3d 15.52, upscaling 1.25, clustering 0.22, main_transparent_pass_3d 0.15
+  hard shadows          17.8     17.7 18.0 17.8    2.9   16.8   15.2   main_opaque_pass_3d 13.31, upscaling 1.30, clustering 0.22, main_transparent_pass_3d 0.14
+  lamps hidden          20.1     36.7 19.4 19.6    3.0   19.2   16.7   main_opaque_pass_3d 15.14, upscaling 1.34, clustering 0.22, main_transparent_pass_3d 0.10
+  near plane 1 m        20.0     22.2 19.6 19.0    3.1   18.3   16.9   main_opaque_pass_3d 15.38, upscaling 1.33, clustering 0.22
+  ghost lit             18.6     15.1 18.8 19.5    3.0   17.1   16.6   main_opaque_pass_3d 14.83, upscaling 1.33, clustering 0.22
+  buildings merged      29.0     27.4 28.1 29.7    3.1   27.6   23.1   main_opaque_pass_3d 21.09, upscaling 1.48, clustering 0.22, main_transparent_pass_3d 0.15
+  half width+height      9.5      10.5 10.7 8.7    4.3    8.4    5.6   main_opaque_pass_3d 4.80, upscaling 0.27, clustering 0.23
+
+06_whole_town (zoom 0.14, 13.0 h)
+  variant              frame          per round   main render    GPU   GPU passes
+  as set                32.6     33.8 33.8 30.4    4.9   30.5   22.9   main_opaque_pass_3d 20.87, upscaling 1.42, clustering 0.24, main_transparent_pass_3d 0.12
+  MSAA x4               43.2    293.5 35.7 31.8    3.8   42.2   23.8   main_opaque_pass_3d 21.10, upscaling 1.35, clustering 0.24, main_transparent_pass_3d 0.13
+  hard shadows          34.7    223.3 30.8 26.6    4.3   33.0   19.2   main_opaque_pass_3d 17.25, upscaling 1.42, clustering 0.24
+  lamps hidden          27.1     31.2 27.1 26.6    3.7   24.7   21.3   main_opaque_pass_3d 19.35, upscaling 1.39, clustering 0.24
+  near plane 1 m        27.8     32.3 27.9 26.2    4.1   25.5   20.6   main_opaque_pass_3d 18.51, upscaling 1.37, clustering 0.24
+  ghost lit             30.6     67.2 25.5 26.0    4.2   28.3   20.9   main_opaque_pass_3d 18.97, upscaling 1.39, clustering 0.24, main_transparent_pass_3d 0.14
+  buildings merged      32.7     37.5 29.1 32.3    4.0   30.7   24.2   main_opaque_pass_3d 22.28, upscaling 1.30, clustering 0.23
+  half width+height     10.5       38.4 9.5 9.8    4.3    9.2    7.1   main_opaque_pass_3d 6.31, upscaling 0.26, clustering 0.22
+
+08_housing_night (zoom 0.8, 18.8 h)
+  variant              frame          per round   main render    GPU   GPU passes
+  as set                32.1     32.4 32.1 32.3    3.7   31.0   28.7   main_opaque_pass_3d 27.22, upscaling 1.13, clustering 0.24, main_transparent_pass_3d 0.17
+  MSAA x4               29.8     27.7 30.5 29.3    2.9   28.9   23.7   main_opaque_pass_3d 22.15, upscaling 1.23, clustering 0.23, main_transparent_pass_3d 0.16
+  hard shadows          24.6     33.1 24.3 23.2    3.1   23.5   20.9   main_opaque_pass_3d 19.18, upscaling 1.12, clustering 0.23, main_transparent_pass_3d 0.15
+  lamps hidden          20.6     32.1 19.3 20.0    3.3   19.3   17.0   main_opaque_pass_3d 15.37, upscaling 1.12, clustering 0.23, main_transparent_pass_3d 0.15
+  near plane 1 m        28.4     30.0 27.6 29.5    3.6   27.3   24.9   main_opaque_pass_3d 22.83, upscaling 1.33, clustering 0.23, main_transparent_pass_3d 0.18
+  ghost lit             26.5     26.6 25.9 27.0    4.3   25.2   23.5   main_opaque_pass_3d 21.40, upscaling 1.30, clustering 0.25, main_transparent_pass_3d 0.17
+  buildings merged      39.1     39.2 33.3 42.2    3.4   37.9   32.3   main_opaque_pass_3d 30.39, upscaling 1.12, clustering 0.24, main_transparent_pass_3d 0.17
+  half width+height     10.2      9.5 10.2 10.5    4.0    9.0    8.0   main_opaque_pass_3d 7.26, upscaling 0.30, clustering 0.24
+
+09_central_street_night (zoom 0.6, 18.8 h)
+  variant              frame          per round   main render    GPU   GPU passes
+  as set                26.0     26.1 26.2 25.8    3.0   25.2   23.6   main_opaque_pass_3d 20.70, main_transparent_pass_3d 1.59, upscaling 0.97, clustering 0.22
+  MSAA x4               29.7     29.4 30.5 29.7    2.8   28.9   24.8   main_opaque_pass_3d 21.72, main_transparent_pass_3d 1.64, upscaling 0.94, clustering 0.22
+  hard shadows          23.8     23.8 23.8 24.1    2.8   23.0   21.5   main_opaque_pass_3d 18.81, main_transparent_pass_3d 1.59, upscaling 0.79, clustering 0.21
+  lamps hidden          20.8     23.8 20.2 20.4    3.0   20.0   18.2   main_opaque_pass_3d 15.20, main_transparent_pass_3d 1.61, upscaling 0.97, clustering 0.21
+  near plane 1 m        27.8     28.4 27.5 27.8    3.2   26.8   25.0   main_opaque_pass_3d 21.93, main_transparent_pass_3d 1.61, upscaling 1.06, clustering 0.23
+  ghost lit             30.6     30.3 30.3 32.1    3.0   29.7   28.2   main_opaque_pass_3d 21.01, main_transparent_pass_3d 5.96, upscaling 0.96, clustering 0.22
+  buildings merged      32.8     32.2 32.6 37.1    3.0   32.0   28.2   main_opaque_pass_3d 26.87, upscaling 0.96, clustering 0.22
+  half width+height      8.9        8.6 8.8 9.3    2.3    8.1    6.8   main_opaque_pass_3d 5.71, main_transparent_pass_3d 0.44, upscaling 0.24, clustering 0.22
+
+10_shop_boards_close (zoom 2.2, 13.0 h)
+  variant              frame          per round   main render    GPU   GPU passes
+  as set                23.9     24.4 17.0 24.9    2.8   23.0   22.1   main_opaque_pass_3d 20.61, upscaling 0.84, main_transparent_pass_3d 0.24, clustering 0.21
+  MSAA x4               15.1     15.8 13.8 15.6    2.6   14.2   11.2   main_opaque_pass_3d 9.85, upscaling 0.69, main_transparent_pass_3d 0.22, clustering 0.18
+  hard shadows          12.5     12.5 13.3 11.5    2.6   11.6   10.6   main_opaque_pass_3d 9.19, upscaling 0.77, main_transparent_pass_3d 0.22, clustering 0.19
+  lamps hidden          13.6     13.7 14.4 11.9    2.6   12.8   11.7   main_opaque_pass_3d 10.38, upscaling 0.76, main_transparent_pass_3d 0.22, clustering 0.19
+  near plane 1 m        14.1     14.7 14.5 12.0    2.6   13.3   12.5   main_opaque_pass_3d 11.15, upscaling 0.77, main_transparent_pass_3d 0.24, clustering 0.20
+  ghost lit             14.1     14.4 14.5 12.1    2.8   13.1   12.5   main_opaque_pass_3d 11.15, upscaling 0.77, main_transparent_pass_3d 0.24, clustering 0.19
+  buildings merged      26.9     27.0 27.1 24.9    3.0   25.9   22.7   main_opaque_pass_3d 21.31, upscaling 0.93, main_transparent_pass_3d 0.24, clustering 0.20
+  half width+height      7.4        7.8 4.6 8.5    2.7    6.4    6.2   main_opaque_pass_3d 5.52, upscaling 0.22, clustering 0.20

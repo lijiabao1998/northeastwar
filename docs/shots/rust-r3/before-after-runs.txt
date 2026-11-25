@@ -1,0 +1,72 @@
+## r2 run 1
+01_central_street_noon       mean   34.2 ms  p95   61.8 ms  over 24 frames
+02_central_street_wide       mean   41.9 ms  p95   72.1 ms  over 24 frames
+03_housing_noon              mean   47.5 ms  p95   66.9 ms  over 24 frames
+04_mother_square             mean   35.4 ms  p95   73.7 ms  over 24 frames
+05_river_and_far_bank        mean   34.8 ms  p95   59.2 ms  over 24 frames
+06_whole_town                mean   56.3 ms  p95  105.2 ms  over 24 frames
+07_central_street_dusk       mean   45.8 ms  p95  103.4 ms  over 24 frames
+08_housing_night             mean   46.7 ms  p95   74.7 ms  over 24 frames
+09_central_street_night      mean   39.5 ms  p95   56.6 ms  over 24 frames
+10_shop_boards_close         mean   62.3 ms  p95  112.7 ms  over 24 frames
+11_shop_boards_night         mean   46.2 ms  p95   66.4 ms  over 24 frames
+## r2 run 2
+01_central_street_noon       mean   36.2 ms  p95   52.4 ms  over 24 frames
+02_central_street_wide       mean   44.4 ms  p95   68.0 ms  over 24 frames
+03_housing_noon              mean   47.4 ms  p95   64.2 ms  over 24 frames
+04_mother_square             mean   32.9 ms  p95  102.8 ms  over 24 frames
+05_river_and_far_bank        mean   37.5 ms  p95   51.6 ms  over 24 frames
+06_whole_town                mean   59.2 ms  p95   69.5 ms  over 24 frames
+07_central_street_dusk       mean   40.0 ms  p95   81.0 ms  over 24 frames
+08_housing_night             mean   47.3 ms  p95   57.2 ms  over 24 frames
+09_central_street_night      mean   43.0 ms  p95   68.5 ms  over 24 frames
+10_shop_boards_close         mean   54.7 ms  p95   88.6 ms  over 24 frames
+11_shop_boards_night         mean   47.6 ms  p95   62.6 ms  over 24 frames
+## r2 run 3
+01_central_street_noon       mean   34.8 ms  p95   36.8 ms  over 24 frames
+02_central_street_wide       mean   46.3 ms  p95   54.2 ms  over 24 frames
+03_housing_noon              mean   46.0 ms  p95   55.6 ms  over 24 frames
+04_mother_square             mean   30.6 ms  p95   59.5 ms  over 24 frames
+05_river_and_far_bank        mean   48.5 ms  p95  155.9 ms  over 24 frames
+06_whole_town                mean  106.9 ms  p95  199.7 ms  over 24 frames
+07_central_street_dusk       mean   53.8 ms  p95  112.5 ms  over 24 frames
+08_housing_night             mean   42.4 ms  p95   52.7 ms  over 24 frames
+09_central_street_night      mean   37.9 ms  p95   63.9 ms  over 24 frames
+10_shop_boards_close         mean   44.1 ms  p95   53.2 ms  over 24 frames
+11_shop_boards_night         mean   43.7 ms  p95   45.2 ms  over 24 frames
+## r3 run 1
+01_central_street_noon       mean   18.8 ms  p95   46.5 ms  over 24 frames
+02_central_street_wide       mean   15.7 ms  p95   22.2 ms  over 24 frames
+03_housing_noon              mean   16.0 ms  p95   32.3 ms  over 24 frames
+04_mother_square             mean   16.4 ms  p95   33.2 ms  over 24 frames
+05_river_and_far_bank        mean   21.0 ms  p95   38.8 ms  over 24 frames
+06_whole_town                mean   19.8 ms  p95   32.4 ms  over 24 frames
+07_central_street_dusk       mean   22.9 ms  p95   32.5 ms  over 24 frames
+08_housing_night             mean   18.9 ms  p95   27.8 ms  over 24 frames
+09_central_street_night      mean   18.7 ms  p95   25.8 ms  over 24 frames
+10_shop_boards_close         mean   13.3 ms  p95   16.2 ms  over 24 frames
+11_shop_boards_night         mean   18.4 ms  p95   27.0 ms  over 24 frames
+## r3 run 2
+01_central_street_noon       mean   14.7 ms  p95   18.3 ms  over 24 frames
+02_central_street_wide       mean   16.4 ms  p95   19.5 ms  over 24 frames
+03_housing_noon              mean   14.0 ms  p95   17.1 ms  over 24 frames
+04_mother_square             mean   22.6 ms  p95   56.9 ms  over 24 frames
+05_river_and_far_bank        mean   16.3 ms  p95   28.9 ms  over 24 frames
+06_whole_town                mean   19.2 ms  p95   40.3 ms  over 24 frames
+07_central_street_dusk       mean   22.0 ms  p95   29.5 ms  over 24 frames
+08_housing_night             mean   18.1 ms  p95   23.8 ms  over 24 frames
+09_central_street_night      mean   18.1 ms  p95   18.9 ms  over 24 frames
+10_shop_boards_close         mean   14.0 ms  p95   18.9 ms  over 24 frames
+11_shop_boards_night         mean   18.0 ms  p95   20.3 ms  over 24 frames
+## r3 run 3
+01_central_street_noon       mean   32.9 ms  p95   59.6 ms  over 24 frames
+02_central_street_wide       mean   18.5 ms  p95   49.8 ms  over 24 frames
+03_housing_noon              mean   27.9 ms  p95   51.4 ms  over 24 frames
+04_mother_square             mean   15.3 ms  p95   25.7 ms  over 24 frames
+05_river_and_far_bank        mean   20.1 ms  p95   45.7 ms  over 24 frames
+06_whole_town                mean   46.4 ms  p95  104.0 ms  over 24 frames
+07_central_street_dusk       mean  104.5 ms  p95  250.0 ms  over 24 frames
+08_housing_night             mean   34.5 ms  p95   95.8 ms  over 24 frames
+09_central_street_night      mean   23.3 ms  p95   51.7 ms  over 24 frames
+10_shop_boards_close         mean   18.7 ms  p95   43.3 ms  over 24 frames
+11_shop_boards_night         mean   20.7 ms  p95   37.4 ms  over 24 frames

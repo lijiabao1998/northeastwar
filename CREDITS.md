@@ -16,6 +16,14 @@ Game code, original audio, shaders and story text: © 2026 李家宝. All rights
 
 The slice is the Chinese riverfront around 中央街, 王肃街, 文化街, 海兰街, 兴安街, 官渡路 and 邮政路, plus the Amur (黑龙江) and the near skyline of Blagoveshchensk.
 
+## CMAB building outlines
+
+Zhang, Yecheng; Zhao, Huimin; Long, Ying (2024). *CMAB-The World's First National-Scale Multi-Attribute Building Dataset*, v7. figshare. Dataset. [doi:10.6084/m9.figshare.27992417.v7](https://doi.org/10.6084/m9.figshare.27992417.v7). [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+- Downloaded 2026-11-16: `heilongjiang.zip` (figshare file 53667566, 414,319,581 bytes, MD5 `1f21f2de9813547fef849bb26c13176b`, the same as published). The layer covering central Heihe is `processed_1809_20230514_all` (imagery of 2023-05-14). The download and the extracted layer stay in `data/raw/` and are not committed.
+- Changes made: cut to 127.4780-127.5110 E, 50.2420-50.2580 N (centre inside); reprojected from Web Mercator to the local metre grid above; rounded to centimetres (`tools/cmab/slice_heihe.py` writes `data/heihe/cmab.json`). Then, in the game (`crates/sim/src/cmab.rs`): every outline is moved 2 m west and 6 m north to sit on the OpenStreetMap map and simplified at 0.3 m; each outer ring becomes its own building and inner rings (yards, light wells) are filled; roofs that overlap OpenStreetMap buildings (30% either way), that a street or footpath runs through, on the river or the promenade, over a landmark, under 20 m2 or narrower than 2.8 m are left out; heights are turned into storeys as that file explains. CMAB's heights are also used to replace the guessed heights of OpenStreetMap buildings that one CMAB roof matches. See `docs/rust-r2-receipt.md`.
+- CMAB's outlines are traced from imagery; its heights and attributes are model estimates, not surveys.
+
 ## What is measured, what is estimated, what is dressing
 
 Measured from OSM, and kept:
@@ -29,7 +37,7 @@ Measured from OSM, and kept:
 
 Estimated, because the tags were not there:
 
-- Building height in the Chinese core. A count of the core bbox found building footprints and essentially no `building:levels` or `height`. Heights are guessed from footprint area: mostly 6–8 storey slabs, with a few mid-rises. The guess is tagged `height_source: estimated_from_footprint` in `city.json`. Where OSM did have levels (mostly Blagoveshchensk), those values are used.
+- Building height in the Chinese core. A count of the core bbox found building footprints and essentially no `building:levels` or `height`. Heights are guessed from footprint area: mostly 6–8 storey slabs, with a few mid-rises. The guess is tagged `height_source: estimated_from_footprint` in `city.json`. Where OSM did have levels (mostly Blagoveshchensk), those values are used. `city.json` itself is unchanged, but in the Rust build (from R2) the OSM buildings that one CMAB roof matches take CMAB's reading instead, the hashed towers no CMAB roof confirms are capped at 7 storeys, and the rest of the town comes from CMAB (see the CMAB section).
 - The memorial footprint had no levels. It is forced to two storeys because the 12 October 2025 street photo shows a two-storey facade. Tagged `poi_plus_reference_photo`.
 
 Dressing, not from a survey of each object:

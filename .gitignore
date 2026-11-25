@@ -15,3 +15,10 @@
 .idea/
 __pycache__/
 *.pyc
+
+# Rust
+/target/
+/out/
+/target-sim/
+/out-build.log
+/data/raw/

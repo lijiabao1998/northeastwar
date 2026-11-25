@@ -1,0 +1,101 @@
+northeast --bench, release build, 3200 x 1800 physical pixels.
+GPU features: timestamps yes, timestamps inside passes yes, multi-draw indirect count yes, depth clip control yes
+3 counted rounds of 40 frames per variant, after 20 to settle. Medians in ms; GPU is the sum of top-level passes.
+
+01_central_street_noon (zoom 1, 12.5 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             38.9       40.8 39.7 37.7    29.4   main_opaque_pass_3d 22.19, main_transparent_pass_3d 5.60, upscaling 1.25, clustering 0.23, ui 0.06, uniform_allocation 0.03
+  no MSAA                38.7      29.3 476.3 27.7    24.7   main_opaque_pass_3d 17.95, main_transparent_pass_3d 5.51, upscaling 0.88, clustering 0.24, ui 0.05, uniform_allocation 0.03
+  MSAA x2                35.4       56.0 35.1 31.7    25.2   main_opaque_pass_3d 18.27, main_transparent_pass_3d 5.58, upscaling 0.97, clustering 0.23, ui 0.06, uniform_allocation 0.03
+  no sun shadows         46.6       51.4 33.7 51.0    21.4   main_opaque_pass_3d 15.56, main_transparent_pass_3d 4.24, upscaling 1.28, clustering 0.25, ui 0.07, early_mesh_preprocessing 0.03
+  1-tap shadows          36.5       69.0 34.4 31.9    23.4   main_opaque_pass_3d 16.82, main_transparent_pass_3d 4.99, upscaling 1.26, clustering 0.24, ui 0.07, uniform_allocation 0.04
+  sun at moon angle      35.9       51.5 34.9 34.6    25.8   main_opaque_pass_3d 18.56, main_transparent_pass_3d 5.60, upscaling 1.25, clustering 0.23, ui 0.06, uniform_allocation 0.04
+  lamps hidden           32.5       63.0 31.2 27.6    18.8   main_opaque_pass_3d 11.98, main_transparent_pass_3d 5.13, upscaling 1.25, clustering 0.23, ui 0.06, uniform_allocation 0.04
+  windows cast none      35.1       39.3 36.5 33.6    25.7   main_opaque_pass_3d 18.51, main_transparent_pass_3d 5.59, upscaling 1.24, clustering 0.23, ui 0.06, uniform_allocation 0.04
+  no boards, speck       36.4       41.6 42.5 34.1    25.6   main_opaque_pass_3d 18.52, main_transparent_pass_3d 5.59, upscaling 1.24, clustering 0.23, ui 0.06, early_mesh_preprocessing 0.03
+  buildings merged       47.2       53.3 46.7 45.5    29.6   main_opaque_pass_3d 27.91, upscaling 1.23, clustering 0.23, ui 0.06, uniform_allocation 0.04, main_transparent_pass_3d 0.03
+  half width+height      22.8       23.4 17.4 45.5     8.3   main_opaque_pass_3d 6.15, main_transparent_pass_3d 1.47, upscaling 0.26, clustering 0.24, ui 0.05, uniform_allocation 0.04
+
+03_housing_noon (zoom 0.8, 13.5 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             42.2       42.3 43.0 41.6    35.2   main_opaque_pass_3d 33.65, upscaling 1.12, clustering 0.23, main_transparent_pass_3d 0.17, ui 0.06, uniform_allocation 0.04
+  no MSAA                30.4       28.8 30.8 31.4    27.4   main_opaque_pass_3d 25.82, upscaling 0.90, clustering 0.23, main_transparent_pass_3d 0.14, ui 0.05, uniform_allocation 0.04
+  MSAA x2                35.1       36.5 34.1 36.1    28.5   main_opaque_pass_3d 26.65, upscaling 1.05, clustering 0.23, main_transparent_pass_3d 0.17, ui 0.06, uniform_allocation 0.04
+  no sun shadows         29.7       29.7 28.6 32.7    23.8   main_opaque_pass_3d 21.98, upscaling 1.14, clustering 0.23, main_transparent_pass_3d 0.16, ui 0.06, early_mesh_preprocessing 0.03
+  1-tap shadows          34.3       34.1 32.7 35.8    26.1   main_opaque_pass_3d 24.27, upscaling 1.13, clustering 0.23, main_transparent_pass_3d 0.17, ui 0.06, uniform_allocation 0.04
+  sun at moon angle      38.0       37.4 36.1 39.8    29.7   main_opaque_pass_3d 27.91, upscaling 1.22, clustering 0.24, main_transparent_pass_3d 0.18, ui 0.06, uniform_allocation 0.04
+  lamps hidden           25.2       24.3 29.8 29.4    18.1   main_opaque_pass_3d 16.44, upscaling 1.22, clustering 0.23, main_transparent_pass_3d 0.14, ui 0.06, uniform_allocation 0.04
+  windows cast none      36.8       36.4 37.0 40.5    29.7   main_opaque_pass_3d 27.51, upscaling 1.24, clustering 0.24, main_transparent_pass_3d 0.18, ui 0.06, uniform_allocation 0.04
+  no boards, speck       35.2       34.6 35.9 40.3    30.0   main_opaque_pass_3d 28.50, upscaling 1.45, clustering 0.24, ui 0.06, early_mesh_preprocessing 0.03, uniform_allocation 0.02
+  buildings merged       51.5       49.8 53.9 53.5    39.3   main_opaque_pass_3d 37.52, upscaling 1.22, clustering 0.23, main_transparent_pass_3d 0.17, ui 0.06, uniform_allocation 0.04
+  half width+height      15.2       14.5 12.3 39.5     9.3   main_opaque_pass_3d 8.62, upscaling 0.25, clustering 0.23, main_transparent_pass_3d 0.08, ui 0.05, uniform_allocation 0.04
+
+04_mother_square (zoom 0.9, 12.0 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             41.4       34.3 42.1 43.6    14.0   main_opaque_pass_3d 11.83, upscaling 1.47, clustering 0.25, ui 0.08, uniform_allocation 0.04, main_transparent_pass_3d 0.04
+  no MSAA                19.6       14.9 28.4 22.0    14.0   main_opaque_pass_3d 11.96, upscaling 1.46, clustering 0.25, ui 0.06, uniform_allocation 0.04, early_mesh_preprocessing 0.03
+  MSAA x2                22.2       18.8 20.2 32.0    13.1   main_opaque_pass_3d 11.66, upscaling 1.04, clustering 0.24, ui 0.06, uniform_allocation 0.04, early_mesh_preprocessing 0.03
+  no sun shadows         19.6       14.3 22.0 32.9    10.8   main_opaque_pass_3d 9.17, upscaling 1.22, clustering 0.24, ui 0.06, main_transparent_pass_3d 0.03, early_mesh_preprocessing 0.03
+  1-tap shadows          20.4       18.7 21.6 22.6    12.1   main_opaque_pass_3d 10.39, upscaling 1.24, clustering 0.24, ui 0.06, uniform_allocation 0.04, main_transparent_pass_3d 0.04
+  sun at moon angle      21.4       19.0 22.0 24.6    13.1   main_opaque_pass_3d 11.61, upscaling 1.21, clustering 0.23, ui 0.06, uniform_allocation 0.04, main_transparent_pass_3d 0.03
+  lamps hidden           20.6       18.9 20.1 23.6    13.2   main_opaque_pass_3d 11.68, upscaling 1.14, clustering 0.23, ui 0.06, uniform_allocation 0.04, early_mesh_preprocessing 0.03
+  windows cast none      22.0       19.0 21.6 23.7    13.2   main_opaque_pass_3d 11.59, upscaling 1.11, clustering 0.23, ui 0.06, uniform_allocation 0.04, early_mesh_preprocessing 0.03
+  no boards, speck       19.7       17.5 31.7 20.8    13.2   main_opaque_pass_3d 11.66, upscaling 1.23, clustering 0.24, ui 0.06, early_mesh_preprocessing 0.03, uniform_allocation 0.02
+  buildings merged       29.0       25.7 32.5 33.7    14.1   main_opaque_pass_3d 12.53, upscaling 1.19, clustering 0.23, ui 0.06, uniform_allocation 0.04, early_mesh_preprocessing 0.03
+  half width+height      18.3       18.8 22.0 15.9     4.0   main_opaque_pass_3d 3.29, upscaling 0.25, clustering 0.24, ui 0.05, uniform_allocation 0.04, early_mesh_preprocessing 0.03
+
+06_whole_town (zoom 0.14, 13.0 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             70.3       78.2 65.4 63.3    47.0   main_opaque_pass_3d 44.17, upscaling 1.50, auxiliary_views 0.30, main_transparent_pass_3d 0.29, clustering 0.27, uniform_allocation 0.10
+  no MSAA                47.3       49.8 44.1 46.7    35.1   main_opaque_pass_3d 32.89, upscaling 1.47, main_transparent_pass_3d 0.27, clustering 0.26, uniform_allocation 0.08, ui 0.06
+  MSAA x2                63.7       58.2 68.5 56.8    39.1   main_opaque_pass_3d 35.83, upscaling 1.48, main_transparent_pass_3d 0.29, clustering 0.27, uniform_allocation 0.09, ui 0.09
+  no sun shadows         45.9       51.5 40.4 45.9    34.8   main_opaque_pass_3d 32.44, upscaling 1.40, clustering 0.26, main_transparent_pass_3d 0.25, ui 0.08, early_mesh_preprocessing 0.04
+  1-tap shadows          56.6       62.3 53.4 55.4    38.4   main_opaque_pass_3d 35.80, upscaling 1.49, main_transparent_pass_3d 0.28, clustering 0.27, ui 0.09, uniform_allocation 0.08
+  sun at moon angle      68.5       73.3 57.0 68.7    43.2   main_opaque_pass_3d 38.46, auxiliary_views 2.58, upscaling 1.50, main_transparent_pass_3d 0.29, clustering 0.27, uniform_allocation 0.10
+  lamps hidden           41.3       52.3 40.1 37.9    22.7   main_opaque_pass_3d 20.37, upscaling 1.49, clustering 0.26, main_transparent_pass_3d 0.19, uniform_allocation 0.08, ui 0.08
+  windows cast none      52.5       55.6 58.4 43.6    32.9   main_opaque_pass_3d 28.74, upscaling 1.33, clustering 0.25, main_transparent_pass_3d 0.23, ui 0.07, uniform_allocation 0.06
+  no boards, speck       61.7       55.1 62.9 66.3    40.9   main_opaque_pass_3d 37.23, upscaling 1.48, clustering 0.27, main_transparent_pass_3d 0.26, ui 0.08, uniform_allocation 0.07
+  buildings merged       80.4       88.5 73.7 85.5    51.9   main_opaque_pass_3d 47.23, auxiliary_views 3.12, upscaling 1.49, clustering 0.27, main_transparent_pass_3d 0.13, ui 0.09
+  half width+height      32.0       33.7 25.1 37.3    15.5   main_opaque_pass_3d 14.58, upscaling 0.27, clustering 0.26, main_transparent_pass_3d 0.19, uniform_allocation 0.08, ui 0.05
+
+07_central_street_dusk (zoom 1, 16.2 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             43.7       43.2 41.5 64.8    29.6   main_opaque_pass_3d 22.22, main_transparent_pass_3d 5.61, upscaling 1.26, clustering 0.24, ui 0.07, uniform_allocation 0.04
+  no MSAA                38.1       34.0 31.7 73.0    25.7   main_opaque_pass_3d 18.20, main_transparent_pass_3d 5.60, upscaling 1.46, clustering 0.24, ui 0.08, uniform_allocation 0.04
+  MSAA x2                46.6       57.8 36.0 50.2    25.4   main_opaque_pass_3d 18.34, main_transparent_pass_3d 5.60, upscaling 1.05, clustering 0.24, ui 0.07, uniform_allocation 0.04
+  no sun shadows         37.6       53.5 40.3 31.7    21.8   main_opaque_pass_3d 15.62, main_transparent_pass_3d 4.26, upscaling 1.47, clustering 0.25, ui 0.08, early_mesh_preprocessing 0.03
+  1-tap shadows          39.3       57.7 33.1 33.6    23.9   main_opaque_pass_3d 16.96, main_transparent_pass_3d 5.03, upscaling 1.31, clustering 0.24, ui 0.08, uniform_allocation 0.04
+  sun at moon angle      43.2       60.0 53.3 36.2    26.2   main_opaque_pass_3d 18.67, main_transparent_pass_3d 5.61, upscaling 1.29, clustering 0.24, ui 0.07, uniform_allocation 0.04
+  lamps hidden           31.6       24.8 76.7 28.8    18.8   main_opaque_pass_3d 12.03, main_transparent_pass_3d 5.14, upscaling 1.25, clustering 0.24, ui 0.06, uniform_allocation 0.04
+  windows cast none      35.4       32.0 62.0 35.3    25.8   main_opaque_pass_3d 18.49, main_transparent_pass_3d 5.61, upscaling 1.24, clustering 0.24, ui 0.06, uniform_allocation 0.04
+  no boards, speck       35.7       34.2 38.5 37.3    26.0   main_opaque_pass_3d 18.62, main_transparent_pass_3d 5.63, upscaling 1.24, clustering 0.24, ui 0.07, early_mesh_preprocessing 0.04
+  buildings merged       49.1       46.6 71.1 48.0    29.7   main_opaque_pass_3d 27.90, upscaling 1.25, clustering 0.24, ui 0.07, uniform_allocation 0.04, main_transparent_pass_3d 0.04
+  half width+height      26.1       32.8 24.4 23.2     8.4   main_opaque_pass_3d 6.17, main_transparent_pass_3d 1.48, upscaling 0.26, clustering 0.24, ui 0.05, uniform_allocation 0.04
+
+08_housing_night (zoom 0.8, 18.8 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             60.4      200.9 67.6 43.3    34.2   main_opaque_pass_3d 31.92, upscaling 1.80, clustering 0.25, main_transparent_pass_3d 0.20, ui 0.08, uniform_allocation 0.04
+  no MSAA                36.2       33.0 56.7 31.4    29.2   main_opaque_pass_3d 27.13, upscaling 1.49, clustering 0.25, main_transparent_pass_3d 0.19, ui 0.06, uniform_allocation 0.04
+  MSAA x2                42.5      41.4 113.7 37.1    29.6   main_opaque_pass_3d 27.78, upscaling 1.34, clustering 0.24, main_transparent_pass_3d 0.20, ui 0.06, uniform_allocation 0.04
+  no sun shadows         44.8       33.4 82.0 50.7    24.8   main_opaque_pass_3d 22.89, upscaling 1.79, clustering 0.25, main_transparent_pass_3d 0.18, ui 0.08, early_mesh_preprocessing 0.03
+  1-tap shadows          52.6       39.2 58.9 53.9    28.2   main_opaque_pass_3d 25.73, upscaling 1.87, clustering 0.25, main_transparent_pass_3d 0.19, ui 0.09, uniform_allocation 0.04
+  sun at moon angle      56.8       46.5 63.3 50.3    30.4   main_opaque_pass_3d 28.29, upscaling 1.92, clustering 0.25, main_transparent_pass_3d 0.20, ui 0.09, uniform_allocation 0.04
+  lamps hidden           43.1       26.5 62.2 47.1    18.6   main_opaque_pass_3d 16.51, upscaling 1.95, clustering 0.24, main_transparent_pass_3d 0.16, ui 0.09, uniform_allocation 0.04
+  windows cast none      58.5       44.7 58.5 62.7    30.4   main_opaque_pass_3d 28.10, upscaling 1.95, clustering 0.25, main_transparent_pass_3d 0.20, ui 0.09, uniform_allocation 0.04
+  no boards, speck       50.5       39.8 52.6 50.6    30.9   main_opaque_pass_3d 28.62, upscaling 1.96, clustering 0.25, ui 0.09, per_view_shadow_pass 0.04, early_mesh_preprocessing 0.04
+  buildings merged       58.2       67.0 69.9 55.6    39.9   main_opaque_pass_3d 37.43, upscaling 1.78, clustering 0.24, main_transparent_pass_3d 0.19, ui 0.08, uniform_allocation 0.04
+  half width+height      37.1       75.1 48.7 13.9     9.5   main_opaque_pass_3d 8.73, upscaling 0.34, clustering 0.24, main_transparent_pass_3d 0.12, ui 0.05, uniform_allocation 0.04
+
+10_shop_boards_close (zoom 2.2, 13.0 h)
+  variant               frame            per round     GPU   GPU passes
+  as shipped             56.4       63.9 51.4 60.1    37.1   main_opaque_pass_3d 34.44, upscaling 1.56, main_transparent_pass_3d 0.43, clustering 0.24, ui 0.08, uniform_allocation 0.04
+  no MSAA                25.8       24.5 28.1 36.5    22.6   main_opaque_pass_3d 19.87, upscaling 1.82, main_transparent_pass_3d 0.44, clustering 0.24, ui 0.06, uniform_allocation 0.04
+  MSAA x2                45.0       29.1 62.8 45.0    22.0   main_opaque_pass_3d 20.07, upscaling 1.04, main_transparent_pass_3d 0.43, clustering 0.24, ui 0.07, uniform_allocation 0.04
+  no sun shadows         28.6       26.0 38.9 28.5    19.1   main_opaque_pass_3d 17.08, upscaling 1.27, main_transparent_pass_3d 0.37, clustering 0.24, ui 0.06, early_mesh_preprocessing 0.03
+  1-tap shadows          30.3       27.8 31.2 31.7    20.5   main_opaque_pass_3d 18.16, upscaling 1.43, main_transparent_pass_3d 0.41, clustering 0.24, ui 0.06, uniform_allocation 0.04
+  sun at moon angle      32.0       24.9 33.0 39.4    22.3   main_opaque_pass_3d 20.02, upscaling 1.26, main_transparent_pass_3d 0.43, clustering 0.24, ui 0.06, uniform_allocation 0.04
+  lamps hidden           26.3       16.5 26.3 64.5    13.6   main_opaque_pass_3d 11.46, upscaling 1.26, main_transparent_pass_3d 0.30, clustering 0.23, ui 0.06, uniform_allocation 0.04
+  windows cast none      33.4       26.8 33.9 98.5    22.2   main_opaque_pass_3d 19.99, upscaling 1.34, main_transparent_pass_3d 0.43, clustering 0.23, ui 0.06, uniform_allocation 0.04
+  no boards, speck       30.2       24.9 38.4 34.2    22.2   main_opaque_pass_3d 20.08, upscaling 1.48, clustering 0.24, ui 0.08, early_mesh_preprocessing 0.03, uniform_allocation 0.02
+  buildings merged       48.2       35.4 54.4 63.7    37.8   main_opaque_pass_3d 35.35, upscaling 1.49, main_transparent_pass_3d 0.43, clustering 0.24, ui 0.08, uniform_allocation 0.04
+  half width+height      24.0       18.2 43.2 21.1    10.3   main_opaque_pass_3d 9.29, clustering 0.24, upscaling 0.23, main_transparent_pass_3d 0.19, ui 0.05, uniform_allocation 0.04

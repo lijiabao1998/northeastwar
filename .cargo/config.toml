@@ -1,0 +1,13 @@
+# The game is built for x86_64-pc-windows-gnullvm and linked with the LLD that
+# ships with the Rust toolchain. Everything needed comes from rustup:
+#   rustup target add x86_64-pc-windows-gnullvm
+#   rustup component add rust-mingw-x86_64-pc-windows-gnullvm llvm-tools
+# The plain windows-gnu target was tried first and does not work for a program
+# this size without a full MinGW: its import tables come out with entries the
+# loader never fills in, and the program dies before main.
+[build]
+target = "x86_64-pc-windows-gnullvm"
+
+[target.x86_64-pc-windows-gnullvm]
+linker = "C:/RUST/.toolchain/rustup/toolchains/1.99.1-x86_64-pc-windows-gnu/lib/rustlib/x86_64-pc-windows-gnu/bin/rust-lld.exe"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "link-self-contained=yes", "-C", "target-feature=+crt-static"]
