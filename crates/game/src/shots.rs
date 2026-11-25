@@ -1106,7 +1106,7 @@ fn configure_interior_scene(
             sim.body.heated = true;
             sim.body.temp = 36.6;
             sim.objective_zh = "21:30 全城停暖 · 守住自己家安全屋与煤炉，熬过寒夜到 07:00".into();
-            sim.prompt = "煤炉燃烧中（余火 92s · 按 T 添 1 煤）".into();
+            sim.prompt = format!("炉火还能烧 {:.1} 小时 · 按 E 化雪喝水 · 按 T 添煤或柴（屋里还有 {} 件家具）", 92.0 * 15.0 / 3600.0, sim.interiors[room_i].furniture);
 
             clock.hour = sim.hour;
             clock.speed = 1.0;

@@ -82,13 +82,6 @@ pub const DAY_SUN_DEG: f32 = -5.56;
 /// Below this it is full night. The sun's height at 17:15 on 17 January.
 pub const NIGHT_SUN_DEG: f32 = -12.21;
 
-/// True from 19:00 to 09:00, when the cold is the night's: the sun is down or too
-/// low to warm anything, and the coldest hour is just after sunrise.
-pub fn night_cold(hour: f32) -> bool {
-    let t = time_of_day(hour);
-    t > 19.0 || t < 9.0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
