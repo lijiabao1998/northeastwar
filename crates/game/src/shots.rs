@@ -878,7 +878,7 @@ struct InteriorPlan {
     frames: u32,
 }
 
-const INTERIOR_NAMES: [&str; 7] = [
+const INTERIOR_NAMES: [&str; 8] = [
     "01_shop_interior_lit",
     "02_blackout_ambush_indoor",
     "03_player_home_stove",
@@ -886,6 +886,7 @@ const INTERIOR_NAMES: [&str; 7] = [
     "05_basement_asleep",
     "06_march_five_pm",
     "07_curfew_order",
+    "08_days_passing",
 ];
 
 fn retarget_interior(mut commands: Commands, seed: Option<Res<InteriorPlanSeed>>) {
@@ -1113,6 +1114,53 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = sim.fog_density;
+            (pat, 1.55, Vec::new())
+        }
+        7 => {
+            // 08: days passing at a glance in the basement shelter, 26 January.
+            let room_i = sim
+                .interiors
+                .iter()
+                .position(|it| it.kind == InteriorKind::BasementShelter)
+                .unwrap_or(0);
+            let stove_p = sim.interiors[room_i].stove_at.unwrap_or_else(|| sim.interiors[room_i].to_world(0.5, sim.interiors[room_i].depth * 0.7));
+            let pat = stove_p.lerp(sim.interiors[room_i].to_world(0.0, sim.interiors[room_i].split_v + 0.8), 0.55);
+            {
+                let intr = &mut sim.interiors[room_i];
+                intr.stove_fuel_s = 300.0;
+                intr.room_temp_c = 13.0;
+                intr.furniture = 5;
+            }
+            sim.hour = 24.0 * 9.0 + hm(14, 0);
+            sim.mornings = 9;
+            sim.dawn_survived = true;
+            sim.assault_over = true;
+            sim.order_posted = true;
+            sim.blackout = true;
+            sim.weather_override = Some(Weather::Clear);
+            sim.weather = Weather::Clear;
+            sim.fog_density = 0.0;
+            sim.player_at = pat;
+            sim.player_anim = AnimState::Idle;
+            sim.active_interior = Some(room_i);
+            sim.cutaway_interior = Some(room_i);
+            sim.current_room_temp = Some(13.0);
+            sim.active_interior_name = sim.interiors[room_i].name.clone();
+            sim.body.sheltered = true;
+            sim.body.hunger = 88.0;
+            sim.body.thirst = 72.0;
+            sim.body.illness = 12.0;
+            sim.inv.food = 3;
+            sim.inv.water = 1;
+            sim.inv.coal = 0;
+            sim.inv.wood = 1;
+            sim.inv.medicine = 1;
+            sim.passing = true;
+
+            clock.hour = sim.hour;
+            clock.speed = 1.0;
+            clock.blackout = true;
+            clock.fog = 0.0;
             (pat, 1.55, Vec::new())
         }
         6 => {

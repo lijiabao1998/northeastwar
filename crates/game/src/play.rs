@@ -24,6 +24,8 @@ use sim::{
 use std::collections::{HashMap, HashSet};
 
 const SPEED_LEVELS: [f32; 5] = [1.0, 2.0, 4.0, 8.0, 16.0];
+/// Game hours a real second while days pass at a glance: a day every two seconds.
+const PASS_HOURS_PER_SECOND: f32 = 12.0;
 
 #[derive(Clone, Copy, Debug)]
 pub enum SpeedAction {
@@ -1298,8 +1300,46 @@ pub fn step_play(
         fortify_or_stove: !map_open && keys.just_pressed(KeyCode::KeyT),
         floor_delta,
         clock_running: true,
-        toggle_sleep: !map_open && keys.just_pressed(KeyCode::KeyJ),
+        toggle_sleep: false,
     };
+    // J: tired, lie down; not tired, let the days pass by the routine; again, stop.
+    let mut input = input;
+    if !map_open && keys.just_pressed(KeyCode::KeyJ) {
+        if play.sim.passing {
+            play.sim.passing = false;
+            play.sim.subtitle_zh = "你停了下来。".into();
+            play.sim.subtitle_en = "You stop.".into();
+            play.sim.subtitle_ttl = 3.0;
+        } else if !play.sim.sleeping && play.sim.body.fatigue < sim::survival::SLEEP_MIN_FATIGUE && play.sim.can_rest().is_ok() {
+            play.sim.passing = true;
+        } else {
+            input.toggle_sleep = true;
+        }
+    }
+    if play.sim.passing {
+        // Days at a glance: a day every two seconds, until something needs you.
+        let state = &mut *play;
+        let passed = state.sim.pass_time(
+            &heihe.city,
+            &heihe.ground,
+            &state.forces,
+            &sim::routine::Routine::default(),
+            frame_dt * PASS_HOURS_PER_SECOND,
+        );
+        if passed.stop != sim::routine::Stop::Done {
+            state.sim.passing = false;
+            if passed.stop != sim::routine::Stop::Dead {
+                let (zh, en) = passed.stop.text();
+                state.sim.subtitle_zh = zh.into();
+                state.sim.subtitle_en = en.into();
+                state.sim.subtitle_ttl = 8.0;
+            }
+        }
+        clock.hour = state.sim.hour;
+        clock.blackout = state.sim.blackout;
+        clock.fog = state.sim.fog_density;
+        return;
+    }
 
     let was_danger = play.sim.challenged
         || play.sim.under_fire_for > 0.0
@@ -2378,7 +2418,7 @@ pub fn sync_hud(
 ) {
     let s = &play.sim;
     let active = play.started && *menu == MenuScreen::Playing;
-    let show_speed = interactive.play && active && !s.dead && !s.sleeping;
+    let show_speed = interactive.play && active && !s.dead && !s.sleeping && !s.passing;
     for mut v in &mut speed_bar_q {
         *v = if show_speed { Visibility::Inherited } else { Visibility::Hidden };
     }
@@ -2409,7 +2449,7 @@ pub fn sync_hud(
     for (role, mut text, mut color, mut vis) in &mut q {
         match role {
             HudRole::Objective => {
-                *vis = if active && !s.dead && !s.sleeping { Visibility::Inherited } else { Visibility::Hidden };
+                *vis = if active && !s.dead && !s.sleeping && !s.passing { Visibility::Inherited } else { Visibility::Hidden };
                 let bar = s.selected_barricade.label();
                 let (cs, cc) = s.selected_barricade.cost();
                 let pla_arm = s.tanks.iter().filter(|t| t.faction == Faction::Pla).count();
@@ -2522,7 +2562,7 @@ pub fn sync_hud(
                 };
             }
             HudRole::RadioFeed => {
-                if active && !s.dead && !s.sleeping {
+                if active && !s.dead && !s.sleeping && !s.passing {
                     if let Some(rf) = &s.radio_feed {
                         text.0 = format!("【{}】 {}  ·  {}", rf.unit, rf.code_en, rf.text_zh);
                         color.0 = if rf.urgent {
@@ -2547,7 +2587,7 @@ pub fn sync_hud(
                 }
             }
             HudRole::Stats => {
-                *vis = if active && !s.dead && !s.sleeping { Visibility::Inherited } else { Visibility::Hidden };
+                *vis = if active && !s.dead && !s.sleeping && !s.passing { Visibility::Inherited } else { Visibility::Hidden };
                 let bleed = if s.body.bleeding { "  [流血]" } else { "" };
                 let coat = if s.body.coat_bonus > 0.0 { "  [厚棉袄]" } else { "" };
                 let gun = if s.inv.has_rifle {
@@ -2576,7 +2616,7 @@ pub fn sync_hud(
                 };
                 let ill = if s.body.illness >= 5.0 { format!("   病 {:.0}", s.body.illness) } else { String::new() };
                 text.0 = format!(
-                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{ill}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{}/药{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
+                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{ill}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{}/药{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉/过日子   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
                     s.body.hp, s.body.hunger, s.body.thirst, s.body.fatigue, s.inv.bandage, s.inv.medicine, s.inv.food, s.inv.water, s.inv.warmer, s.inv.molotov
                 );
             }
@@ -2589,7 +2629,26 @@ pub fn sync_hud(
                 }
             }
             HudRole::Death => {
-                if active && s.sleeping && !s.dead {
+                if active && s.passing && !s.dead {
+                    let room = s.active_interior.map(|i| &s.interiors[i]);
+                    text.0 = format!(
+                        "日子一天天过去……\n2031年{}  ·  第{}天{}\n\n吃的 {} 份 · 水 {} 瓶 · 药 {}\n煤 {} · 柴 {} · 屋里还有家具 {} 件 · 屋里 {:+.0}°C\n饱 {:.0} · 水 {:.0} · 病 {:.0}\n\n有事会停下   按 J 停",
+                        sim::clock::label(s.hour),
+                        sim::clock::day_index(s.hour) + 1,
+                        if s.sleeping { "  ·  夜里睡着" } else { "" },
+                        s.inv.food,
+                        s.inv.water,
+                        s.inv.medicine,
+                        s.inv.coal,
+                        s.inv.wood,
+                        room.map(|r| r.furniture).unwrap_or(0),
+                        room.map(|r| r.room_temp_c).unwrap_or(s.outdoor_c()),
+                        s.body.hunger,
+                        s.body.thirst,
+                        s.body.illness
+                    );
+                    *vis = Visibility::Inherited;
+                } else if active && s.sleeping && !s.dead {
                     text.0 = format!(
                         "睡着了\n2031年{}  ·  已睡 {:.1} 小时\n\n有动静会醒   按 J 起来",
                         sim::clock::label(s.hour),

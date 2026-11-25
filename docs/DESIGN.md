@@ -79,8 +79,8 @@ Each step ends with tests in `crates/sim` and with a bot that plays it many time
 
 Order revised on 25 November, after the owner set one month to four years as the standard. Save and load and the passing of days come before more content, because no other step can be played or tested over months without them. The steps below keep their names; this is the order to do them in:
 
-1. L1's second half: save and load, game states, on-screen text out of the world state.
-2. **Days that pass at a glance:** routines, the day-level model and what stops it, checked against the real-time sim.
+1. L1's second half: save and load, game states, on-screen text out of the world state. Save and load done on 25 November (`docs/rust-l1b-receipt.md`).
+2. **Days that pass at a glance:** routines, the day-level model and what stops it, checked against the real-time sim. Done on 25 November (`crates/sim/src/routine.rs`, same receipt); choosing a routine and going out as part of one are still to come.
 3. **The seasons:** the thaw and the river, spring, summer, autumn and the next winter, in the rules and on screen.
 4. L3's second part, L4, then L5 stretched from months to years.
 5. L6, endings, and the war's own course over four years, from new research on long occupations (Crimea and Donbas since 2014, Melitopol since 2022).

@@ -1177,6 +1177,9 @@ pub struct WorldSim {
     /// How many 07:00s the run has passed.
     pub mornings: u32,
     pub sleeping: bool,
+    /// Days are passing at a glance (crate::routine); the client shows it.
+    #[serde(default)]
+    pub passing: bool,
     /// A loud noise you made (furniture broken up): how far it carries, for how long.
     pub noise_m: f32,
     pub noise_t: f32,
@@ -1278,7 +1281,7 @@ pub struct WorldSim {
     /// come from the entity counter, so making one more entity changed every later roll.
     pub seed: u64,
     rng: u64,
-    spawn_wait: f32,
+    pub(crate) spawn_wait: f32,
     fpv_cd: f32,
     events_fired: u32,
     warned_cold: bool,
@@ -1399,6 +1402,7 @@ impl WorldSim {
             dawn_survived: false,
             mornings: 0,
             sleeping: false,
+            passing: false,
             noise_m: 0.0,
             noise_t: 0.0,
             slept_hours: 0.0,
@@ -1629,6 +1633,31 @@ impl WorldSim {
         light_at(city, self.hour, self.blackout, self.near_fire(), self.player_at, &self.fire_barrels)
     }
 
+    /// What the calendar brings: each morning (the first ends the assault; each
+    /// empties the shops a little more and may put a visit on), then the order
+    /// sheet, the sweep and the visits. Shared by real time and by days that pass
+    /// at a glance.
+    pub(crate) fn step_calendar(&mut self, out: &mut TickOutput) {
+        let mornings = if self.hour >= DAWN_HOUR { 1 + ((self.hour - DAWN_HOUR) / 24.0).floor() as u32 } else { 0 };
+        while self.mornings < mornings {
+            self.mornings += 1;
+            let m_now = self.mornings;
+            if m_now == 1 {
+                self.dawn_survived = true;
+                self.say("天亮了。你还活着。前线往南去了，解放军撤出了黑河。", "Dawn. You are still alive. The front has moved south; the PLA has left Heihe.");
+                self.objective_zh = "熬过了第一夜。城里只剩占领军的巡逻：白天他们看得远，少上街。\n他们会挨家挨户搜：别把枪和电台带在身上，藏进家里柜子的夹层（E）。困了在屋里按 J 睡。".into();
+                self.objective_en = "You lived through the first night. Only the occupiers' patrols are left: by day they see far, keep off the streets.\nThey will search every flat: don't carry the gun or the radio, hide them behind the cupboard at home (E). Sleep indoors with J.".into();
+                self.end_assault();
+            } else if m_now == mornings {
+                let (m, d) = clock::date_of(self.hour);
+                self.say(&format!("{m}月{d}日，天亮了。第 {m_now} 个早晨。"), &format!("Morning {m_now}."));
+            }
+            self.others_take_from_shops();
+            self.plan_visit();
+        }
+        self.step_occupation(out);
+    }
+
     /// After the first dawn: the front has moved south. The PLA's armour, the
     /// mortars, FPVs and Lancets of the assault are gone, the militia has gone to
     /// ground, and the city is left to the occupiers' patrols.
@@ -1780,6 +1809,46 @@ impl WorldSim {
                 self.say(&zh, &en);
             }
         }
+    }
+
+    /// True once you have been warned the sweep is coming to where you are.
+    pub(crate) fn sweep_warned_here(&self) -> bool {
+        self.active_interior.is_some_and(|i| self.sweep_warned.get(i).copied().unwrap_or(false))
+    }
+
+    /// Count interior `i` as swept already.
+    pub fn mark_swept(&mut self, i: usize) {
+        let n = self.interiors.len();
+        if self.swept.len() != n {
+            self.swept.resize(n, false);
+            self.sweep_warned.resize(n, false);
+        }
+        self.swept[i] = true;
+    }
+
+    /// The rooms for `dt` play seconds: heat, stoves, doors.
+    pub(crate) fn step_rooms(&mut self, dt: f32, out: &mut TickOutput) {
+        self.step_interiors_state(&SimInput::default(), dt, out);
+    }
+
+    /// The body for `dt` play seconds, staying still where you are, as in real
+    /// time. True if it dies.
+    pub(crate) fn step_body_resting(&mut self, city: &City, dt: f32) -> bool {
+        let indoors = self.active_interior.is_some();
+        let sheltered = city.near_heat(self.player_at) || indoors;
+        let near_fire = self.near_fire();
+        self.body.warm_room = self.active_interior.is_some_and(|i| self.interiors[i].room_temp_c >= 10.0);
+        self.body.indoors = indoors;
+        self.body.env_c = match self.active_interior {
+            Some(i) => self.interiors[i].room_temp_c,
+            None => self.outdoor_c(),
+        };
+        self.player_gait = Gait::Still;
+        if let Some((zh, en)) = self.body.tick(dt, self.hour, Gait::Still, sheltered, false, near_fire) {
+            self.kill_player(zh, en);
+            return true;
+        }
+        false
     }
 
     fn sweep_hour(&self, i: usize) -> f32 {
@@ -2058,8 +2127,86 @@ impl WorldSim {
         crate::living::get().outdoor_c(self.seed, self.hour)
     }
 
+    /// Eat one ration: a day's worth of calories against the reserve.
+    pub(crate) fn eat_ration(&mut self) -> bool {
+        if self.inv.food == 0 {
+            return false;
+        }
+        self.inv.food -= 1;
+        let living = crate::living::get();
+        let gain = living.num("body", "food_item_kcal") * 100.0 / living.num("body", "food_reserve_kcal");
+        self.body.hunger = (self.body.hunger + gain).min(100.0);
+        self.say("啃了几口冻干粮，肚子里有了热气。", "You eat cold rations standing up.");
+        true
+    }
+
+    /// Drink a bottle.
+    pub(crate) fn drink_water(&mut self) -> bool {
+        if self.inv.water == 0 {
+            return false;
+        }
+        self.inv.water -= 1;
+        let living = crate::living::get();
+        let gain = living.num("body", "water_item_l") * 100.0 / living.num("body", "water_reserve_l");
+        self.body.thirst = (self.body.thirst + gain).min(100.0);
+        self.say("水冰得牙疼，总算缓过来了。", "Ice-cold water.");
+        true
+    }
+
+    pub(crate) fn take_medicine(&mut self) -> bool {
+        if self.inv.medicine == 0 {
+            return false;
+        }
+        self.inv.medicine -= 1;
+        self.body.illness = (self.body.illness - crate::living::get().num("body", "medicine_cures")).max(0.0);
+        self.say("吃了药。烧退了一些。", "You take the medicine. The fever eases a little.");
+        true
+    }
+
+    /// Feed the stove in interior `i`: coal, then wood, and with neither, break
+    /// up a piece of furniture (loud) for the next time.
+    pub(crate) fn feed_stove(&mut self, i: usize, out: &mut TickOutput) -> bool {
+        let living = crate::living::get();
+        let play_s_per_h = 3600.0 / TIME_SCALE;
+        if self.inv.coal > 0 {
+            self.inv.coal -= 1;
+            self.interiors[i].stove_fuel_s += living.num("fuel", "coal_unit_burn_h") * play_s_per_h;
+            self.say("添了一块煤，炉子旺起来了。", "Coal on the stove. It catches.");
+            true
+        } else if self.inv.wood > 0 {
+            self.inv.wood -= 1;
+            self.interiors[i].stove_fuel_s += living.num("fuel", "wood_unit_burn_h") * play_s_per_h;
+            self.say("把劈开的木头塞进炉膛。", "Wood into the stove.");
+            true
+        } else if self.interiors[i].furniture > 0 {
+            self.interiors[i].furniture -= 1;
+            self.inv.wood += living.num("fuel", "wood_per_piece") as u32;
+            self.noise_m = living.num("fuel", "break_noise_m");
+            self.noise_t = 3.0;
+            out.door_breach_thud = true;
+            self.say("把一件家具砸开当柴烧（动静不小）。再按 T 添进炉子。", "You smash a piece of furniture for firewood. Loud. T again to feed the stove.");
+            true
+        } else {
+            self.say("没有煤，也没有能烧的家具了。去别的屋子找。", "No coal and nothing left here to burn.");
+            false
+        }
+    }
+
+    /// Melt a pot of snow on the stove in interior `i` and drink it.
+    pub(crate) fn melt_snow(&mut self, i: usize) -> bool {
+        if self.interiors[i].stove_fuel_s < self.melt_fuel_s() {
+            return false;
+        }
+        let living = crate::living::get();
+        self.interiors[i].stove_fuel_s = (self.interiors[i].stove_fuel_s - self.melt_fuel_s()).max(0.0);
+        let per_l = 100.0 / living.num("body", "water_reserve_l");
+        self.body.thirst = (self.body.thirst + living.num("fuel", "melt_litres") * per_l).min(100.0);
+        self.say("在煤炉上融化清洁积雪煮成热水，喝下去润喉解渴！", "Melted snow over coal stove for drinking water!");
+        true
+    }
+
     /// Stove time one pot of melted snow costs (play seconds).
-    fn melt_fuel_s(&self) -> f32 {
+    pub fn melt_fuel_s(&self) -> f32 {
         crate::living::get().num("fuel", "melt_fuel_h") * 3600.0 / TIME_SCALE
     }
 
@@ -2099,11 +2246,23 @@ impl WorldSim {
         men.chain(tanks).fold(f32::MAX, f32::min)
     }
 
-    fn try_sleep(&mut self) {
-        if self.active_interior.is_none() {
-            self.say("得先进屋才能睡。", "Get indoors before you sleep.");
+    /// Whether you can rest here: indoors, nobody close, not being shot at. The
+    /// reason why not, in Chinese and English.
+    pub fn can_rest(&self) -> Result<(), (&'static str, &'static str)> {
+        if self.dead {
+            Err(("", ""))
+        } else if self.active_interior.is_none() {
+            Err(("得先进屋才行。", "Get indoors first."))
         } else if self.challenged || self.under_fire_for > 0.0 || self.nearest_enemy_m() < SLEEP_QUIET_M {
-            self.say("外面有动静，睡不着。", "There is movement outside. You can't sleep.");
+            Err(("外面有动静，静不下来。", "There is movement outside."))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn try_sleep(&mut self) {
+        if let Err((zh, en)) = self.can_rest() {
+            self.say(zh, en);
         } else if self.body.fatigue < SLEEP_MIN_FATIGUE {
             self.say("还不困。", "You are not tired.");
         } else {
@@ -2236,24 +2395,7 @@ impl WorldSim {
         }
 
         self.step_timeline();
-        let mornings = if self.hour >= DAWN_HOUR { 1 + ((self.hour - DAWN_HOUR) / 24.0).floor() as u32 } else { 0 };
-        while self.mornings < mornings {
-            self.mornings += 1;
-            let m_now = self.mornings;
-            if m_now == 1 {
-                self.dawn_survived = true;
-                self.say("天亮了。你还活着。前线往南去了，解放军撤出了黑河。", "Dawn. You are still alive. The front has moved south; the PLA has left Heihe.");
-                self.objective_zh = "熬过了第一夜。城里只剩占领军的巡逻：白天他们看得远，少上街。\n他们会挨家挨户搜：别把枪和电台带在身上，藏进家里柜子的夹层（E）。困了在屋里按 J 睡。".into();
-                self.objective_en = "You lived through the first night. Only the occupiers' patrols are left: by day they see far, keep off the streets.\nThey will search every flat: don't carry the gun or the radio, hide them behind the cupboard at home (E). Sleep indoors with J.".into();
-                self.end_assault();
-            } else if m_now == mornings {
-                let (m, d) = clock::date_of(self.hour);
-                self.say(&format!("{m}月{d}日，天亮了。第 {m_now} 个早晨。"), &format!("Morning {m_now}."));
-            }
-            self.others_take_from_shops();
-            self.plan_visit();
-        }
-        self.step_occupation(&mut out);
+        self.step_calendar(&mut out);
         if self.dead {
             return out;
         }
@@ -2447,7 +2589,7 @@ impl WorldSim {
     }
 
     /// Burn the fires down; a barrel goes out when it is knocked over.
-    fn step_fires(&mut self, dt: f32) {
+    pub(crate) fn step_fires(&mut self, dt: f32) {
         // Fires put in from outside (the picture scenes) burn like barrels.
         self.fire_ttl.resize(self.fire_barrels.len(), f32::INFINITY);
         let knocked: Vec<P2> = self
@@ -2750,26 +2892,7 @@ impl WorldSim {
                 let d_back = intr.back_door.as_ref().map(|b| b.at.dist(pat)).unwrap_or(f32::MAX);
 
                 if d_stove <= 2.4 {
-                    let living = crate::living::get();
-                    let play_s_per_h = 3600.0 / TIME_SCALE;
-                    if self.inv.coal > 0 {
-                        self.inv.coal -= 1;
-                        intr.stove_fuel_s += living.num("fuel", "coal_unit_burn_h") * play_s_per_h;
-                        self.say("添了一块煤，炉子旺起来了。", "Coal on the stove. It catches.");
-                    } else if self.inv.wood > 0 {
-                        self.inv.wood -= 1;
-                        intr.stove_fuel_s += living.num("fuel", "wood_unit_burn_h") * play_s_per_h;
-                        self.say("把劈开的木头塞进炉膛。", "Wood into the stove.");
-                    } else if intr.furniture > 0 {
-                        intr.furniture -= 1;
-                        self.inv.wood += living.num("fuel", "wood_per_piece") as u32;
-                        self.noise_m = living.num("fuel", "break_noise_m");
-                        self.noise_t = 3.0;
-                        out.door_breach_thud = true;
-                        self.say("把一件家具砸开当柴烧（动静不小）。再按 T 添进炉子。", "You smash a piece of furniture for firewood. Loud. T again to feed the stove.");
-                    } else {
-                        self.say("没有煤，也没有能烧的家具了。去别的屋子找。", "No coal and nothing left here to burn.");
-                    }
+                    self.feed_stove(i, out);
                 } else if let Some(w) = win_near {
                     if self.inv.scrap > 0 {
                         self.inv.scrap -= 1;
@@ -2909,9 +3032,7 @@ impl WorldSim {
 
     fn handle_items(&mut self, input: &SimInput) {
         if input.use_bandage && !self.body.bleeding && self.body.illness > 10.0 && self.inv.medicine > 0 {
-            self.inv.medicine -= 1;
-            self.body.illness = (self.body.illness - crate::living::get().num("body", "medicine_cures")).max(0.0);
-            self.say("吃了药。烧退了一些。", "You take the medicine. The fever eases a little.");
+            self.take_medicine();
         } else if input.use_bandage && (self.body.bleeding || self.body.hp < 100.0) {
             if self.inv.bandage > 0 {
                 self.inv.bandage -= 1;
@@ -2922,19 +3043,11 @@ impl WorldSim {
                 self.say("没有绷带，快找药店或补给箱。", "No bandage.");
             }
         }
-        if input.use_food && self.inv.food > 0 {
-            self.inv.food -= 1;
-            let living = crate::living::get();
-            let gain = living.num("body", "food_item_kcal") * 100.0 / living.num("body", "food_reserve_kcal");
-            self.body.hunger = (self.body.hunger + gain).min(100.0);
-            self.say("啃了几口冻干粮，肚子里有了热气。", "You eat cold rations standing up.");
+        if input.use_food {
+            self.eat_ration();
         }
-        if input.use_water && self.inv.water > 0 {
-            self.inv.water -= 1;
-            let living = crate::living::get();
-            let gain = living.num("body", "water_item_l") * 100.0 / living.num("body", "water_reserve_l");
-            self.body.thirst = (self.body.thirst + gain).min(100.0);
-            self.say("水冰得牙疼，总算缓过来了。", "Ice-cold water.");
+        if input.use_water {
+            self.drink_water();
         }
         if input.use_warmer && self.inv.warmer > 0 {
             self.inv.warmer -= 1;
@@ -3432,11 +3545,7 @@ impl WorldSim {
             && self.interiors[i_idx].stove_fuel_s >= self.melt_fuel_s()
             && input.interact_just_pressed
         {
-            let living = crate::living::get();
-            self.interiors[i_idx].stove_fuel_s = (self.interiors[i_idx].stove_fuel_s - self.melt_fuel_s()).max(0.0);
-            let per_l = 100.0 / living.num("body", "water_reserve_l");
-            self.body.thirst = (self.body.thirst + living.num("fuel", "melt_litres") * per_l).min(100.0);
-            self.say("在煤炉上融化清洁积雪煮成热水，喝下去润喉解渴！", "Melted snow over coal stove for drinking water!");
+            self.melt_snow(i_idx);
             return true;
         }
 

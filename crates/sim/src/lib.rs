@@ -14,6 +14,7 @@ pub mod interior;
 pub mod living;
 pub mod look;
 pub mod occupation;
+pub mod routine;
 pub mod save;
 pub mod scene;
 pub mod soup;
