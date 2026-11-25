@@ -4880,9 +4880,11 @@ impl WorldSim {
                 }
                 for &(bi, bp, bk) in bar_snap {
                     if bk == BarricadeKind::BarbedWire && bp.dist(s.at) <= 1.8 {
+                        // Slowed and cut, not killed: a man in wire works his way
+                        // through it, and the wire gives as he does. Play numbers.
                         eff_spd *= 0.30;
-                        s.hp = (s.hp - 8.0 * dt).max(0.0);
-                        bar_dmg.push((bi, 10.0 * dt));
+                        s.hp = (s.hp - 1.5 * dt).max(0.0);
+                        bar_dmg.push((bi, 18.0 * dt));
                         break;
                     }
                 }
@@ -5649,13 +5651,20 @@ impl WorldSim {
 
                 let is_friendly_tank = faction == Faction::Pla;
                 engaging_hold = diff.abs() < 0.75 || self.tanks[ti].lock_timer > 0.05;
+                // Danger close: a PLA crew holds the gun (not the machine gun) while you or
+                // a militia fighter stands within its blast of the target.
+                let close_m = v_rad + 4.0;
+                let danger_close = is_friendly_tank
+                    && !is_player
+                    && (self.player_at.dist(tgt_at) < close_m
+                        || self.militia.iter().any(|m| m.hp > 0.0 && m.at.dist(tgt_at) < close_m));
 
-                if self.tanks[ti].salvo_left > 0 && self.tanks[ti].cannon_cd <= 0.0 {
+                if self.tanks[ti].salvo_left > 0 && self.tanks[ti].cannon_cd <= 0.0 && !danger_close {
                     self.tanks[ti].salvo_left -= 1;
                     self.tanks[ti].cannon_cd = if self.tanks[ti].salvo_left > 0 { 0.45 } else { v_cd };
                     let scatter = P2::new((self.next_rand(97) - 0.5) * 6.0, (self.next_rand(98) - 0.5) * 6.0);
                     cannon_shots.push((tat, tgt_at.add(scatter), tgt_floor, v_rad, v_dmg, v_sdmg, is_friendly_tank));
-                } else if diff.abs() <= 0.35 && self.tanks[ti].cannon_cd <= 0.0 {
+                } else if diff.abs() <= 0.35 && self.tanks[ti].cannon_cd <= 0.0 && !danger_close {
                     let prev_lock = self.tanks[ti].lock_timer;
                     self.tanks[ti].lock_timer += dt;
                     self.tanks[ti].locked_target = Some((tgt_at, tgt_floor));
@@ -5714,7 +5723,11 @@ impl WorldSim {
                     let want = tat.add(d.norm().mul(v_spd * dt));
                     let next_pos = ground.step(tat, want, 0.85);
                     let blocked_wreck = self.wrecks.iter().any(|w| w.at.dist(next_pos) < 3.4);
-                    if blocked_wreck || next_pos.dist(tat) <= 0.05 * dt {
+                    let moves = !blocked_wreck && next_pos.dist(tat) > 0.05 * dt;
+                    // Progress is what counts: sliding along a wall moves it a little
+                    // every step and gets it nowhere.
+                    let progress = d.len() - goal.dist(next_pos);
+                    if !moves || progress < 0.25 * v_spd * dt {
                         // A wreck in the way or a wall the route cuts through: back up
                         // the way it came rather than wait for the rest of the night.
                         self.tanks[ti].stuck_t += dt;
@@ -5726,6 +5739,8 @@ impl WorldSim {
                         }
                     } else {
                         self.tanks[ti].stuck_t = 0.0;
+                    }
+                    if moves {
                         self.tanks[ti].hull_yaw = d.y.atan2(d.x);
                         self.tanks[ti].at = next_pos;
                         let dir = d.norm();
@@ -8073,5 +8088,105 @@ mod tests {
             turned |= sim.tanks[0].wp_dir == -1;
         }
         assert!(turned, "after three seconds against the wreck it turns round");
+    }
+
+    #[test]
+    fn a_vehicle_pressed_against_a_wall_turns_back() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = hm(19, 0);
+        sim.squads.clear();
+        sim.tanks.clear();
+        sim.player_at = P2::new(-600.0, -600.0);
+        let (a, _) = open_street(&city, &ground, 40.0);
+        // Aim it at the middle of the nearest solid building: it reaches the wall and
+        // can get no closer, however it slides.
+        let b = city
+            .buildings
+            .iter()
+            .filter(|b| b.solid)
+            .min_by(|x, y| x.centroid.dist(a).total_cmp(&y.centroid.dist(a)))
+            .unwrap();
+        let ti = russian_tank_at(&mut sim, &forces, a);
+        sim.tanks[ti].waypoints = vec![a, b.centroid];
+        sim.tanks[ti].wp_idx = 1;
+        let id = sim.tanks[ti].id;
+        let mut turned = false;
+        for _ in 0..300 {
+            sim.squads.clear();
+            sim.tanks.retain(|t| t.id == id);
+            sim.spawn_wait = 1.0e6;
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+            turned |= sim.tanks[0].wp_dir == -1;
+        }
+        assert!(turned, "pressed against a wall for half a minute it must turn round");
+    }
+
+    #[test]
+    fn a_soldier_crosses_wire_cut_but_alive() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let sim = WorldSim::new(&city);
+        let ground = Ground::new_with_interiors(&city, &sim.interiors);
+        let (p, dir) = open_street(&city, &ground, 20.0);
+        let wire = p.add(dir.mul(6.0));
+        let snap = vec![(0usize, wire, BarricadeKind::BarbedWire)];
+        let mut sol = test_squad(p).men.remove(0);
+        let mut cut = 0.0;
+        for _ in 0..300 {
+            let mut dmg = Vec::new();
+            WorldSim::move_squad_one(&mut sol, &ground, &sim.interiors, &snap, &mut dmg, p.add(dir.mul(14.0)), 0, 1.3, 0.1, 0.3);
+            cut += dmg.iter().map(|d| d.1).sum::<f32>();
+        }
+        assert!(sol.at.dist(p) > 12.0, "he gets through: {:.1} m", sol.at.dist(p));
+        assert!(sol.hp > 80.0, "cut, not killed: {}", sol.hp);
+        assert!(cut > 40.0, "and the wire gives: {cut}");
+    }
+
+    #[test]
+    fn pla_armour_holds_its_gun_when_you_stand_by_the_target() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let (a, dir) = open_street(&city, &ground, 62.0);
+        let run = |player_m: f32| {
+            let mut sim = WorldSim::new(&city);
+            sim.hour = hm(19, 0);
+            sim.squads.clear();
+            sim.tanks.clear();
+            sim.tank_wave_mask = u16::MAX;
+            sim.spawn_tank_wave_at(VehicleKind::Ztz99A, a, &forces);
+            let mine = sim.tanks.pop().unwrap();
+            sim.tanks.clear();
+            sim.tanks.push(mine);
+            let t = &mut sim.tanks[0];
+            t.at = a;
+            t.waypoints = vec![a];
+            t.wp_idx = 0;
+            t.cannon_cd = 0.0;
+            let id = t.id;
+            let target = a.add(dir.mul(40.0));
+            sim.player_at = target.add(P2::new(-dir.y, dir.x).mul(player_m));
+            let mut shelled = false;
+            for _ in 0..100 {
+                sim.tanks.retain(|t| t.id == id);
+                sim.spawn_wait = 1.0e6;
+                if sim.squads.is_empty() || sim.squads[0].men.is_empty() {
+                    sim.squads.clear();
+                    let mut sq = test_squad(target);
+                    sq.state = SquadState::Check;
+                    sim.squads.push(sq);
+                }
+                sim.squads[0].men[0].at = target;
+                sim.squads[0].men[0].hp = 100.0;
+                let out = sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+                shelled |= out.tank_cannon && out.explosions.iter().any(|e| e.at.dist(target) < 8.0);
+            }
+            shelled
+        };
+        assert!(!run(3.0), "no gun on a soldier 3 m from you");
+        let shelled_far = run(60.0);
+        assert!(shelled_far, "with you 60 m away it fires");
     }
 }

@@ -56,3 +56,32 @@ The bot also confirmed these hold:
   - Home: dies of cold at 17:30 on the 18th, three hours later than before.
   - The sim step fell from 0.65–1.0 ms to 0.17–0.25 ms per step, though the machine was also quieter on this run.
 - Dying of cold indoors now says so: 你冻死在屋里, instead of the street.
+
+## The bot again, on these rules
+
+The same agent re-ran the bot on a copy of the code as of the commit above (`out/read/bot3`, not in the repository). It used `WorldSim::with_seed` for seeds 0 to 4 instead of its reseed hack, with a steady 1/60 s step. It ran 8 strategies × 5 seeds, the rally-then-home variant, and its probes. The full table is `out/read/bot3/runs/table.md`.
+
+| strategy | bot2 (before) | bot3 (after) |
+|---|---|---|
+| A, E, G: outdoors | all died, 18:15–19:25 | all died, 18:14–20:52, mostly to armour |
+| F: standing in a heated doorway | all died to tanks by 19:25 | four outlast the armour and die of thirst at 03:26 (the bot never looks for water); one killed at 23:20 by PLA fire (below) |
+| B, C, D, H: indoors | all alive | all alive |
+| I: rally at the cell, then home | one Lancet hit for −29 | all alive, untouched |
+
+- **Lancets and FPVs:** in the probe that gave 7 Lancets at a basement player, there are now 0, with under-fire time 0. Across 45 nights no FPV was queued and no Lancet was aimed at the player.
+- **Armour:** 38 locks, all outdoors, none indoors. A still player is not locked at 70 m by day, dusk or night. At 40 m it is locked at dusk, but not at 22:00 in the scripted river fog. At 25 m it is locked in the dark. Outdoors, armour still decides who dies; that is the night as designed.
+- **Vehicles:** none stuck in 45 nights, where before all 17 survivors ended every night frozen.
+- **Barricades against vehicles**, time over 40 m with and without the barricade: concrete holds a T-72 20 s against 17 s, and a BTR 18 s against 10 s. A dead car and wire hold a BTR 13 s and 12 s; a T-72 crushes both, as designed.
+- **The challenge, combat and sight** are unchanged and hold.
+- **Self-called 155 mm** with the new falloff: still lethal at 0–10 m (18 of 20 hit at 10 m), 6 of 20 at 14 m, none at 20 m.
+
+It found three more problems, fixed in a second commit:
+
+1. **A vehicle sliding along a wall never counted as stuck.** On road 13 northbound it moved a few centimetres a step, so the 3 s rule never fired. Stuck now means making less than a quarter of its speed's progress towards the waypoint.
+2. **Barbed wire killed every soldier who walked into it** (8 hp a second at 30% speed). Now it slows and cuts, 1.5 hp a second, and the wire gives 18 hp a second per man working through it. These are play numbers.
+3. **PLA armour shelled a Russian squad standing 3 m from the player**, for −100. A PLA crew now holds its gun, though not its machine gun, while you or a militia fighter stand within its blast radius plus 4 m of the target.
+
+Tests for these, 110 in all now:
+- `a_vehicle_pressed_against_a_wall_turns_back`;
+- `a_soldier_crosses_wire_cut_but_alive`: 14 m through wire in 30 s, above 80 hp, the wire takes over 40;
+- `pla_armour_holds_its_gun_when_you_stand_by_the_target`: no gun with you 3 m from the target; it fires with you 60 m away.
