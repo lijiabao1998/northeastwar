@@ -13,7 +13,7 @@ use crate::geom::{hash01, nearest_on_segment, P2};
 use crate::interior::{build_interiors, DoorStyle, Interior, InteriorKind, RoomZone, FLOOR_H};
 use crate::look::Rgb;
 use crate::walk::Ground;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 pub const START_HOUR: f32 = 16.0;
 pub const CROSSING_HOUR: f32 = 17.0 + 36.0 / 60.0;
@@ -71,7 +71,7 @@ pub const fn hm(hours: u32, minutes: u32) -> f32 {
     hours as f32 + minutes as f32 / 60.0
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ShopKind {
     Pharmacy,
     Hotel,
@@ -114,7 +114,7 @@ pub fn shop_kind(zh: &str, ru: &str) -> ShopKind {
     ShopKind::Shop
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RolledLoot {
     pub food: u32,
     pub water: u32,
@@ -194,7 +194,7 @@ const EMPTY_LOOT: RolledLoot = RolledLoot {
     medicine: 0,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Body {
     pub hp: f32,
     pub temp: f32,
@@ -429,7 +429,7 @@ impl Body {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Inventory {
     pub food: u32,
     pub water: u32,
@@ -547,7 +547,7 @@ impl Inventory {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Door {
     pub at: P2,
     pub name: String,
@@ -555,7 +555,7 @@ pub struct Door {
     pub searched: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CacheKind {
     StreetScrap,
     ResistanceCell,
@@ -565,17 +565,18 @@ pub enum CacheKind {
     SmugglerCache,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SupplyCache {
     pub id: u32,
     pub at: P2,
     pub kind: CacheKind,
     pub unlock_hour: f32,
-    pub title: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub title: crate::save::StaticText,
     pub collected: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SquadState {
     Patrol,
     Check,
@@ -585,7 +586,7 @@ pub enum SquadState {
     Search,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Soldier {
     pub id: u32,
     pub at: P2,
@@ -601,7 +602,7 @@ pub struct Soldier {
     pub grenade_cd: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Squad {
     pub id: u32,
     pub state: SquadState,
@@ -663,11 +664,12 @@ pub fn light_at(city: &City, hour: f32, blackout: bool, revealed: bool, p: P2, f
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Weather {
     Clear,
     Flurries,
     RiverFog,
+    Rain,
 }
 
 impl Weather {
@@ -676,6 +678,7 @@ impl Weather {
             Self::Clear => "晴冷",
             Self::Flurries => "飘雪",
             Self::RiverFog => "江面大雾（无人机致盲）",
+            Self::Rain => "下雨",
         }
     }
 }
@@ -705,20 +708,31 @@ pub fn weather_at(seed: u64, hour: f32) -> (Weather, f32) {
     let r = hash01(block ^ (seed as i64), 0x57EA);
     let t = clock::time_of_day(hour);
     let living = crate::living::get();
-    // Snow falls in about half the blocks of a day with snow, and only below freezing.
-    let snow_p = living.snow_share(hour) * 0.5;
+    // Rain or snow falls in about half the blocks of a day that has it: snow below
+    // freezing, rain above.
+    let precip_p = living.precip_share(hour) * 0.5;
     let freezing = living.outdoor_c(seed, hour) < 0.5;
     if r < 0.06 && !(10.0..20.0).contains(&t) {
         (Weather::RiverFog, 0.92)
-    } else if freezing && r < 0.06 + snow_p {
+    } else if !freezing && r < 0.06 + precip_p {
+        (Weather::Rain, 0.12)
+    } else if freezing && r < 0.06 + precip_p {
         (Weather::Flurries, 0.25 + 0.1 * hash01(block ^ (seed as i64), 0x57EB))
     } else {
         (Weather::Clear, 0.0)
     }
 }
 
+/// Who is searching you.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Inspect {
+    Sweep,
+    Patrol,
+    Visit,
+}
+
 /// Why you woke up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WakeReason {
     Rested,
     ByHand,
@@ -745,7 +759,7 @@ impl WakeReason {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SnowTrack {
     pub id: u32,
     pub at: P2,
@@ -755,14 +769,14 @@ pub struct SnowTrack {
     pub is_vehicle: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Crater {
     pub id: u32,
     pub at: P2,
     pub radius: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct VehicleWreck {
     pub id: u32,
     pub kind: VehicleKind,
@@ -772,7 +786,7 @@ pub struct VehicleWreck {
     pub smoke_ttl: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SmokeCloud {
     pub id: u32,
     pub at: P2,
@@ -781,7 +795,7 @@ pub struct SmokeCloud {
     pub dark: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ActiveGrenade {
     pub id: u32,
     pub from: P2,
@@ -794,7 +808,7 @@ pub struct ActiveGrenade {
     pub friendly: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BloodMark {
     pub id: u32,
     pub at: P2,
@@ -802,7 +816,7 @@ pub struct BloodMark {
     pub age: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ReconDrone {
     pub active: bool,
     pub at: P2,
@@ -866,7 +880,7 @@ impl ReconDrone {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MortarMission {
     pub target: P2,
     pub fuse: f32,
@@ -896,7 +910,7 @@ pub fn blast_harm(forces: &Forces, distance: f32, under_roof: bool) -> f32 {
     harm
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FpvDrone {
     pub origin: P2,
     pub at: P2,
@@ -907,14 +921,14 @@ pub struct FpvDrone {
     pub jammed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PendingFpv {
     pub target: P2,
     pub eta: f32,
     pub fibre_optic: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LancetDrone {
     pub origin: P2,
     pub at: P2,
@@ -924,7 +938,7 @@ pub struct LancetDrone {
     pub hit_tank_id: Option<u32>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FriendlyFpv {
     pub origin: P2,
     pub at: P2,
@@ -932,7 +946,7 @@ pub struct FriendlyFpv {
     pub target: P2,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TankUnit {
     pub id: u32,
     pub kind: VehicleKind,
@@ -953,17 +967,18 @@ pub struct TankUnit {
     pub stuck_t: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum MilitiaOrder {
     Follow,
     Hold(P2),
     Garrison(P2),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MilitiaMember {
     pub id: u32,
-    pub name: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub name: crate::save::StaticText,
     pub at: P2,
     pub floor: u8,
     pub facing: f32,
@@ -981,7 +996,7 @@ pub struct MilitiaMember {
     pub rescue_progress: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BarricadeKind {
     Sandbag,
     IronGate,
@@ -1034,7 +1049,7 @@ impl BarricadeKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Barricade {
     pub at: P2,
     pub kind: BarricadeKind,
@@ -1043,7 +1058,7 @@ pub struct Barricade {
     pub hp: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Pedestrian {
     pub id: u32,
     pub at: P2,
@@ -1059,7 +1074,7 @@ pub struct Pedestrian {
     pub speed: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LootDrop {
     pub at: P2,
     pub ammo: u32,
@@ -1069,17 +1084,18 @@ pub struct LootDrop {
     pub taken: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Sms {
     pub sender: String,
     pub zh: String,
     pub en: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RadioCallout {
     pub unit: String,
-    pub code_en: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub code_en: crate::save::StaticText,
     pub text_zh: String,
     pub ttl: f32,
     pub urgent: bool,
@@ -1150,7 +1166,7 @@ pub struct SimInput {
     pub toggle_sleep: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct WorldSim {
     pub hour: f32,
     pub hours_alive: f32,
@@ -1166,15 +1182,44 @@ pub struct WorldSim {
     /// How many 07:00s the run has passed.
     pub mornings: u32,
     pub sleeping: bool,
+    /// Days are passing at a glance (crate::routine); the client shows it.
+    #[serde(default)]
+    pub passing: bool,
+    /// When it last rained (hour): rain caught in pots is water for a while.
+    #[serde(default)]
+    pub last_rain_hour: f32,
+    /// The Heilongjiang is open water (between the break-up and the freeze-up).
+    #[serde(default)]
+    pub river_open: bool,
     /// A loud noise you made (furniture broken up): how far it carries, for how long.
     pub noise_m: f32,
     pub noise_t: f32,
     /// Hours of the clock slept since lying down.
     pub slept_hours: f32,
     pub woke: Option<WakeReason>,
+    /// The occupation (L3). After the first dawn the assault is over: the front has
+    /// moved south and the city belongs to the occupiers' patrols.
+    pub assault_over: bool,
+    pub profile: crate::occupation::Profile,
+    /// How much the occupiers know about you, 0 to 100 (the watchlist).
+    pub suspicion: f32,
+    /// The commandant's order sheet (curfew) is up.
+    pub order_posted: bool,
+    pub detentions: u32,
+    pub days_detained: f32,
+    pub signed_cooperation: bool,
+    /// Which interiors the sweep has been through, and which you were warned of.
+    swept: Vec<bool>,
+    sweep_warned: Vec<bool>,
+    /// When the next visit to your home comes (hour), if one is due.
+    pub visit_at: Option<f32>,
+    /// What you find when you next come home, if they came while you were out.
+    home_note: Option<(String, String)>,
     pub dead: bool,
-    pub death_zh: &'static str,
-    pub death_en: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub death_zh: crate::save::StaticText,
+    #[serde(with = "crate::save::static_str")]
+    pub death_en: crate::save::StaticText,
 
     pub player_at: P2,
     pub player_facing: f32,
@@ -1204,7 +1249,7 @@ pub struct WorldSim {
     pub smoke_clouds: Vec<SmokeCloud>,
     pub grenades: Vec<ActiveGrenade>,
     pub blood_marks: Vec<BloodMark>,
-    pub visited: HashSet<(i32, i32)>,
+    pub visited: BTreeSet<(i32, i32)>,
     pub drone: ReconDrone,
     pub mortars: Vec<MortarMission>,
     pub pending_fpvs: Vec<PendingFpv>,
@@ -1247,7 +1292,7 @@ pub struct WorldSim {
     /// come from the entity counter, so making one more entity changed every later roll.
     pub seed: u64,
     rng: u64,
-    spawn_wait: f32,
+    pub(crate) spawn_wait: f32,
     fpv_cd: f32,
     events_fired: u32,
     warned_cold: bool,
@@ -1352,7 +1397,7 @@ impl WorldSim {
         }
 
         let interiors = build_interiors(city);
-        let mut visited = HashSet::new();
+        let mut visited = BTreeSet::new();
         visited.insert(((city.spawn.x / 20.0).floor() as i32, (city.spawn.y / 20.0).floor() as i32));
 
         Self {
@@ -1368,10 +1413,24 @@ impl WorldSim {
             dawn_survived: false,
             mornings: 0,
             sleeping: false,
+            passing: false,
+            last_rain_hour: -1000.0,
+            river_open: false,
             noise_m: 0.0,
             noise_t: 0.0,
             slept_hours: 0.0,
             woke: None,
+            assault_over: false,
+            profile: crate::occupation::Profile::default(),
+            suspicion: 0.0,
+            order_posted: false,
+            detentions: 0,
+            days_detained: 0.0,
+            signed_cooperation: false,
+            swept: Vec::new(),
+            sweep_warned: Vec::new(),
+            visit_at: None,
+            home_note: None,
             dead: false,
             death_zh: "",
             death_en: "",
@@ -1587,13 +1646,606 @@ impl WorldSim {
         light_at(city, self.hour, self.blackout, self.near_fire(), self.player_at, &self.fire_barrels)
     }
 
+    /// What the calendar brings: each morning (the first ends the assault; each
+    /// empties the shops a little more and may put a visit on), then the order
+    /// sheet, the sweep and the visits. Shared by real time and by days that pass
+    /// at a glance.
+    pub(crate) fn step_calendar(&mut self, out: &mut TickOutput) {
+        let open = self.ice_cm() <= 0.0;
+        if open != self.river_open {
+            self.river_open = open;
+            if open {
+                self.say("黑龙江开河了。冰排顺着江水往下漂，江面再也走不过去了。", "The Heilongjiang has broken up. Ice floes drift downstream; the river can no longer be crossed on foot.");
+            } else {
+                self.say("黑龙江封冻了。冰还薄，走上去会裂。", "The Heilongjiang has frozen over. The ice is still thin and will not hold you yet.");
+            }
+        }
+        let mornings = if self.hour >= DAWN_HOUR { 1 + ((self.hour - DAWN_HOUR) / 24.0).floor() as u32 } else { 0 };
+        while self.mornings < mornings {
+            self.mornings += 1;
+            let m_now = self.mornings;
+            if m_now == 1 {
+                self.dawn_survived = true;
+                self.say("天亮了。你还活着。前线往南去了，解放军撤出了黑河。", "Dawn. You are still alive. The front has moved south; the PLA has left Heihe.");
+                self.objective_zh = "熬过了第一夜。城里只剩占领军的巡逻：白天他们看得远，少上街。\n他们会挨家挨户搜：别把枪和电台带在身上，藏进家里柜子的夹层（E）。困了在屋里按 J 睡。".into();
+                self.objective_en = "You lived through the first night. Only the occupiers' patrols are left: by day they see far, keep off the streets.\nThey will search every flat: don't carry the gun or the radio, hide them behind the cupboard at home (E). Sleep indoors with J.".into();
+                self.end_assault();
+            } else if m_now == mornings {
+                let (m, d) = clock::date_of(self.hour);
+                self.say(&format!("{m}月{d}日，天亮了。第 {m_now} 个早晨。"), &format!("Morning {m_now}."));
+            }
+            self.others_take_from_shops();
+            self.plan_visit();
+        }
+        self.step_occupation(out);
+    }
+
+    /// After the first dawn: the front has moved south. The PLA's armour, the
+    /// mortars, FPVs and Lancets of the assault are gone, the militia has gone to
+    /// ground, and the city is left to the occupiers' patrols.
+    fn end_assault(&mut self) {
+        self.assault_over = true;
+        self.tanks.clear();
+        self.mortars.clear();
+        self.pending_fpvs.clear();
+        self.fpv = None;
+        self.lancet = None;
+        self.friendly_fpv = None;
+        self.militia.clear();
+        self.militia_cmd_marker = None;
+        self.resistance_active = false;
+        self.inv.radio_strikes = 0;
+    }
+
+    /// Curfew: from the order sheet on, 20:00 to 06:00.
+    pub fn curfew_now(&self) -> bool {
+        if !self.order_posted {
+            return false;
+        }
+        let o = crate::occupation::get();
+        let t = clock::time_of_day(self.hour);
+        t >= o.num("order", "curfew_from") || t < o.num("order", "curfew_to")
+    }
+
+    fn add_suspicion(&mut self, what: &str, share: f32) {
+        let w = crate::occupation::get().num("suspicion", what);
+        self.suspicion = (self.suspicion + w * share).min(100.0);
+    }
+
+    /// What you carry that a search is looking for.
+    pub fn carried_contraband(&self) -> crate::occupation::Contraband {
+        let i = &self.inv;
+        crate::occupation::Contraband {
+            primaries: i.unlocked_primaries,
+            ammo: i.ammo,
+            rpg: i.rpg,
+            pf98: i.pf98,
+            hj12: i.hj12,
+            rpo_shmel: i.rpo_shmel,
+            grenades: i.grenades,
+            smoke_grenades: i.smoke_grenades,
+            molotov: i.molotov,
+            friendly_fpv: i.friendly_fpv,
+            radio: i.has_radio,
+            radio_strikes: i.radio_strikes,
+        }
+    }
+
+    fn take_contraband(&mut self) -> crate::occupation::Contraband {
+        let c = self.carried_contraband();
+        let i = &mut self.inv;
+        i.unlocked_primaries = 0;
+        i.has_rifle = false;
+        i.ammo = 0;
+        i.rpg = 0;
+        i.pf98 = 0;
+        i.hj12 = 0;
+        i.rpo_shmel = 0;
+        i.grenades = 0;
+        i.smoke_grenades = 0;
+        i.molotov = 0;
+        i.friendly_fpv = 0;
+        i.has_radio = false;
+        i.radio_strikes = 0;
+        c
+    }
+
+    fn give_contraband(&mut self, c: crate::occupation::Contraband) {
+        let i = &mut self.inv;
+        i.unlocked_primaries |= c.primaries;
+        i.has_rifle = i.unlocked_primaries != 0;
+        if i.has_rifle && !i.has_primary(i.active_primary) {
+            for w in [PrimaryWeapon::Ak74m, PrimaryWeapon::Qbz191, PrimaryWeapon::Saiga12] {
+                if i.has_primary(w) {
+                    i.active_primary = w;
+                    break;
+                }
+            }
+        }
+        i.ammo += c.ammo;
+        i.rpg += c.rpg;
+        i.pf98 += c.pf98;
+        i.hj12 += c.hj12;
+        i.rpo_shmel += c.rpo_shmel;
+        i.grenades += c.grenades;
+        i.smoke_grenades += c.smoke_grenades;
+        i.molotov += c.molotov;
+        i.friendly_fpv += c.friendly_fpv;
+        i.has_radio |= c.radio;
+        i.radio_strikes += c.radio_strikes;
+    }
+
+    fn home_index(&self) -> Option<usize> {
+        self.interiors.iter().position(|i| i.kind == InteriorKind::PlayerHome)
+    }
+
+    /// The order sheet, the sweep, the visits; a note when you come home.
+    fn step_occupation(&mut self, out: &mut TickOutput) {
+        if !self.assault_over {
+            return;
+        }
+        let o = crate::occupation::get();
+        if !self.order_posted && self.hour >= o.num("order", "posted_hour") {
+            self.order_posted = true;
+            self.push_sms(
+                "黑河市临时军事管理处",
+                "第1号布告：每日20:00至次日06:00宵禁。只准单独或两人同行。听到第一声命令必须站住。车辆白天慢行、接受检查。",
+                "Order No. 1: curfew 20:00 to 06:00. Walk alone or in pairs. Stop at the first order. Vehicles by day, slowly, and accept searches.",
+            );
+            self.objective_zh = "布告贴出来了：20:00 到 06:00 宵禁，宵禁时上街他们直接开枪。\n白天被喝令就站住，他们会搜身：枪和电台别带在身上，藏进家里柜子的夹层（E）。".into();
+            self.objective_en = "The order is up: curfew 20:00 to 06:00, and they shoot on sight after dark.\nBy day, stop when told; they search you. Don't carry the gun or the radio: hide them at home (E).".into();
+        }
+
+        let n = self.interiors.len();
+        if self.swept.len() != n {
+            self.swept.resize(n, false);
+            self.sweep_warned.resize(n, false);
+        }
+        let warn_h = o.num("sweep", "warning_min") / 60.0;
+        for i in 0..n {
+            if self.swept[i] || self.dead {
+                continue;
+            }
+            let at = self.sweep_hour(i);
+            if !self.sweep_warned[i] && self.active_interior == Some(i) && self.hour >= at - warn_h {
+                self.sweep_warned[i] = true;
+                out.shout_stoy = true;
+                self.say("楼道里有靴子声和喊声：他们在挨家挨户地搜！", "Boots and shouting on the stairs: they are searching every flat.");
+            }
+            if self.hour >= at {
+                self.swept[i] = true;
+                self.sweep_building(i, out);
+            }
+        }
+        if self.dead {
+            return;
+        }
+        if let Some(at) = self.visit_at {
+            if self.hour >= at {
+                self.visit_at = None;
+                self.visit_home(out);
+            }
+        }
+        if self.active_interior.is_some() && self.active_interior == self.home_index() {
+            if let Some((zh, en)) = self.home_note.take() {
+                self.say(&zh, &en);
+            }
+        }
+    }
+
+    /// True once you have been warned the sweep is coming to where you are.
+    pub(crate) fn sweep_warned_here(&self) -> bool {
+        self.active_interior.is_some_and(|i| self.sweep_warned.get(i).copied().unwrap_or(false))
+    }
+
+    /// Count interior `i` as swept already.
+    pub fn mark_swept(&mut self, i: usize) {
+        let n = self.interiors.len();
+        if self.swept.len() != n {
+            self.swept.resize(n, false);
+            self.sweep_warned.resize(n, false);
+        }
+        self.swept[i] = true;
+    }
+
+    /// The rooms for `dt` play seconds: heat, stoves, doors.
+    pub(crate) fn step_rooms(&mut self, dt: f32, out: &mut TickOutput) {
+        self.step_interiors_state(&SimInput::default(), dt, out);
+    }
+
+    /// The body for `dt` play seconds, staying still where you are, as in real
+    /// time. True if it dies.
+    pub(crate) fn step_body_resting(&mut self, city: &City, dt: f32) -> bool {
+        let indoors = self.active_interior.is_some();
+        let sheltered = city.near_heat(self.player_at) || indoors;
+        let near_fire = self.near_fire();
+        self.body.warm_room = self.active_interior.is_some_and(|i| self.interiors[i].room_temp_c >= 10.0);
+        self.body.indoors = indoors;
+        self.body.env_c = match self.active_interior {
+            Some(i) => self.interiors[i].room_temp_c,
+            None => self.outdoor_c(),
+        };
+        self.player_gait = Gait::Still;
+        if let Some((zh, en)) = self.body.tick(dt, self.hour, Gait::Still, sheltered, false, near_fire) {
+            self.kill_player(zh, en);
+            return true;
+        }
+        false
+    }
+
+    fn sweep_hour(&self, i: usize) -> f32 {
+        let b = self.interiors[i].building_id ^ ((i as i64) << 40);
+        crate::occupation::get().sweep_hour(self.seed, b)
+    }
+
+    /// Soldiers go through building `i`: a barricaded door is forced, the hiding
+    /// places are looked at, and whoever is inside is searched.
+    fn sweep_building(&mut self, i: usize, out: &mut TickOutput) {
+        let o = crate::occupation::get();
+        let forced = Self::force_door(&mut self.interiors[i]);
+        if forced {
+            out.door_breach_thud = true;
+        }
+        let found = !self.interiors[i].hidden.is_empty() && self.next_rand(0x5E01) < o.num("inspection", "cache_found_p");
+        if self.active_interior == Some(i) {
+            if forced {
+                self.say("他们把顶住的门砸开了，枪口对着屋里。", "They smash in the barred door, rifles first.");
+            } else {
+                self.say("当兵的进来了：所有人下地下室，门别锁。挨个搜身。", "Soldiers come in: everyone to the basement, leave the doors unlocked. They search each of you.");
+            }
+            if found {
+                self.interiors[i].hidden = Default::default();
+            }
+            self.inspect_player(Inspect::Sweep, forced, found);
+        } else {
+            self.searched_while_away(i, found, "清查的时候他们来过");
+        }
+    }
+
+    /// A barricaded or locked front door is broken in: forced, and left open.
+    fn force_door(intr: &mut Interior) -> bool {
+        let d = &mut intr.front_door;
+        if d.barricade_hp > 0.0 {
+            d.barricade_hp = 0.0;
+            d.destroyed = true;
+            d.open = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// They came to building `i` while you were out: if it is your home, what
+    /// they found and took is waiting for you.
+    fn searched_while_away(&mut self, i: usize, found: bool, when_zh: &str) {
+        if self.interiors[i].kind != InteriorKind::PlayerHome {
+            if found {
+                self.interiors[i].hidden = Default::default();
+            }
+            return;
+        }
+        let o = crate::occupation::get();
+        let share = o.num("inspection", "loot_share");
+        let st = &mut self.interiors[i].stash;
+        let take = |n: &mut u32| *n -= (*n as f32 * share).floor() as u32;
+        take(&mut st.food);
+        take(&mut st.water);
+        take(&mut st.bandage);
+        take(&mut st.warmer);
+        let mut zh = format!("{when_zh}：门被打开，东西被翻得到处都是，柜子里的吃的少了一半。");
+        let mut en = "They came while you were out: the door open, everything turned over, half the food gone.".to_string();
+        if found {
+            self.interiors[i].hidden = Default::default();
+            self.add_suspicion("contraband_found", 1.0);
+            zh.push_str("柜子后面藏的东西不见了。他们知道这是谁家。");
+            en.push_str(" What was behind the cupboard is gone. They know whose flat this is.");
+        }
+        self.home_note = Some((zh, en));
+    }
+
+    /// Being searched, by a sweep, a patrol or a visit. What you carry (or what was
+    /// found hidden where you are) decides most of it; being a man, being known,
+    /// and a door they had to break raise the odds.
+    fn inspect_player(&mut self, by: Inspect, forced: bool, cache_found: bool) {
+        let o = crate::occupation::get();
+        let carried = self.carried_contraband();
+        let forced_mul = if forced { o.num("inspection", "forced_door_mul") } else { 1.0 };
+        if !carried.is_empty() || cache_found {
+            self.add_suspicion("contraband_found", 1.0);
+            self.take_contraband();
+            if carried.armed() && self.next_rand(0x1A01) < (o.num("inspection", "armed_shot_p") * forced_mul).min(1.0) {
+                self.kill_player("他们从你身上搜出了枪，当场就开了枪。", "They found the gun on you and shot you where you stood.");
+                return;
+            }
+            if self.next_rand(0x1A02) < (o.num("inspection", "contraband_detain_p") * forced_mul).min(1.0) {
+                let (zh, en) = if carried.is_empty() {
+                    ("他们在夹层里找到了藏着的东西。", "They found what was hidden.")
+                } else {
+                    ("他们从你身上搜出了武器和电台。", "They found the weapons and the radio on you.")
+                };
+                self.detain(zh, en);
+                return;
+            }
+            self.say("东西全被收走了。他们骂了一顿，踢了你两脚，走了。", "They took it all, cursed you, kicked you twice and left.");
+            return;
+        }
+        let listed = self.suspicion >= o.num("suspicion", "listed_at");
+        let base = if self.profile.male { o.num("inspection", "man_taken_p") } else { o.num("inspection", "woman_taken_p") };
+        let known = 1.0 + self.suspicion / o.num("inspection", "suspicion_doubles_at");
+        let p = match by {
+            Inspect::Visit if listed => o.num("visits", "listed_detain_p"),
+            _ => base * forced_mul * known,
+        };
+        if self.next_rand(0x1A03) < p.min(1.0) {
+            let (zh, en) = match by {
+                Inspect::Visit => ("他们手里有名单，上面有你的名字。", "They have a list, and your name is on it."),
+                _ => ("他们挑了几个男人带走，你是其中一个。", "They pick out a few men to take away. You are one."),
+            };
+            self.detain(zh, en);
+            return;
+        }
+        let share = o.num("inspection", "loot_share");
+        let inv = &mut self.inv;
+        for n in [&mut inv.food, &mut inv.water, &mut inv.bandage, &mut inv.warmer] {
+            *n -= (*n as f32 * share).floor() as u32;
+        }
+        let zh = match by {
+            Inspect::Patrol => "他们搜了身，翻走一些吃的，挥手让你走。",
+            _ => "他们搜了身和屋子，拿走一些吃的，让你待着别动，走了。",
+        };
+        self.say(zh, "They searched you, took some of your food, and let you be.");
+    }
+
+    /// Taken away. Most come back, after days to months, thinner, sick, sometimes
+    /// beaten, sometimes having signed; some are moved away for good, a few die.
+    /// The world goes on meanwhile: the rooms cool, the shops empty, the sweep
+    /// passes through your home without you.
+    fn detain(&mut self, why_zh: &str, why_en: &str) {
+        let o = crate::occupation::get();
+        let l = crate::living::get();
+        self.detentions += 1;
+        self.take_contraband();
+        self.sleeping = false;
+        self.body.asleep = false;
+        if self.next_rand(0x0D01) < o.num("detention", "death_p") {
+            self.kill_player("你被带走了，再也没能从关押的地方出来。", "They took you, and you never came out of the place they held you.");
+            return;
+        }
+        let Some(days) = o.detention_days(self.next_rand(0x0D02), self.next_rand(0x0D03)) else {
+            self.kill_player("你被押上了一辆往北开的车，此后再也没有消息。", "They put you on a truck heading north. Nobody heard of you again.");
+            return;
+        };
+        let start = self.hour;
+        let mut end = start + days * 24.0;
+        end += (o.num("detention", "release_hour") - clock::time_of_day(end)).rem_euclid(24.0);
+        let hours = end - start;
+        self.hour = end;
+        self.hours_alive += hours;
+        self.days_detained += hours / 24.0;
+
+        let deficit = (l.kcal_per_day(10.0) - o.num("detention", "kcal_per_day")) * hours / 24.0;
+        let b = &mut self.body;
+        b.hunger = (b.hunger - deficit * 100.0 / l.num("body", "food_reserve_kcal")).max(5.0);
+        b.thirst = b.thirst.clamp(40.0, 70.0);
+        b.illness = (b.illness + o.num("detention", "illness_per_day") * hours / 24.0).min(90.0);
+        b.temp = 36.4;
+        b.bleeding = false;
+        b.fatigue = 70.0;
+        let beaten = self.next_rand(0x0D04) < o.num("detention", "ill_treated_p");
+        if beaten {
+            self.body.hp = (self.body.hp - o.num("detention", "ill_treated_hp")).max(20.0);
+        }
+        let signed = self.next_rand(0x0D05) < o.num("detention", "cooperate_p");
+        if signed {
+            self.signed_cooperation = true;
+            self.suspicion *= 0.5;
+        } else {
+            self.suspicion = (self.suspicion + 10.0).min(100.0);
+        }
+        self.age_world(hours);
+        if let Some(home) = self.home_index() {
+            self.player_at = self.interiors[home].front_door.inside;
+            self.player_floor = 0;
+        }
+        let d = days.round().max(1.0);
+        let mut zh = format!("{why_zh}你被带走了，关了 {d:.0} 天。");
+        let mut en = format!("{why_en} They held you for {d:.0} days.");
+        if beaten {
+            zh.push_str("他们打了你。");
+            en.push_str(" They beat you.");
+        }
+        if signed {
+            zh.push_str("你在一张\"合作\"的纸上签了字，才被放出来。");
+            en.push_str(" You signed a paper promising to cooperate before they let you go.");
+        }
+        zh.push_str("今天早上，他们把你扔在家门口。");
+        en.push_str(" This morning they left you at your door.");
+        self.say(&zh, &en);
+        self.subtitle_ttl = 12.0;
+    }
+
+    /// Time passed without you (detention): rooms cool and stoves go out, fires
+    /// burn down, patrols move on, and the sweep goes through any building it
+    /// was due at, your home included.
+    fn age_world(&mut self, hours: f32) {
+        let l = crate::living::get();
+        let t_out = self.outdoor_c();
+        let play_s = hours * 3600.0 / TIME_SCALE;
+        for intr in &mut self.interiors {
+            intr.stove_fuel_s = (intr.stove_fuel_s - play_s).max(0.0);
+            let leak = 1.0 + intr.open_doors_count() as f32 * l.num("building", "open_door_mul");
+            let (balance, tau) = if intr.kind == InteriorKind::BasementShelter {
+                (l.num("building", "basement_c"), l.num("building", "basement_tau_h") / leak)
+            } else {
+                (t_out + l.num("building", "above_outdoor_c") / leak, l.num("building", "cool_tau_h") / leak)
+            };
+            intr.room_temp_c = balance + (intr.room_temp_c - balance) * (-hours / tau.max(0.1)).exp();
+        }
+        self.step_fires(play_s);
+        self.squads.clear();
+        self.grenades.clear();
+        self.tracks.clear();
+        self.spawn_wait = 6.0;
+        self.active_interior = None;
+        let n = self.interiors.len();
+        if self.swept.len() != n {
+            self.swept.resize(n, false);
+            self.sweep_warned.resize(n, false);
+        }
+        for i in 0..n {
+            if !self.swept[i] && self.sweep_hour(i) <= self.hour {
+                self.swept[i] = true;
+                let found = !self.interiors[i].hidden.is_empty() && self.next_rand(0x5E02) < crate::occupation::get().num("inspection", "cache_found_p");
+                Self::force_door(&mut self.interiors[i]);
+                self.searched_while_away(i, found, "你不在的时候，清查的人来过");
+            }
+        }
+        if self.visit_at.is_some_and(|v| v <= self.hour) {
+            self.visit_at = None;
+        }
+    }
+
+    /// Each morning after the sweep, a visit to your home may be put on for the
+    /// early hours, more likely the more they know about you.
+    fn plan_visit(&mut self) {
+        let o = crate::occupation::get();
+        if !self.assault_over || self.visit_at.is_some() || (self.mornings as f32) < o.num("visits", "from_day") {
+            return;
+        }
+        let p = o.num("visits", "p_per_day_at_100") * self.suspicion / 100.0;
+        if self.next_rand(0x7151) < p {
+            let day = clock::day_index(self.hour) as f32;
+            let h = o.num("visits", "hour_from") + self.next_rand(0x7152) * (o.num("visits", "hour_to") - o.num("visits", "hour_from"));
+            let mut at = day * 24.0 + h;
+            if at <= self.hour {
+                at += 24.0;
+            }
+            self.visit_at = Some(at);
+        }
+    }
+
+    /// They come to your home with your name.
+    fn visit_home(&mut self, out: &mut TickOutput) {
+        let Some(home) = self.home_index() else { return };
+        let o = crate::occupation::get();
+        let forced = Self::force_door(&mut self.interiors[home]);
+        if forced {
+            out.door_breach_thud = true;
+        }
+        let found = !self.interiors[home].hidden.is_empty() && self.next_rand(0x7153) < o.num("visits", "cache_found_p");
+        if self.active_interior == Some(home) {
+            self.say("天刚亮就有人砸门。他们点着名找你。", "At first light someone pounds on the door. They ask for you by name.");
+            if found {
+                self.interiors[home].hidden = Default::default();
+            }
+            self.inspect_player(Inspect::Visit, forced, found);
+        } else {
+            self.searched_while_away(home, found, "他们一早来家里找过你");
+        }
+    }
+
     /// The temperature in the street now (°C).
     pub fn outdoor_c(&self) -> f32 {
         crate::living::get().outdoor_c(self.seed, self.hour)
     }
 
+    /// Eat one ration: a day's worth of calories against the reserve.
+    pub(crate) fn eat_ration(&mut self) -> bool {
+        if self.inv.food == 0 {
+            return false;
+        }
+        self.inv.food -= 1;
+        let living = crate::living::get();
+        let gain = living.num("body", "food_item_kcal") * 100.0 / living.num("body", "food_reserve_kcal");
+        self.body.hunger = (self.body.hunger + gain).min(100.0);
+        self.say("啃了几口冻干粮，肚子里有了热气。", "You eat cold rations standing up.");
+        true
+    }
+
+    /// Drink a bottle.
+    pub(crate) fn drink_water(&mut self) -> bool {
+        if self.inv.water == 0 {
+            return false;
+        }
+        self.inv.water -= 1;
+        let living = crate::living::get();
+        let gain = living.num("body", "water_item_l") * 100.0 / living.num("body", "water_reserve_l");
+        self.body.thirst = (self.body.thirst + gain).min(100.0);
+        self.say("水冰得牙疼，总算缓过来了。", "Ice-cold water.");
+        true
+    }
+
+    pub(crate) fn take_medicine(&mut self) -> bool {
+        if self.inv.medicine == 0 {
+            return false;
+        }
+        self.inv.medicine -= 1;
+        self.body.illness = (self.body.illness - crate::living::get().num("body", "medicine_cures")).max(0.0);
+        self.say("吃了药。烧退了一些。", "You take the medicine. The fever eases a little.");
+        true
+    }
+
+    /// Feed the stove in interior `i`: coal, then wood, and with neither, break
+    /// up a piece of furniture (loud) for the next time.
+    pub(crate) fn feed_stove(&mut self, i: usize, out: &mut TickOutput) -> bool {
+        let living = crate::living::get();
+        let play_s_per_h = 3600.0 / TIME_SCALE;
+        if self.inv.coal > 0 {
+            self.inv.coal -= 1;
+            self.interiors[i].stove_fuel_s += living.num("fuel", "coal_unit_burn_h") * play_s_per_h;
+            self.say("添了一块煤，炉子旺起来了。", "Coal on the stove. It catches.");
+            true
+        } else if self.inv.wood > 0 {
+            self.inv.wood -= 1;
+            self.interiors[i].stove_fuel_s += living.num("fuel", "wood_unit_burn_h") * play_s_per_h;
+            self.say("把劈开的木头塞进炉膛。", "Wood into the stove.");
+            true
+        } else if self.interiors[i].furniture > 0 {
+            self.interiors[i].furniture -= 1;
+            self.inv.wood += living.num("fuel", "wood_per_piece") as u32;
+            self.noise_m = living.num("fuel", "break_noise_m");
+            self.noise_t = 3.0;
+            out.door_breach_thud = true;
+            self.say("把一件家具砸开当柴烧（动静不小）。再按 T 添进炉子。", "You smash a piece of furniture for firewood. Loud. T again to feed the stove.");
+            true
+        } else {
+            self.say("没有煤，也没有能烧的家具了。去别的屋子找。", "No coal and nothing left here to burn.");
+            false
+        }
+    }
+
+    /// Melt a pot of snow (or boil rain caught in pots) on the stove in interior
+    /// `i` and drink it. With no snow lying and no rain lately, there is nothing to
+    /// melt: water has to be fetched.
+    pub(crate) fn melt_snow(&mut self, i: usize) -> bool {
+        if self.interiors[i].stove_fuel_s < self.melt_fuel_s() {
+            return false;
+        }
+        if !self.water_to_melt() {
+            self.say("外面没有雪，也好久没下雨了：没东西可烧开喝。得去江边或水站打水。", "No snow outside and no rain lately: nothing to boil. Water has to be fetched.");
+            return false;
+        }
+        let living = crate::living::get();
+        self.interiors[i].stove_fuel_s = (self.interiors[i].stove_fuel_s - self.melt_fuel_s()).max(0.0);
+        let per_l = 100.0 / living.num("body", "water_reserve_l");
+        self.body.thirst = (self.body.thirst + living.num("fuel", "melt_litres") * per_l).min(100.0);
+        self.say("在煤炉上融化清洁积雪煮成热水，喝下去润喉解渴！", "Melted snow over coal stove for drinking water!");
+        true
+    }
+
+    /// Snow lying outside, or rain in the last two days caught in pots.
+    pub fn water_to_melt(&self) -> bool {
+        let l = crate::living::get();
+        l.snow_depth_cm(self.hour) >= 0.5 || self.hour - self.last_rain_hour < l.num("fuel", "rain_water_h")
+    }
+
+    /// The river as it is now: open water, thin ice, or ice that holds.
+    pub fn ice_cm(&self) -> f32 {
+        crate::living::get().ice_cm(self.hour)
+    }
+
     /// Stove time one pot of melted snow costs (play seconds).
-    fn melt_fuel_s(&self) -> f32 {
+    pub fn melt_fuel_s(&self) -> f32 {
         crate::living::get().num("fuel", "melt_fuel_h") * 3600.0 / TIME_SCALE
     }
 
@@ -1633,11 +2285,23 @@ impl WorldSim {
         men.chain(tanks).fold(f32::MAX, f32::min)
     }
 
-    fn try_sleep(&mut self) {
-        if self.active_interior.is_none() {
-            self.say("得先进屋才能睡。", "Get indoors before you sleep.");
+    /// Whether you can rest here: indoors, nobody close, not being shot at. The
+    /// reason why not, in Chinese and English.
+    pub fn can_rest(&self) -> Result<(), (&'static str, &'static str)> {
+        if self.dead {
+            Err(("", ""))
+        } else if self.active_interior.is_none() {
+            Err(("得先进屋才行。", "Get indoors first."))
         } else if self.challenged || self.under_fire_for > 0.0 || self.nearest_enemy_m() < SLEEP_QUIET_M {
-            self.say("外面有动静，睡不着。", "There is movement outside. You can't sleep.");
+            Err(("外面有动静，静不下来。", "There is movement outside."))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn try_sleep(&mut self) {
+        if let Err((zh, en)) = self.can_rest() {
+            self.say(zh, en);
         } else if self.body.fatigue < SLEEP_MIN_FATIGUE {
             self.say("还不困。", "You are not tired.");
         } else {
@@ -1755,9 +2419,13 @@ impl WorldSim {
             Some(Weather::Clear) => (Weather::Clear, 0.0),
             Some(Weather::Flurries) => (Weather::Flurries, 0.35),
             Some(Weather::RiverFog) => (Weather::RiverFog, 0.92),
+            Some(Weather::Rain) => (Weather::Rain, 0.12),
             None => weather_at(self.seed, self.hour),
         };
         self.weather = target_w;
+        if target_w == Weather::Rain {
+            self.last_rain_hour = self.hour;
+        }
         if self.weather_override.is_some() {
             self.fog_density = target_fog;
         } else {
@@ -1770,19 +2438,9 @@ impl WorldSim {
         }
 
         self.step_timeline();
-        let mornings = if self.hour >= DAWN_HOUR { 1 + ((self.hour - DAWN_HOUR) / 24.0).floor() as u32 } else { 0 };
-        if mornings > self.mornings {
-            self.mornings = mornings;
-            if mornings == 1 {
-                self.dawn_survived = true;
-                self.say("天亮了。你还活着。", "Dawn. You are still alive.");
-                self.objective_zh = "熬过了第一夜。天亮了，他们看得更远：白天少上街。\n在屋里找吃的喝的、生炉子；困了就在屋里按 J 睡，有动静会醒。".into();
-                self.objective_en = "You lived through the first night. By day they see further: keep off the streets.\nFind food and water indoors, keep a stove going; sleep indoors with J, noise will wake you.".into();
-            } else {
-                let (m, d) = clock::date_of(self.hour);
-                self.say(&format!("{m}月{d}日，天亮了。第 {mornings} 个早晨。"), &format!("Morning {mornings}."));
-            }
-            self.others_take_from_shops();
+        self.step_calendar(&mut out);
+        if self.dead {
+            return out;
         }
 
         // 2. Player movement, visited street cells & snow footprints.
@@ -1794,7 +2452,14 @@ impl WorldSim {
             let speed = base_speed * self.body.move_scale;
             let to = self.player_at.add(dir.mul(speed * dt));
             let cur_floor = if self.active_interior.is_some() { self.player_floor } else { 0 };
-            let next_pos = ground.step_with_interiors_on_floor(&self.interiors, self.player_at, to, 0.35, cur_floor, false);
+            let mut next_pos = ground.step_with_interiors_on_floor(&self.interiors, self.player_at, to, 0.35, cur_floor, false);
+            // From the break-up to the freeze-up the river is open water.
+            if cur_floor == 0 && !ground.on_ice(self.player_at) && ground.on_ice(next_pos) && self.ice_cm() < 1.0 {
+                next_pos = self.player_at;
+                if self.subtitle_ttl <= 0.0 {
+                    self.say("江面开河了，没有冰可以走。", "The river is open water: there is no ice to walk on.");
+                }
+            }
             if cur_floor == 0 && self.player_vault_t <= 0.0 && next_pos.dist(self.player_at) > 0.01 {
                 if self.barricades.iter().any(|b| {
                     !b.shoved
@@ -1832,6 +2497,19 @@ impl WorldSim {
         let indoors = self.active_interior.is_some();
         let sheltered = city.near_heat(self.player_at) || indoors;
         let on_ice = !indoors && ground.on_ice(self.player_at);
+        // Thin ice (the freeze-up, the thaw) may give way under you.
+        if on_ice {
+            let l = crate::living::get();
+            let ice = self.ice_cm();
+            let safe = l.num("river", "walk_safe_cm");
+            if ice < safe {
+                let p = l.num("river", "fall_through_p_per_s") * (1.0 - ice / safe) * dt;
+                if self.next_rand(0x1CE0) < p {
+                    self.kill_player("冰裂开了，你掉进了黑龙江。", "The ice gave way, and the Heilongjiang took you.");
+                    return out;
+                }
+            }
+        }
         let near_barrel = self.near_fire();
         self.body.warm_room = self.active_interior.is_some_and(|i| self.interiors[i].room_temp_c >= 10.0);
 
@@ -1927,6 +2605,10 @@ impl WorldSim {
     }
 
     fn push_track(&mut self, at: P2, dir: P2, by_player: bool, is_vehicle: bool) {
+        // Footprints need snow on the ground.
+        if crate::living::get().snow_depth_cm(self.hour) < 0.5 {
+            return;
+        }
         if self.tracks.len() >= 240 {
             let drop_n = self.tracks.len() - 239;
             self.tracks.drain(0..drop_n);
@@ -1974,7 +2656,7 @@ impl WorldSim {
     }
 
     /// Burn the fires down; a barrel goes out when it is knocked over.
-    fn step_fires(&mut self, dt: f32) {
+    pub(crate) fn step_fires(&mut self, dt: f32) {
         // Fires put in from outside (the picture scenes) burn like barrels.
         self.fire_ttl.resize(self.fire_barrels.len(), f32::INFINITY);
         let knocked: Vec<P2> = self
@@ -2277,26 +2959,7 @@ impl WorldSim {
                 let d_back = intr.back_door.as_ref().map(|b| b.at.dist(pat)).unwrap_or(f32::MAX);
 
                 if d_stove <= 2.4 {
-                    let living = crate::living::get();
-                    let play_s_per_h = 3600.0 / TIME_SCALE;
-                    if self.inv.coal > 0 {
-                        self.inv.coal -= 1;
-                        intr.stove_fuel_s += living.num("fuel", "coal_unit_burn_h") * play_s_per_h;
-                        self.say("添了一块煤，炉子旺起来了。", "Coal on the stove. It catches.");
-                    } else if self.inv.wood > 0 {
-                        self.inv.wood -= 1;
-                        intr.stove_fuel_s += living.num("fuel", "wood_unit_burn_h") * play_s_per_h;
-                        self.say("把劈开的木头塞进炉膛。", "Wood into the stove.");
-                    } else if intr.furniture > 0 {
-                        intr.furniture -= 1;
-                        self.inv.wood += living.num("fuel", "wood_per_piece") as u32;
-                        self.noise_m = living.num("fuel", "break_noise_m");
-                        self.noise_t = 3.0;
-                        out.door_breach_thud = true;
-                        self.say("把一件家具砸开当柴烧（动静不小）。再按 T 添进炉子。", "You smash a piece of furniture for firewood. Loud. T again to feed the stove.");
-                    } else {
-                        self.say("没有煤，也没有能烧的家具了。去别的屋子找。", "No coal and nothing left here to burn.");
-                    }
+                    self.feed_stove(i, out);
                 } else if let Some(w) = win_near {
                     if self.inv.scrap > 0 {
                         self.inv.scrap -= 1;
@@ -2436,9 +3099,7 @@ impl WorldSim {
 
     fn handle_items(&mut self, input: &SimInput) {
         if input.use_bandage && !self.body.bleeding && self.body.illness > 10.0 && self.inv.medicine > 0 {
-            self.inv.medicine -= 1;
-            self.body.illness = (self.body.illness - crate::living::get().num("body", "medicine_cures")).max(0.0);
-            self.say("吃了药。烧退了一些。", "You take the medicine. The fever eases a little.");
+            self.take_medicine();
         } else if input.use_bandage && (self.body.bleeding || self.body.hp < 100.0) {
             if self.inv.bandage > 0 {
                 self.inv.bandage -= 1;
@@ -2449,19 +3110,11 @@ impl WorldSim {
                 self.say("没有绷带，快找药店或补给箱。", "No bandage.");
             }
         }
-        if input.use_food && self.inv.food > 0 {
-            self.inv.food -= 1;
-            let living = crate::living::get();
-            let gain = living.num("body", "food_item_kcal") * 100.0 / living.num("body", "food_reserve_kcal");
-            self.body.hunger = (self.body.hunger + gain).min(100.0);
-            self.say("啃了几口冻干粮，肚子里有了热气。", "You eat cold rations standing up.");
+        if input.use_food {
+            self.eat_ration();
         }
-        if input.use_water && self.inv.water > 0 {
-            self.inv.water -= 1;
-            let living = crate::living::get();
-            let gain = living.num("body", "water_item_l") * 100.0 / living.num("body", "water_reserve_l");
-            self.body.thirst = (self.body.thirst + gain).min(100.0);
-            self.say("水冰得牙疼，总算缓过来了。", "Ice-cold water.");
+        if input.use_water {
+            self.drink_water();
         }
         if input.use_warmer && self.inv.warmer > 0 {
             self.inv.warmer -= 1;
@@ -2495,6 +3148,7 @@ impl WorldSim {
             return;
         }
         self.resistance_active = true;
+        self.add_suspicion("rally", 1.0);
         self.inv.unlock_primary(PrimaryWeapon::Ak74m);
         self.inv.active_primary = PrimaryWeapon::Ak74m;
         self.inv.ammo += 20;
@@ -2790,6 +3444,27 @@ impl WorldSim {
                 self.prompt = "按 E：打开家用应急储物柜".into();
                 return true;
             }
+            // Behind the cupboard: put the gun and the radio away before a search, or
+            // take them out again.
+            let at_locker = self.interiors[i_idx].locker_at.is_some_and(|p| p.dist(pat) <= 2.2);
+            let carrying = !self.carried_contraband().is_empty();
+            let hidden = !self.interiors[i_idx].hidden.is_empty();
+            if at_locker && (carrying || hidden) {
+                if input.interact_just_pressed {
+                    if carrying {
+                        let c = self.take_contraband();
+                        self.interiors[i_idx].hidden.add(c);
+                        self.say("把枪、弹药和电台塞进了柜子后面的夹层。", "You push the gun, the rounds and the radio into the space behind the cupboard.");
+                    } else {
+                        let c = std::mem::take(&mut self.interiors[i_idx].hidden);
+                        self.give_contraband(c);
+                        self.say("从柜子夹层里取出了藏着的东西。", "You take the hidden things out from behind the cupboard.");
+                    }
+                    return true;
+                }
+                self.prompt = if carrying { "按 E：把武器和电台藏进柜子后面的夹层".into() } else { "按 E：取出柜子夹层里藏着的东西".into() };
+                return true;
+            }
         }
 
         let loot_idx = if pf == 0 {
@@ -2937,11 +3612,7 @@ impl WorldSim {
             && self.interiors[i_idx].stove_fuel_s >= self.melt_fuel_s()
             && input.interact_just_pressed
         {
-            let living = crate::living::get();
-            self.interiors[i_idx].stove_fuel_s = (self.interiors[i_idx].stove_fuel_s - self.melt_fuel_s()).max(0.0);
-            let per_l = 100.0 / living.num("body", "water_reserve_l");
-            self.body.thirst = (self.body.thirst + living.num("fuel", "melt_litres") * per_l).min(100.0);
-            self.say("在煤炉上融化清洁积雪煮成热水，喝下去润喉解渴！", "Melted snow over coal stove for drinking water!");
+            self.melt_snow(i_idx);
             return true;
         }
 
@@ -3380,6 +4051,9 @@ impl WorldSim {
                         }
 
                         if !hit_air {
+                            if self.gunfire_reveal_timer <= 0.0 && self.under_fire_for > 0.0 {
+                                self.add_suspicion("fired_at_troops", 1.0);
+                            }
                             self.gunfire_reveal_timer = 5.5;
                             let mut hit_pt = ray_end;
                             let mut hit_floor = 0u8;
@@ -3658,6 +4332,7 @@ impl WorldSim {
         if let Some(target) = input.launch_fpv_at {
             if self.inv.friendly_fpv > 0 && self.friendly_fpv.is_none() {
                 self.inv.friendly_fpv -= 1;
+                self.add_suspicion("fpv_launch", 1.0);
                 let max_d = target.dist(self.player_at).clamp(10.0, 145.0);
                 let aim_pt = self.player_at.add(target.sub(self.player_at).norm().mul(max_d));
                 let locked = self
@@ -3699,8 +4374,13 @@ impl WorldSim {
             }
         }
 
-        if let Some(target) = input.call_radio_at {
+        if input.call_radio_at.is_some() && self.assault_over && self.inv.has_radio {
+            // Nobody answers now, and a radio on the air can be found.
+            self.add_suspicion("radio_call", 0.3);
+            self.say("电台里只有杂音，前线早已南移，没有人回答。", "Only static: the front has moved on and nobody answers.");
+        } else if let Some(target) = input.call_radio_at {
             if self.inv.has_radio && self.inv.radio_strikes > 0 && self.radio_cd <= 0.0 {
+                self.add_suspicion("radio_call", 1.0);
                 self.inv.radio_strikes -= 1;
                 self.radio_cd = 45.0;
                 self.mortars.push(MortarMission { target, fuse: 2.6, rounds_left: 5, round_gap: 0.55, friendly: true, whistled: false });
@@ -4430,6 +5110,8 @@ impl WorldSim {
         }
 
         let mul = exposure(self.player_gait, self.body.sheltered);
+        // Out in the curfew there is no challenge.
+        let curfew_out = self.curfew_now() && self.active_interior.is_none();
         let indoor_stealth = if let Some(i_idx) = self.active_interior {
             let intr = &self.interiors[i_idx];
             let room_lit = !self.blackout && self.hour < BLACKOUT_HOUR;
@@ -4660,7 +5342,11 @@ impl WorldSim {
                         let goal = road[g.wp_idx.min(road.len() - 1)];
                         Self::move_squad(&mut g.men, ground, interiors, &bar_snap, &mut bar_dmg, goal, 0, walk_spd, dt, 1.2);
                     }
-                    if g.meter >= 1.0 {
+                    if g.meter >= 1.0 && curfew_out {
+                        g.state = SquadState::Engage;
+                        g.hostile = true;
+                        g.lost_for = 0.0;
+                    } else if g.meter >= 1.0 {
                         g.state = SquadState::Challenge;
                         g.timer = challenge_s;
                         g.shouted = false;
@@ -4673,7 +5359,11 @@ impl WorldSim {
                     let tf = if interiors.iter().any(|it| it.contains(g.last_seen)) { player_floor } else { 0 };
                     Self::move_squad(&mut g.men, ground, interiors, &bar_snap, &mut bar_dmg, g.last_seen, tf, walk_spd, dt, 1.4);
                     g.timer -= dt;
-                    if g.meter >= 1.0 {
+                    if g.meter >= 1.0 && curfew_out {
+                        g.state = SquadState::Engage;
+                        g.hostile = true;
+                        g.lost_for = 0.0;
+                    } else if g.meter >= 1.0 {
                         g.state = SquadState::Challenge;
                         g.timer = challenge_s;
                         g.shouted = false;
@@ -4879,7 +5569,7 @@ impl WorldSim {
                     Self::move_squad(&mut g.men, ground, interiors, &bar_snap, &mut bar_dmg, g.last_seen, tf, walk_spd * 1.4, dt, 1.5);
                     g.timer -= dt;
                     if g.meter >= 1.0 {
-                        if g.hostile || self.inv.has_rifle || self.player_gait != Gait::Still {
+                        if g.hostile || curfew_out || self.inv.has_rifle || self.player_gait != Gait::Still {
                             g.state = SquadState::Engage;
                             g.hostile = true;
                             g.lost_for = 0.0;
@@ -4923,7 +5613,7 @@ impl WorldSim {
             self.push_radio("敌军手雷", "INCOMING GRENADE", "俄军投掷破片手雷！快散开隐蔽", true);
         }
 
-        if queue_spotted_fpv {
+        if queue_spotted_fpv && !self.assault_over {
             self.fpv_cd = 90.0;
             let (flo, _) = forces.range("fpv", "spotted_to_strike_min");
             let fibre = self.next_rand(87) < forces.num_or("fpv", "fibre_optic_p", 0.2);
@@ -4989,7 +5679,10 @@ impl WorldSim {
             self.push_track(at, dir, false, false);
         }
 
-        if robbed {
+        if robbed && self.assault_over {
+            // Under occupation a stop is a search: what you carry decides it.
+            self.inspect_player(Inspect::Patrol, false, false);
+        } else if robbed {
             let taken = self.inv.food + self.inv.water + self.inv.bandage + self.inv.warmer;
             self.inv.food = 0;
             self.inv.water = 0;
@@ -5220,7 +5913,24 @@ impl WorldSim {
                 self.drone.centre = self.drone.centre.lerp(self.player_at, (dt * 0.5).min(1.0));
                 self.drone.confirm += dt;
                 let confirm_s = forces.num_or("recon_drone", "confirm_s", 6.0);
-                if self.drone.confirm >= confirm_s && self.mortars.iter().all(|m| m.friendly) {
+                if self.drone.confirm >= confirm_s && self.assault_over {
+                    // No more mortars: the drone calls the nearest patrol over.
+                    self.drone.confirm = 0.0;
+                    let pat = self.player_at;
+                    if let Some(g) = self
+                        .squads
+                        .iter_mut()
+                        .filter(|g| g.men.iter().any(|m| m.hp > 0.0))
+                        .min_by(|a, b| a.men[0].at.dist(pat).total_cmp(&b.men[0].at.dist(pat)))
+                    {
+                        if matches!(g.state, SquadState::Patrol) {
+                            g.state = SquadState::Check;
+                            g.last_seen = pat;
+                            g.timer = 30.0;
+                        }
+                    }
+                    self.say("无人机在头顶盯着你。巡逻队往这边来了。", "A drone is watching you. A patrol is coming.");
+                } else if self.drone.confirm >= confirm_s && self.mortars.iter().all(|m| m.friendly) {
                     self.drone.confirm = 0.0;
                     let (lo_m, hi_m) = forces.range("mortar_82", "sensor_to_shooter_min");
                     let mins = lo_m + self.next_rand(64) * (hi_m - lo_m);
@@ -5440,7 +6150,7 @@ impl WorldSim {
                 lan.height = (lan.height - dt * 11.0).max(1.2);
                 self.lancet = Some(lan);
             }
-        } else if self.hour >= hm(20, 45) {
+        } else if !self.assault_over && self.hour >= hm(20, 45) {
             self.lancet_cd -= dt;
             let pla_tgt = self.tanks.iter().find(|t| t.hp > 0.0 && t.faction == Faction::Pla).map(|t| (t.id, t.at));
             let spotted_player = drone_seeing || self.under_fire_for > 0.5;
@@ -5601,7 +6311,7 @@ impl WorldSim {
             ),
         ];
         for &(trigger_h, bit, kinds, hint, zh, en) in &waves {
-            if self.hour >= trigger_h && (self.tank_wave_mask & bit) == 0 {
+            if !self.assault_over && self.hour >= trigger_h && (self.tank_wave_mask & bit) == 0 {
                 self.tank_wave_mask |= bit;
                 for (k_i, &kind) in kinds.iter().enumerate() {
                     let h = hint.add(P2::new((k_i as f32 - 1.0) * 8.0, -(k_i as f32) * 4.0));
@@ -8589,5 +9299,388 @@ mod tests {
         }
         let moved = sim.tanks[0].at.dist(a);
         assert!(moved > 3.0, "it drives off the wreck: {moved} m");
+    }
+
+    fn occupied(city: &City, seed: u64) -> WorldSim {
+        let mut sim = WorldSim::new(city);
+        sim.seed = seed;
+        sim.rng = seed;
+        sim.hour = 24.0 + hm(12, 0);
+        sim.mornings = 1;
+        sim.dawn_survived = true;
+        sim.assault_over = true;
+        sim.order_posted = true;
+        sim
+    }
+
+    fn reseed(base: &WorldSim, seed: u64) -> WorldSim {
+        let mut sim = base.clone();
+        sim.seed = seed;
+        sim.rng = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xD1B5_4A32_D192_ED03;
+        sim
+    }
+
+    #[test]
+    fn the_assault_ends_at_first_dawn() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = WorldSim::new(&city);
+        sim.hour = DAWN_HOUR - 0.01;
+        sim.spawn_tank_wave_at(VehicleKind::T72B3, P2::new(-262.0, -322.0), &forces);
+        sim.rally_militia();
+        sim.mortars.push(MortarMission { target: sim.player_at, fuse: 99.0, rounds_left: 3, round_gap: 0.0, friendly: false, whistled: false });
+        assert!(!sim.tanks.is_empty() && !sim.militia.is_empty());
+        for _ in 0..20 {
+            sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.25);
+        }
+        assert!(sim.assault_over);
+        assert!(sim.tanks.is_empty() && sim.mortars.is_empty() && sim.militia.is_empty() && sim.lancet.is_none());
+        // Even jumping straight from the afternoon to dawn, the night's waves stay over.
+        let mut jump = WorldSim::new(&city);
+        jump.hour = DAWN_HOUR + 0.001;
+        jump.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.05);
+        assert!(jump.assault_over && jump.tanks.is_empty(), "{} vehicles", jump.tanks.len());
+        assert!(sim.suspicion > 0.0, "rallying the militia is remembered");
+    }
+
+    #[test]
+    fn the_order_sheet_brings_a_curfew() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = occupied(&city, 1);
+        sim.order_posted = false;
+        sim.hour = 24.0 + hm(11, 59);
+        sim.player_at = P2::new(-900.0, -900.0);
+        sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.25);
+        assert!(!sim.order_posted);
+        sim.hour = 24.0 + hm(12, 1);
+        sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.25);
+        assert!(sim.order_posted && sim.sms.is_some());
+        for (h, curfew) in [(12.0, false), (19.9, false), (20.1, true), (29.0, true), (30.1, false)] {
+            sim.hour = 24.0 + h;
+            assert_eq!(sim.curfew_now(), curfew, "at {h}");
+        }
+    }
+
+    #[test]
+    fn in_the_curfew_a_patrol_shoots_instead_of_challenging() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let (a, dir) = open_street(&city, &ground, 20.0);
+        let run = |hour: f32| -> SquadState {
+            let mut sim = occupied(&city, 3);
+            sim.hour = hour;
+            sim.blackout = true;
+            sim.player_at = a;
+            sim.tanks.clear();
+            sim.spawn_wait = 1.0e6;
+            let mut sq = test_squad(a.add(dir.mul(5.0)));
+            sq.men[0].facing = dir.mul(-1.0).y.atan2(dir.mul(-1.0).x);
+            sim.squads = vec![sq];
+            let mut seen = SquadState::Patrol;
+            for _ in 0..80 {
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput::default(), 0.1);
+                if let Some(g) = sim.squads.first() {
+                    if matches!(g.state, SquadState::Challenge | SquadState::Engage | SquadState::Detain) {
+                        seen = g.state;
+                        break;
+                    }
+                }
+            }
+            seen
+        };
+        assert_eq!(run(24.0 + hm(21, 30)), SquadState::Engage, "out in the curfew: no challenge");
+        assert_eq!(run(24.0 + hm(13, 0)), SquadState::Challenge, "by day: stop and be searched");
+    }
+
+    #[test]
+    fn a_search_finds_what_you_carry() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let mut base = occupied(&city, 0);
+        let home = base.home_index().unwrap();
+        base.player_at = base.interiors[home].front_door.inside;
+        base.active_interior = Some(home);
+        let n = 150;
+        let bad = |sim: &WorldSim| sim.dead || sim.detentions > 0;
+        let mut armed = 0;
+        let mut clean_man = 0;
+        let mut clean_woman = 0;
+        let mut hid = 0;
+        for s in 0..n {
+            let mut sim = reseed(&base, s);
+            sim.inv.unlock_primary(PrimaryWeapon::Ak74m);
+            sim.inv.has_radio = true;
+            sim.inspect_player(Inspect::Sweep, false, false);
+            armed += bad(&sim) as u32;
+            assert!(sim.carried_contraband().is_empty(), "whatever happens, it is taken");
+
+            let mut sim = reseed(&base, s);
+            sim.inspect_player(Inspect::Sweep, false, false);
+            clean_man += bad(&sim) as u32;
+
+            let mut sim = reseed(&base, s);
+            sim.profile.male = false;
+            sim.inspect_player(Inspect::Sweep, false, false);
+            clean_woman += bad(&sim) as u32;
+
+            let mut sim = reseed(&base, s);
+            sim.inv.unlock_primary(PrimaryWeapon::Ak74m);
+            let c = sim.take_contraband();
+            sim.interiors[home].hidden = c;
+            sim.sweep_building(home, &mut TickOutput::default());
+            hid += bad(&sim) as u32;
+        }
+        let rate = |k: u32| k as f32 / n as f32;
+        eprintln!(
+            "search outcomes (shot or taken) over {n} runs: carrying a gun {:.2}, clean man {:.2}, clean woman {:.2}, gun hidden at home {:.2}",
+            rate(armed),
+            rate(clean_man),
+            rate(clean_woman),
+            rate(hid)
+        );
+        assert!(rate(armed) > 0.8, "carrying a gun: {}", rate(armed));
+        assert!(rate(clean_man) > 0.02 && rate(clean_man) < 0.2, "a clean man: {}", rate(clean_man));
+        assert!(rate(clean_woman) < 0.05, "a clean woman: {}", rate(clean_woman));
+        assert!(rate(hid) > 0.1 && rate(hid) < 0.5, "hidden behind the cupboard: {}", rate(hid));
+    }
+
+    #[test]
+    fn detention_takes_days_and_the_world_goes_on() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let base = occupied(&city, 0);
+        let mut came_back = 0;
+        for s in 0..40 {
+            let mut sim = reseed(&base, s);
+            sim.inv.unlock_primary(PrimaryWeapon::Ak74m);
+            sim.player_at = P2::new(-262.0, -322.0);
+            let h0 = sim.hour;
+            let hunger0 = sim.body.hunger;
+            sim.detain("测试。", "Test.");
+            assert_eq!(sim.detentions, 1);
+            if sim.dead {
+                continue;
+            }
+            came_back += 1;
+            let days = (sim.hour - h0) / 24.0;
+            assert!(days >= 0.7 && days < 125.0, "{days}");
+            assert!((clock::time_of_day(sim.hour) - 10.0).abs() < 0.01, "released in the morning");
+            assert!(sim.carried_contraband().is_empty());
+            assert!(sim.body.hunger < hunger0);
+            let home = sim.home_index().unwrap();
+            assert!(sim.player_at.dist(sim.interiors[home].front_door.inside) < 0.5);
+            let before = sim.mornings;
+            sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.1);
+            assert!(sim.mornings > before, "the mornings missed are counted");
+            assert!(
+                (0..sim.interiors.len()).all(|i| sim.swept[i] || sim.sweep_hour(i) > sim.hour),
+                "the sweep went through while you were away"
+            );
+        }
+        assert!(came_back >= 30, "most come back: {came_back} of 40");
+    }
+
+    #[test]
+    fn you_can_hide_things_behind_the_cupboard() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = occupied(&city, 2);
+        let home = sim.home_index().unwrap();
+        sim.interiors[home].stash = Default::default();
+        sim.player_at = sim.interiors[home].locker_at.unwrap();
+        sim.inv.unlock_primary(PrimaryWeapon::Ak74m);
+        sim.inv.ammo = 30;
+        sim.inv.has_radio = true;
+        let e = SimInput { interact_just_pressed: true, ..Default::default() };
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+        sim.tick(&city, &ground, &forces, &e, 0.05);
+        assert!(sim.carried_contraband().is_empty(), "hidden");
+        assert!(sim.interiors[home].hidden.armed() && sim.interiors[home].hidden.radio);
+        sim.tick(&city, &ground, &forces, &e, 0.05);
+        assert!(sim.inv.has_rifle && sim.inv.has_radio && sim.inv.ammo == 30, "and taken out again");
+        assert!(sim.interiors[home].hidden.is_empty());
+    }
+
+    #[test]
+    fn being_known_brings_them_to_your_door() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let mut base = occupied(&city, 0);
+        base.mornings = 5;
+        base.hour = 24.0 * 5.0 + hm(7, 0);
+        let mut planned = 0;
+        let mut taken = 0;
+        let n = 120;
+        for s in 0..n {
+            let mut sim = reseed(&base, s);
+            sim.suspicion = 100.0;
+            sim.plan_visit();
+            if let Some(at) = sim.visit_at {
+                planned += 1;
+                assert!(at > sim.hour);
+                let home = sim.home_index().unwrap();
+                sim.player_at = sim.interiors[home].front_door.inside;
+                sim.active_interior = Some(home);
+                sim.visit_home(&mut TickOutput::default());
+                taken += (sim.detentions > 0 || sim.dead) as u32;
+            }
+            let mut quiet = reseed(&base, s);
+            quiet.plan_visit();
+            assert!(quiet.visit_at.is_none(), "nobody comes for someone they know nothing about");
+        }
+        let p = planned as f32 / n as f32;
+        assert!(p > 0.15 && p < 0.45, "a visit on about one morning in three: {p}");
+        assert!(taken as f32 > planned as f32 * 0.5, "listed and at home: taken {taken} of {planned}");
+    }
+
+    /// A point on the bank, facing the river, at the spawn's x.
+    fn at_the_bank(city: &City) -> P2 {
+        let x = city.spawn.x;
+        P2::new(x, city.bank_y(x) - 4.0)
+    }
+
+    #[test]
+    fn the_open_river_cannot_be_walked_on() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let walk_north = |hour: f32| -> bool {
+            let mut sim = occupied(&city, 1);
+            sim.hour = hour;
+            sim.player_at = at_the_bank(&city);
+            for _ in 0..60 {
+                sim.squads.clear();
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput { wish_move: P2::new(0.0, 1.0), ..Default::default() }, 0.1);
+            }
+            ground.on_ice(sim.player_at)
+        };
+        assert!(walk_north(24.0 * 15.0 + 12.0), "in February you walk out onto the ice");
+        assert!(!walk_north(24.0 * 170.0 + 12.0), "in July the river is water");
+    }
+
+    #[test]
+    fn thin_ice_gives_way() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let on_ice_for_a_minute = |hour: f32, seed: u64| -> bool {
+            let mut sim = occupied(&city, seed);
+            sim.hour = hour;
+            let bank = at_the_bank(&city);
+            sim.player_at = P2::new(bank.x, bank.y + 12.0);
+            assert!(ground.on_ice(sim.player_at));
+            for _ in 0..240 {
+                sim.squads.clear();
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput::default(), 0.25);
+                if sim.dead {
+                    return true;
+                }
+            }
+            false
+        };
+        // 25 April: the ice is down to a few centimetres.
+        let late_april = 24.0 * 98.0 + 12.0;
+        assert!(crate::living::get().ice_cm(late_april) < 6.0);
+        let fell = (0..20).filter(|s| on_ice_for_a_minute(late_april, *s)).count();
+        assert!(fell >= 8, "a minute on rotten ice: {fell} of 20 fell through");
+        let february = 24.0 * 20.0 + 12.0;
+        assert_eq!((0..5).filter(|s| on_ice_for_a_minute(february, *s)).count(), 0, "February's ice holds");
+    }
+
+    #[test]
+    fn summer_leaves_no_footprints_and_no_snow_to_melt() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let tracks_after_a_walk = |hour: f32| -> usize {
+            let mut sim = occupied(&city, 2);
+            sim.hour = hour;
+            sim.tracks.clear();
+            sim.player_at = at_the_bank(&city);
+            for _ in 0..40 {
+                sim.squads.clear();
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput { wish_move: P2::new(1.0, 0.0), ..Default::default() }, 0.1);
+            }
+            sim.tracks.len()
+        };
+        assert!(tracks_after_a_walk(24.0 * 3.0 + 12.0) > 0, "January snow keeps your footprints");
+        assert_eq!(tracks_after_a_walk(24.0 * 170.0 + 12.0), 0, "July has no snow to print");
+
+        let mut sim = occupied(&city, 2);
+        let home = sim.home_index().unwrap();
+        sim.interiors[home].stove_fuel_s = 1.0e4;
+        sim.hour = 24.0 * 170.0 + 12.0;
+        sim.last_rain_hour = -1000.0;
+        assert!(!sim.melt_snow(home), "no snow and no rain: nothing to boil");
+        sim.last_rain_hour = sim.hour - 5.0;
+        assert!(sim.melt_snow(home), "rain caught in pots this morning");
+
+        let blocks = |day: f32| -> Vec<Weather> { (0..400).map(|b| weather_at(9, 24.0 * day + b as f32 * 1.5)).map(|w| w.0).collect() };
+        let jan = blocks(5.0);
+        let jul = blocks(170.0);
+        assert!(!jan.contains(&Weather::Rain));
+        assert!(jul.contains(&Weather::Rain) && !jul.contains(&Weather::Flurries), "summer rains");
+    }
+
+    /// A whole year by the routine, at a glance, from the morning after the first
+    /// night: the river opens and freezes, summer needs no stove.
+    #[test]
+    fn a_year_at_a_glance() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = occupied(&city, 4);
+        let home = sim.home_index().unwrap();
+        sim.hour = DAWN_HOUR + 1.0;
+        sim.player_at = sim.interiors[home].stove_at.unwrap();
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+        assert_eq!(sim.active_interior, Some(home));
+        // Enough for a year even after a search takes half of what you carry.
+        sim.inv.food = 2000;
+        sim.inv.water = 1500;
+        sim.inv.coal = 600;
+        sim.inv.medicine = 50;
+        let r = crate::routine::Routine::default();
+        let t0 = std::time::Instant::now();
+        let end = sim.hour + 24.0 * 365.0;
+        let (mut opened, mut froze, mut was_open) = (false, false, sim.river_open);
+        let mut july_room = f32::MIN;
+        let mut stops = std::collections::BTreeMap::new();
+        while sim.hour < end && !sim.dead {
+            sim.player_at = sim.interiors[home].stove_at.unwrap();
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+            let p = sim.pass_time(&city, &ground, &forces, &r, 24.0);
+            *stops.entry(format!("{:?}", p.stop)).or_insert(0) += 1;
+            if sim.river_open && !was_open {
+                opened = true;
+            }
+            if !sim.river_open && was_open {
+                froze = true;
+            }
+            was_open = sim.river_open;
+            if clock::date_of(sim.hour).0 == 7 {
+                july_room = july_room.max(sim.interiors[home].room_temp_c);
+            }
+            if p.hours == 0.0 && p.stop != crate::routine::Stop::Dead {
+                // Not safe here this instant: step on in real time and try again.
+                for _ in 0..40 {
+                    sim.squads.clear();
+                    sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.25);
+                }
+            }
+        }
+        eprintln!("a year at a glance: {:?}, ended {} dead={} ({}), in {:?}", stops, clock::label(sim.hour), sim.dead, sim.death_en, t0.elapsed());
+        assert!(opened && froze, "the river opened and froze again");
+        assert!(july_room > 15.0, "summer warms the flat without a fire: {july_room}");
+        assert!(sim.dead || sim.hour >= end - 24.0);
+        assert!(t0.elapsed().as_secs() < 120, "a year at a glance takes {:?}", t0.elapsed());
     }
 }

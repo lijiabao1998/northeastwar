@@ -1,7 +1,7 @@
 //! Modern PLA & Russian combat vehicles (including active Russia-Ukraine war hardware)
 //! and infantry/anti-armor/counter-drone weapon rosters.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Faction {
     Pla,
     Russia,
@@ -16,7 +16,7 @@ impl Faction {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum VehicleKind {
     // Russia (10 active / Russo-Ukrainian front-line vehicles)
     T72B3,
@@ -239,7 +239,7 @@ impl VehicleKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub enum PrimaryWeapon {
     #[default]
     Qbz191,
@@ -331,7 +331,7 @@ impl PrimaryWeapon {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub enum AtWeapon {
     #[default]
     Rpg7,

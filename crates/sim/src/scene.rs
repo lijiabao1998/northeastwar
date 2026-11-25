@@ -169,11 +169,39 @@ fn ground(city: &City, pal: &Palette, g: &mut Soup) {
     let snow = pal.get("snow_ground");
     let field = [P2::new(-1500.0, -1100.0), P2::new(1300.0, -1100.0), P2::new(1300.0, 2400.0), P2::new(-1500.0, 2400.0)];
     g.flat(&field, -0.06, snow);
+    // Paving round the buildings, once the snow has gone (in winter it lies under
+    // the snow and is not drawn).
+    let forecourt = pal.get_or("forecourt", Rgb::NONE);
+    if !forecourt.is_none() {
+        // Four metres all round: a strip along each wall and a round at each corner
+        // (one ribbon round the whole ring would spike out at sharp corners).
+        const AROUND: f32 = 4.0;
+        let round: Vec<P2> = (0..8)
+            .map(|k| {
+                let t = k as f32 * std::f32::consts::TAU / 8.0;
+                P2::new(t.cos(), t.sin()).mul(AROUND)
+            })
+            .collect();
+        for b in city.buildings.iter().filter(|b| b.bank == Bank::China && b.footprint.len() >= 3) {
+            let n = b.footprint.len();
+            for i in 0..n {
+                let (a, c) = (b.footprint[i], b.footprint[(i + 1) % n]);
+                if a.dist(c) >= 0.3 {
+                    g.ribbon(&[a, c], AROUND * 2.0, 0.004, forecourt);
+                }
+                let at: Vec<P2> = round.iter().map(|r| a.add(*r)).collect();
+                g.flat(&at, 0.004, forecourt);
+            }
+        }
+    }
 
     // The Heilongjiang, frozen: continuous frosted snow-ice base + subtle mid-river glare + organic pressure cracks.
     if city.bank.len() >= 2 {
         let ice = pal.get("river_ice");
-        let base_ice = ice.mix(snow, 0.34);
+        // The river's face: frosted ice in winter, water once it is open.
+        let base_ice = pal.get_or("river_surface", ice.mix(snow, 0.34));
+        // Snow lying on the ice (none on open water).
+        let river_snow = pal.get_or("river_snow", snow);
         let river_out = smooth_river_out(&city.bank);
         for w in city.bank.windows(2) {
             let far0 = w[0].add(river_out.mul(780.0));
@@ -190,7 +218,7 @@ fn ground(city: &City, pal: &Palette, g: &mut Soup) {
         // Near-shore and far-shore snow-drift aprons.
         for (idx, (dist_out, width)) in [(12.0f32, 22.0f32), (710.0, 26.0)].into_iter().enumerate() {
             let apron: Vec<P2> = smooth.iter().map(|p| p.add(river_out.mul(dist_out))).collect();
-            g.ribbon(&apron, width, -0.021 + idx as f32 * 0.0005, snow.mix(base_ice, 0.32));
+            g.ribbon(&apron, width, -0.021 + idx as f32 * 0.0005, river_snow.mix(base_ice, 0.32));
         }
         // Broad, gentle low-contrast mid-river wind-scoured blue-ice sheen.
         let mid_channel: Vec<P2> = smooth.iter().map(|p| p.add(river_out.mul(225.0))).collect();
@@ -209,7 +237,7 @@ fn ground(city: &City, pal: &Palette, g: &mut Soup) {
             g.ribbon(&crack, w, -0.018 + ci as f32 * 0.0004, crack_col);
         }
         // Four staggered short wind-drifted snow patches along the river surface.
-        let patch_col = snow.mix(base_ice, 0.40);
+        let patch_col = river_snow.mix(base_ice, 0.40);
         for (pi, (i0, len, dist_out, w)) in [
             (0usize, 5usize, 78.0f32, 7.5f32),
             (3, 6, 148.0, 9.5),
@@ -234,7 +262,7 @@ fn ground(city: &City, pal: &Palette, g: &mut Soup) {
         // The Chinese riverside promenade + inland Heilongjiang Park stone-brick walkway + far-bank embankment.
         g.ribbon(&offset(&city.bank, 5.0), 9.0, 0.02, pal.get("granite_paving"));
         let park_walk: Vec<P2> = decimate_bank(&offset(&city.bank, 22.0), 6);
-        g.ribbon(&park_walk, 4.2, 0.024, pal.get("pavement_brick").mix(snow, 0.14));
+        g.ribbon(&park_walk, 4.2, 0.024, pal.get("pavement_brick").mix(pal.get_or("snow_tint", snow), 0.14));
         let far_shore: Vec<P2> = smooth.iter().map(|p| p.add(river_out.mul(725.0))).collect();
         g.ribbon(&far_shore, 6.5, 0.15, pal.get("embankment"));
 
@@ -250,11 +278,11 @@ fn ground(city: &City, pal: &Palette, g: &mut Soup) {
             slipway_start.add(river_out.mul(710.0)).add(along_bank.mul(-10.0)),
         ];
         for side in [-1.4f32, 1.4] {
-            g.ribbon(&offset(&ice_trail, side), 0.75, -0.010, pal.get("river_ice_dark").mix(snow, 0.3));
+            g.ribbon(&offset(&ice_trail, side), 0.75, -0.010, pal.get("river_ice_dark").mix(river_snow, 0.3));
         }
     }
 
-    let brick = pal.get("pavement_brick").mix(snow, 0.18);
+    let brick = pal.get("pavement_brick").mix(pal.get_or("snow_tint", snow), 0.18);
     let asphalt = pal.get("asphalt").mix(pal.get("asphalt_snow_film"), 0.42);
     for (i, road) in city.roads.iter().enumerate() {
         let lift = i as f32 * 0.0006;
@@ -424,6 +452,15 @@ fn trees(city: &City, pal: &Palette, props: &mut Soup) {
             props.boxed(twig, h + 0.5, [0.07, 1.6 + hash01(id, 50 + k), 0.07], a, bark.mix(snow, 0.15));
         }
         props.boxed(*at, h + 0.02, [0.5 * scale, 0.08, 0.5 * scale], 0.0, snow);
+        // In leaf, the pollarded head carries a dense round crown of new shoots.
+        let leaves = pal.get_or("foliage", Rgb::NONE);
+        if !leaves.is_none() {
+            let shade = leaves.mix(Rgb { r: 0.0, g: 0.0, b: 0.0 }, 0.18);
+            let r = 1.25 * scale;
+            props.boxed(*at, h - 0.55, [r * 2.0, 1.5 * scale, r * 2.0], yaw, shade);
+            props.boxed(*at, h + 0.35, [r * 1.7, 1.25 * scale, r * 1.7], yaw + 0.6, leaves);
+            props.boxed(*at, h + 1.25, [r * 1.1, 0.7 * scale, r * 1.1], yaw + 0.2, leaves.mix(Rgb { r: 1.0, g: 1.0, b: 0.9 }, 0.08));
+        }
     }
 }
 
@@ -950,8 +987,9 @@ fn riverfront(city: &City, pal: &Palette, scene: &mut Scene) {
         scene.lamp_posts.push((world(p, 4.55), 2));
     });
 
-    // 3. Clean pressure-ice blocks shoved gently up against the riverbank wall.
-    let ice = pal.get("river_ice");
+    // 3. Clean pressure-ice blocks shoved gently up against the riverbank wall (gone
+    // once the river is open).
+    let ice = pal.get_or("shore_ice", pal.get("river_ice"));
     let mut idx = 0i64;
     along(&offset(&city.bank, -5.5), 14.0, |p, _| {
         idx += 1;
@@ -1099,6 +1137,16 @@ fn riverfront(city: &City, pal: &Palette, scene: &mut Scene) {
                     scene.props.beam(world(p, h * 0.65), world(bp, h + 1.1), 0.055, bark_col);
                 }
                 scene.props.boxed(p, h, [0.55, 0.08, 0.55], 0.0, snow);
+                // In leaf: a loose, narrow crown over the upper half, a little lighter
+                // than the town's other trees.
+                let leaves = pal.get_or("foliage", Rgb::NONE);
+                if !leaves.is_none() {
+                    let lit = leaves.mix(Rgb { r: 1.0, g: 1.0, b: 0.75 }, 0.12);
+                    let yaw = hash01(seed, 5) * 1.5;
+                    scene.props.boxed(p, h * 0.5, [1.7, h * 0.35, 1.7], yaw, leaves.mix(Rgb { r: 0.0, g: 0.0, b: 0.0 }, 0.15));
+                    scene.props.boxed(p, h * 0.75, [2.0, h * 0.3, 2.0], yaw + 0.7, lit);
+                    scene.props.boxed(p, h * 0.98, [1.3, 1.0, 1.3], yaw + 0.3, lit);
+                }
             } else {
                 // Dark snow-laden spruce / pine (`雪松`).
                 let sc = 0.85 + hash01(seed, 3) * 0.45;
@@ -1343,7 +1391,7 @@ fn snow_piles(city: &City, pal: &Palette, props: &mut Soup) {
                 let id = (r * 1000 + k) as i64;
                 if hash01(id, if side > 0.0 { 8 } else { 7 }) < 0.55 {
                     let size = 0.7 + hash01(id, 2);
-                    props.cone(p, 0.0, size, 0.35 + 0.3 * size, 7, pal.get("snow_dirty").mix(pal.get("snow_ground"), hash01(id, 5)));
+                    props.cone(p, 0.0, size, 0.35 + 0.3 * size, 7, pal.get("snow_dirty").mix(pal.get_or("snow_tint", pal.get("snow_ground")), hash01(id, 5)));
                 }
             });
         }
@@ -1444,4 +1492,99 @@ fn boards(city: &City, pal: &Palette, props: &mut Soup) -> Vec<Board> {
         });
     }
     out
+}
+
+#[cfg(test)]
+mod season_tests {
+    use super::*;
+    use crate::look::{Foliage, Season, SnowCover};
+
+    fn all_colours(scene: &Scene) -> Vec<[f32; 4]> {
+        let mut v = Vec::new();
+        for s in [&scene.ground, &scene.buildings, &scene.props, &scene.glass, &scene.lit, &scene.lamp_glow] {
+            v.extend_from_slice(&s.col);
+        }
+        for b in &scene.blocks {
+            v.extend_from_slice(&b.solid.col);
+        }
+        v
+    }
+
+    fn tris(scene: &Scene) -> usize {
+        scene.ground.triangles() + scene.props.triangles() + scene.buildings.triangles() + scene.blocks.iter().map(|b| b.solid.triangles()).sum::<usize>()
+    }
+
+    #[test]
+    fn the_seasons_follow_the_calendar() {
+        // Days from 17 January.
+        let at = |day: f32| Season::at(24.0 * day + 12.0);
+        assert_eq!(at(0.0), Season::WINTER);
+        let july = at(170.0);
+        assert_eq!((july.snow, july.river_open, july.foliage), (SnowCover::None, true, Foliage::Summer));
+        assert_eq!(at(110.0).foliage, Foliage::Bare, "7 May: not yet in leaf");
+        assert_eq!(at(120.0).foliage, Foliage::Spring, "17 May: the first leaves");
+        assert_eq!(at(235.0).foliage, Foliage::LateSummer, "9 September: still in leaf");
+        assert_eq!(at(265.0).foliage, Foliage::Autumn, "9 October: turned");
+        assert_eq!(at(285.0).foliage, Foliage::Fallen, "29 October: down");
+        assert!(at(96.0).thin_ice && !at(96.0).river_open, "23 April: the last thin ice");
+        assert!(at(312.0).thin_ice, "25 November: a week after freeze-up");
+        assert!(at(330.0).snow == SnowCover::Deep && !at(330.0).river_open && !at(330.0).thin_ice, "mid-December");
+        // The town changes its look a handful of times a year, not every day.
+        let mut changes = 0;
+        let mut last = at(0.0);
+        for d in 1..365 {
+            let s = at(d as f32);
+            if s != last {
+                changes += 1;
+            }
+            last = s;
+        }
+        assert!((6..=14).contains(&changes), "{changes} changes of look in a year");
+    }
+
+    #[test]
+    fn the_table_has_every_season_colour() {
+        let (_, pal) = crate::load_heihe().unwrap();
+        for name in crate::look::SEASON_COLOURS {
+            assert!(pal.sources.contains_key(name), "{name} is not in data/heihe/look.json");
+            assert!(!pal.sources[name].is_empty(), "{name} names no photograph");
+        }
+    }
+
+    #[test]
+    fn winter_is_the_town_as_drawn_and_summer_has_no_snow() {
+        let (city, pal) = crate::load_heihe().unwrap();
+        let base = build(&city, &pal);
+        let winter = build(&city, &pal.seasonal(&Season::WINTER));
+        assert_eq!(tris(&base), tris(&winter), "the winter palette draws the same town");
+        assert_eq!(all_colours(&base), all_colours(&winter));
+
+        let near = |c: &[f32; 4], rgb: Rgb| {
+            let l = crate::soup::linear(rgb);
+            (c[0] - l[0]).abs() + (c[1] - l[1]).abs() + (c[2] - l[2]).abs() < 0.01
+        };
+        let snow = pal.get("snow");
+        let summer = build(&city, &pal.seasonal(&Season { snow: SnowCover::None, river_open: true, thin_ice: false, foliage: Foliage::Summer }));
+        let cols = all_colours(&summer);
+        assert!(cols.iter().all(|c| c.iter().all(|v| v.is_finite())), "nothing drawn in no colour");
+        assert!(!cols.iter().any(|c| near(c, snow)), "no snow lies anywhere in July");
+        for (name, what) in [
+            ("grass_summer", "the ground is grass"),
+            ("river_water_clear", "the river is water"),
+            ("foliage_summer", "the trees are in leaf"),
+            ("roof_metal_red", "the roofs are roofs"),
+            ("asphalt_summer_sun", "the roads are dry asphalt"),
+        ] {
+            assert!(cols.iter().any(|c| near(c, pal.get(name))), "{what} ({name})");
+        }
+        assert!(!cols.iter().any(|c| near(c, pal.get("river_ice").mix(snow, 0.35))), "no ice is shoved up on the bank");
+
+        // The last days of April: no snow, the ice still there, thin.
+        let thaw = build(&city, &pal.seasonal(&Season { snow: SnowCover::None, river_open: false, thin_ice: true, foliage: Foliage::Bare }));
+        let cols = all_colours(&thaw);
+        assert!(cols.iter().all(|c| c.iter().all(|v| v.is_finite())));
+        assert!(cols.iter().any(|c| near(c, pal.get("river_floes"))), "floes on the river");
+        assert!(cols.iter().any(|c| near(c, pal.get("verge_dormant_spring"))), "dead verges");
+        assert!(!cols.iter().any(|c| near(c, pal.get("foliage_summer"))), "no leaves");
+    }
 }

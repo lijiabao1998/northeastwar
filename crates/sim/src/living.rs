@@ -79,6 +79,52 @@ impl Living {
         (self.month("snow_days", m as usize - 1) / DAYS[m as usize - 1]).clamp(0.0, 1.0)
     }
 
+    /// Snow lying on the ground (cm), the month's normal.
+    pub fn snow_depth_cm(&self, hour: f32) -> f32 {
+        let doy = (clock::FIRST_DAY_OF_YEAR - 1) as f32 + hour.max(0.0) / 24.0;
+        self.normal("snow_depth_cm", doy).max(0.0)
+    }
+
+    /// Days with rain or snow in the month `hour` falls in, as a share of the month.
+    pub fn precip_share(&self, hour: f32) -> f32 {
+        let (m, _) = clock::date_of(hour);
+        const DAYS: [f32; 12] = [31.0, 28.0, 31.0, 30.0, 31.0, 30.0, 31.0, 31.0, 30.0, 31.0, 30.0, 31.0];
+        (self.month("precip_days", m as usize - 1) / DAYS[m as usize - 1]).clamp(0.0, 1.0)
+    }
+
+    /// The Heilongjiang's ice at `hour` (cm): thickening through the winter,
+    /// gone from the break-up in late April to the freeze-up in November.
+    pub fn ice_cm(&self, hour: f32) -> f32 {
+        let pts: Vec<(f32, f32)> = self
+            .root
+            .pointer("/river/ice_cm_by_day")
+            .and_then(|v| v.as_array())
+            .expect("river/ice_cm_by_day")
+            .iter()
+            .filter_map(|p| p.as_array().map(|a| (a[0].as_f64().unwrap_or(0.0) as f32, a[1].as_f64().unwrap_or(0.0) as f32)))
+            .collect();
+        // 1-based day of the year, fractional.
+        let d = ((clock::FIRST_DAY_OF_YEAR as f32 - 1.0 + hour.max(0.0) / 24.0).rem_euclid(365.0)) + 1.0;
+        let n = pts.len();
+        for k in 0..n {
+            let (d0, v0) = pts[k];
+            let (mut d1, v1) = pts[(k + 1) % n];
+            if k + 1 == n {
+                d1 += 365.0;
+            }
+            let dd = if d < d0 && k + 1 == n { d + 365.0 } else { d };
+            if dd >= d0 && dd <= d1 {
+                let t = if d1 > d0 { (dd - d0) / (d1 - d0) } else { 0.0 };
+                return v0 + (v1 - v0) * t;
+            }
+        }
+        // Before the first point of the year: between the last and the first.
+        let (dl, vl) = pts[n - 1];
+        let (df, vf) = pts[0];
+        let t = (d + 365.0 - dl) / (df + 365.0 - dl);
+        vl + (vf - vl) * t.clamp(0.0, 1.0)
+    }
+
     /// The temperature outdoors at `hour`, in °C: the month's normal daily low and
     /// high, the hour of the day, and a departure from normal that lasts several
     /// days at a time (a cold wave, a thaw), rolled from the run's seed. The first
@@ -183,6 +229,31 @@ mod tests {
         let step: f32 = days.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f32>() / days.len() as f32;
         let spread: f32 = days.iter().map(|v| v.abs()).sum::<f32>() / days.len() as f32;
         assert!(step < spread * 1.2, "{step} {spread}");
+    }
+
+    #[test]
+    fn the_river_freezes_and_opens_on_its_days() {
+        let l = get();
+        let at = |day: f32, month_day: (u32, u32)| {
+            let h = 24.0 * day + 12.0;
+            assert_eq!(clock::date_of(h), month_day);
+            l.ice_cm(h)
+        };
+        assert!((at(0.0, (1, 17)) - 55.0).abs() < 1.0);
+        assert!((at(73.0, (3, 31)) - 103.0).abs() < 2.0);
+        assert!(at(85.0, (4, 12)) > 30.0, "still thick in mid-April");
+        assert!(at(99.0, (4, 26)) < 1.0, "the ice drifts away on 26 April");
+        assert_eq!(at(170.0, (7, 6)), 0.0);
+        assert!(at(305.0, (11, 18)) < 1.0 && at(320.0, (12, 3)) > 10.0, "it freezes again in November");
+        assert!((at(365.0, (1, 17)) - 55.0).abs() < 1.0, "and a year on it is where it began");
+    }
+
+    #[test]
+    fn snow_lies_in_winter_rain_falls_in_summer() {
+        let l = get();
+        assert!(l.snow_depth_cm(12.0) > 10.0);
+        assert_eq!(l.snow_depth_cm(24.0 * 170.0), 0.0);
+        assert!(l.precip_share(24.0 * 170.0) > l.precip_share(12.0), "July is wetter than January");
     }
 
     #[test]

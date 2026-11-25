@@ -2,7 +2,11 @@
 //! already trust for the night: take what is in the shelter, bar the door, close
 //! the curtains, sit by the stove; drink, eat, keep the stove going (coal, then
 //! the furniture), take medicine when ill, sleep when tired. It never goes out,
-//! so it shows how long what one shelter holds lasts, and what ends it.
+//! so it shows how long what one shelter holds lasts, and what ends it. Once the
+//! occupation starts it hides the gun and the radio behind the cupboard, or with
+//! `keep` it keeps them on it, to see what the sweep makes of each.
+//!
+//! cargo run --release -p sim --bin days_bot -- [seeds] [days] [hide|keep]
 //!
 //! cargo run --release -p sim --bin days_bot -- [seeds] [days]
 
@@ -17,6 +21,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let seeds: u64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(5);
     let days: f32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(8.0);
+    let hide = args.get(3).map(|s| s.as_str()) != Some("keep");
     let (city, _) = sim::load_heihe().expect("Heihe data");
     let forces = Forces::from_json(&std::fs::read_to_string(sim::data_dir().join("russia/forces.json")).unwrap()).unwrap();
     let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
@@ -24,8 +29,8 @@ fn main() {
     // Stove time a pot of melted snow costs (play seconds), as the sim reckons it.
     let melt_s = sim::living::get().num("fuel", "melt_fuel_h") * 3600.0 / sim::forces::TIME_SCALE;
 
-    println!("| shelter | seed | result | when | mornings | slept h | woke by | coal / wood / furniture / food / water left | room min / max °C | body min °C | illness max | ms per game hour |");
-    println!("|---|---|---|---|---|---|---|---|---|---|---|---|");
+    println!("| shelter | seed | result | when | mornings | taken / days held / suspicion | slept h | woke by | coal / wood / furniture / food / water left | room min / max °C | body min °C | illness max | ms per game hour |");
+    println!("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
     for kind in [InteriorKind::BasementShelter, InteriorKind::PlayerHome] {
         for seed in 0..seeds {
             let mut sim = WorldSim::with_seed(&city, seed);
@@ -48,6 +53,7 @@ fn main() {
             let mut woke: BTreeMap<String, u32> = BTreeMap::new();
             let mut slept = 0.0f32;
             let mut min_temp = f32::MAX;
+            let mut seen_detentions = 0;
             let mut room_lo = f32::MAX;
             let mut room_hi = f32::MIN;
             let mut ill_max = 0.0f32;
@@ -56,6 +62,20 @@ fn main() {
             let h0 = sim.hour;
             while !sim.dead && sim.hour < end_hour {
                 let mut inp = SimInput { clock_running: true, ..Default::default() };
+                // Back from detention they leave you at your own door: go back to the shelter.
+                if sim.detentions != seen_detentions {
+                    seen_detentions = sim.detentions;
+                    sim.player_at = stove;
+                }
+                // Once the occupation starts: the gun and the radio go behind the cupboard.
+                if hide && sim.assault_over && !sim.sleeping && !sim.carried_contraband().is_empty() {
+                    if let Some(locker) = sim.interiors[idx].locker_at {
+                        sim.player_at = locker;
+                        sim.tick(&city, &ground, &forces, &SimInput { interact_just_pressed: true, clock_running: true, ..Default::default() }, 0.1);
+                        sim.player_at = stove;
+                        continue;
+                    }
+                }
                 let room = &sim.interiors[idx];
                 if !sim.sleeping {
                     if sim.body.hunger < 70.0 && sim.inv.food > 0 {
@@ -124,12 +144,22 @@ fn main() {
                 ill_max = ill_max.max(sim.body.illness);
             }
             let ms = t0.elapsed().as_secs_f32() * 1000.0 / (sim.hour - h0).max(0.01);
+            // DAYS_BOT_SAVE=1 keeps the last run as the game's autosave, to try loading it.
+            if std::env::var("DAYS_BOT_SAVE").is_ok_and(|v| v == "1") && !sim.dead {
+                match sim::save::write(&sim, "auto") {
+                    Ok(p) => eprintln!("saved {}", p.display()),
+                    Err(e) => eprintln!("{e}"),
+                }
+            }
             let result = if sim.dead { format!("died: {}", sim.death_en) } else { "alive".into() };
             let woke_s: Vec<String> = woke.iter().map(|(k, v)| format!("{k} {v}")).collect();
             println!(
-                "| {kind:?} | {seed} | {result} | {} | {} | {slept:.1} | {} | {} / {} / {} / {} / {} | {room_lo:.1} / {room_hi:.1} | {min_temp:.1} | {ill_max:.0} | {ms:.0} |",
+                "| {kind:?} | {seed} | {result} | {} | {} | {} / {:.0} / {:.0} | {slept:.1} | {} | {} / {} / {} / {} / {} | {room_lo:.1} / {room_hi:.1} | {min_temp:.1} | {ill_max:.0} | {ms:.0} |",
                 sim::clock::label(sim.hour),
                 sim.mornings,
+                sim.detentions,
+                sim.days_detained,
+                sim.suspicion,
                 woke_s.join(", "),
                 sim.inv.coal,
                 sim.inv.wood,

@@ -24,6 +24,8 @@ use sim::{
 use std::collections::{HashMap, HashSet};
 
 const SPEED_LEVELS: [f32; 5] = [1.0, 2.0, 4.0, 8.0, 16.0];
+/// Game hours a real second while days pass at a glance: a day every two seconds.
+const PASS_HOURS_PER_SECOND: f32 = 12.0;
 
 #[derive(Clone, Copy, Debug)]
 pub enum SpeedAction {
@@ -234,7 +236,7 @@ pub fn install(app: &mut App, interactive: bool, combat_shots: bool) {
 
     if interactive {
         app.add_systems(Update, step_play.after(crate::tick).before(crate::follow))
-            .add_systems(Update, (sync_actors, sync_fx, sync_hud).after(step_play));
+            .add_systems(Update, (sync_actors, sync_fx, sync_hud, autosave).after(step_play));
     } else if combat_shots {
         app.add_systems(Update, (sync_actors, sync_fx, sync_hud));
     }
@@ -1040,6 +1042,34 @@ pub fn spawn_fx(
     }
 }
 
+/// Save the run by itself every morning; when you die, its saves go with you
+/// (one life, docs/DESIGN.md rule 1).
+fn autosave(play: Option<Res<PlayState>>, mut last_morning: Local<Option<u32>>, mut buried: Local<bool>) {
+    let Some(p) = play else { return };
+    if !p.started {
+        *last_morning = None;
+        return;
+    }
+    if p.sim.dead {
+        if !*buried {
+            *buried = true;
+            sim::save::delete_all();
+        }
+        return;
+    }
+    *buried = false;
+    match *last_morning {
+        Some(m) if p.sim.mornings > m => {
+            if let Err(e) = sim::save::write(&p.sim, "auto") {
+                eprintln!("autosave: {e}");
+            }
+            *last_morning = Some(p.sim.mornings);
+        }
+        Some(m) if p.sim.mornings == m => {}
+        _ => *last_morning = Some(p.sim.mornings),
+    }
+}
+
 pub fn step_play(
     mut commands: Commands,
     time: Res<Time>,
@@ -1270,8 +1300,47 @@ pub fn step_play(
         fortify_or_stove: !map_open && keys.just_pressed(KeyCode::KeyT),
         floor_delta,
         clock_running: true,
-        toggle_sleep: !map_open && keys.just_pressed(KeyCode::KeyJ),
+        toggle_sleep: false,
     };
+    // J: tired, lie down; not tired, let the days pass by the routine; again, stop.
+    let mut input = input;
+    if !map_open && keys.just_pressed(KeyCode::KeyJ) {
+        if play.sim.passing {
+            play.sim.passing = false;
+            play.sim.subtitle_zh = "你停了下来。".into();
+            play.sim.subtitle_en = "You stop.".into();
+            play.sim.subtitle_ttl = 3.0;
+        } else if !play.sim.sleeping && play.sim.body.fatigue < sim::survival::SLEEP_MIN_FATIGUE && play.sim.can_rest().is_ok() {
+            play.sim.passing = true;
+        } else {
+            input.toggle_sleep = true;
+        }
+    }
+    if play.sim.passing {
+        // Days at a glance: a day every two seconds, until something needs you.
+        let state = &mut *play;
+        let passed = state.sim.pass_time(
+            &heihe.city,
+            &heihe.ground,
+            &state.forces,
+            &sim::routine::Routine::default(),
+            frame_dt * PASS_HOURS_PER_SECOND,
+        );
+        if passed.stop != sim::routine::Stop::Done {
+            state.sim.passing = false;
+            if passed.stop != sim::routine::Stop::Dead {
+                let (zh, en) = passed.stop.text();
+                state.sim.subtitle_zh = zh.into();
+                state.sim.subtitle_en = en.into();
+                state.sim.subtitle_ttl = 8.0;
+            }
+        }
+        clock.hour = state.sim.hour;
+        clock.blackout = state.sim.blackout;
+        clock.fog = state.sim.fog_density;
+        clock.overcast = overcast(state.sim.weather);
+        return;
+    }
 
     let was_danger = play.sim.challenged
         || play.sim.under_fire_for > 0.0
@@ -1346,6 +1415,7 @@ pub fn step_play(
     clock.hour = play.sim.hour;
     clock.blackout = play.sim.blackout;
     clock.fog = play.sim.fog_density;
+    clock.overcast = overcast(play.sim.weather);
 
     if fx.footstep {
         audio_q.footstep = Some(input.sprinting);
@@ -2292,6 +2362,12 @@ pub fn sync_actors(
     prune_pool(&mut commands, &mut pools.danger_rings, &seen_danger);
 }
 
+/// Rain falls from a sky that hides the sun. The winter's flurries and river fog
+/// keep the light they were drawn with.
+fn overcast(w: Weather) -> f32 {
+    if w == Weather::Rain { 1.0 } else { 0.0 }
+}
+
 pub fn sync_fx(
     mut commands: Commands,
     time: Res<Time>,
@@ -2312,7 +2388,9 @@ pub fn sync_fx(
             commands.entity(e).despawn();
         }
     }
-    let show_snow = play.as_deref().is_some_and(|p| p.started && p.sim.weather != Weather::Clear);
+    let show_snow = play.as_deref().is_some_and(|p| p.started && !matches!(p.sim.weather, Weather::Clear));
+    // The same flakes, in summer rain: long streaks that fall several times faster and straight.
+    let rain = play.as_deref().is_some_and(|p| p.sim.weather == Weather::Rain);
     let paused = play.as_deref().is_some_and(|p| p.paused);
     let px = player.at.x;
     let pz = -player.at.y;
@@ -2322,10 +2400,15 @@ pub fn sync_fx(
             continue;
         }
         *vis = Visibility::Inherited;
+        tf.scale = if rain { Vec3::new(0.35, 7.0, 0.35) } else { Vec3::ONE };
         if !paused {
-            sp.offset.y -= sp.speed * dt;
-            sp.offset.x += (time.elapsed_secs() * 1.4 + sp.phase).sin() * 0.9 * dt;
-            sp.offset.z += 0.65 * dt;
+            if rain {
+                sp.offset.y -= sp.speed * 4.0 * dt;
+            } else {
+                sp.offset.y -= sp.speed * dt;
+                sp.offset.x += (time.elapsed_secs() * 1.4 + sp.phase).sin() * 0.9 * dt;
+                sp.offset.z += 0.65 * dt;
+            }
             if sp.offset.y < 0.1 {
                 sp.offset.y = 22.0;
             }
@@ -2350,7 +2433,7 @@ pub fn sync_hud(
 ) {
     let s = &play.sim;
     let active = play.started && *menu == MenuScreen::Playing;
-    let show_speed = interactive.play && active && !s.dead && !s.sleeping;
+    let show_speed = interactive.play && active && !s.dead && !s.sleeping && !s.passing;
     for mut v in &mut speed_bar_q {
         *v = if show_speed { Visibility::Inherited } else { Visibility::Hidden };
     }
@@ -2381,7 +2464,7 @@ pub fn sync_hud(
     for (role, mut text, mut color, mut vis) in &mut q {
         match role {
             HudRole::Objective => {
-                *vis = if active && !s.dead && !s.sleeping { Visibility::Inherited } else { Visibility::Hidden };
+                *vis = if active && !s.dead && !s.sleeping && !s.passing { Visibility::Inherited } else { Visibility::Hidden };
                 let bar = s.selected_barricade.label();
                 let (cs, cc) = s.selected_barricade.cost();
                 let pla_arm = s.tanks.iter().filter(|t| t.faction == Faction::Pla).count();
@@ -2403,10 +2486,13 @@ pub fn sync_hud(
             HudRole::TopRight => {
                 *vis = if active && !s.dead { Visibility::Inherited } else { Visibility::Hidden };
                 let wx_tag = match s.weather {
-                    Weather::Clear => "晴冷",
+                    Weather::Clear if s.outdoor_c() < 0.0 => "晴冷",
+                    Weather::Clear => "晴",
                     Weather::Flurries => "小雪飘扬",
                     Weather::RiverFog => "江雾弥漫",
+                    Weather::Rain => "下雨",
                 };
+                let curfew = if s.curfew_now() { "  ·  宵禁中" } else { "" };
                 if let Some(i_idx) = s.active_interior {
                     let intr = &s.interiors[i_idx];
                     let env_tag = if intr.stove_fuel_s > 0.0 {
@@ -2426,7 +2512,7 @@ pub fn sync_hud(
                     let cur_tag = if intr.curtains_closed { " · [窗帘合]" } else { "" };
                     let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
                     text.0 = format!(
-                        "体温 {:.1}°C  ·  {wx_tag}\n{}{floor_tag}  {:+.1}°C ({env_tag}{cur_tag}{fl_tag})",
+                        "体温 {:.1}°C  ·  {wx_tag}{curfew}\n{}{floor_tag}  {:+.1}°C ({env_tag}{cur_tag}{fl_tag})",
                         s.body.temp, intr.name, intr.room_temp_c
                     );
                 } else {
@@ -2442,7 +2528,7 @@ pub fn sync_hud(
                         "街头"
                     };
                     let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
-                    text.0 = format!("体温 {:.1}°C  ·  {wx_tag}\n室外 {:+.0}°C ({state_tag}{fl_tag})", s.body.temp, s.outdoor_c());
+                    text.0 = format!("体温 {:.1}°C  ·  {wx_tag}{curfew}\n室外 {:+.0}°C ({state_tag}{fl_tag})", s.body.temp, s.outdoor_c());
                 }
                 color.0 = if s.body.temp < 34.4 {
                     Color::srgb(0.55, 0.80, 1.0)
@@ -2493,7 +2579,7 @@ pub fn sync_hud(
                 };
             }
             HudRole::RadioFeed => {
-                if active && !s.dead && !s.sleeping {
+                if active && !s.dead && !s.sleeping && !s.passing {
                     if let Some(rf) = &s.radio_feed {
                         text.0 = format!("【{}】 {}  ·  {}", rf.unit, rf.code_en, rf.text_zh);
                         color.0 = if rf.urgent {
@@ -2518,7 +2604,7 @@ pub fn sync_hud(
                 }
             }
             HudRole::Stats => {
-                *vis = if active && !s.dead && !s.sleeping { Visibility::Inherited } else { Visibility::Hidden };
+                *vis = if active && !s.dead && !s.sleeping && !s.passing { Visibility::Inherited } else { Visibility::Hidden };
                 let bleed = if s.body.bleeding { "  [流血]" } else { "" };
                 let coat = if s.body.coat_bonus > 0.0 { "  [厚棉袄]" } else { "" };
                 let gun = if s.inv.has_rifle {
@@ -2547,7 +2633,7 @@ pub fn sync_hud(
                 };
                 let ill = if s.body.illness >= 5.0 { format!("   病 {:.0}", s.body.illness) } else { String::new() };
                 text.0 = format!(
-                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{ill}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{}/药{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
+                    "伤势 {:.0}{bleed}   饱 {:.0}   水 {:.0}   困 {:.0}{ill}{coat}{gun}{at_tag}{gre_tag}{smk_tag}{fpv_tag}{rad}\nQ绷带{}/药{} Z吃{} X水{} C暖{} V火瓶{}   N换枪 U换炮 F发射 Y雷 O烟 I放FPV R电台   1-8/B工事 T顶门/炉 K窗帘 L手电   J睡觉/过日子   P/空格暂停   Space/Ctrl上下楼   M地图 Esc菜单",
                     s.body.hp, s.body.hunger, s.body.thirst, s.body.fatigue, s.inv.bandage, s.inv.medicine, s.inv.food, s.inv.water, s.inv.warmer, s.inv.molotov
                 );
             }
@@ -2560,7 +2646,26 @@ pub fn sync_hud(
                 }
             }
             HudRole::Death => {
-                if active && s.sleeping && !s.dead {
+                if active && s.passing && !s.dead {
+                    let room = s.active_interior.map(|i| &s.interiors[i]);
+                    text.0 = format!(
+                        "日子一天天过去……\n2031年{}  ·  第{}天{}\n\n吃的 {} 份 · 水 {} 瓶 · 药 {}\n煤 {} · 柴 {} · 屋里还有家具 {} 件 · 屋里 {:+.0}°C\n饱 {:.0} · 水 {:.0} · 病 {:.0}\n\n有事会停下   按 J 停",
+                        sim::clock::label(s.hour),
+                        sim::clock::day_index(s.hour) + 1,
+                        if s.sleeping { "  ·  夜里睡着" } else { "" },
+                        s.inv.food,
+                        s.inv.water,
+                        s.inv.medicine,
+                        s.inv.coal,
+                        s.inv.wood,
+                        room.map(|r| r.furniture).unwrap_or(0),
+                        room.map(|r| r.room_temp_c).unwrap_or(s.outdoor_c()),
+                        s.body.hunger,
+                        s.body.thirst,
+                        s.body.illness
+                    );
+                    *vis = Visibility::Inherited;
+                } else if active && s.sleeping && !s.dead {
                     text.0 = format!(
                         "睡着了\n2031年{}  ·  已睡 {:.1} 小时\n\n有动静会醒   按 J 起来",
                         sim::clock::label(s.hour),
@@ -2571,8 +2676,13 @@ pub fn sync_hud(
                     let h = s.hours_alive as u32;
                     let m = ((s.hours_alive - h as f32) * 60.0) as u32;
                     let lasted = if h >= 24 { format!("{} 天 {} 小时", h / 24, h % 24) } else { format!("{h} 小时 {m} 分") };
+                    let taken = if s.detentions > 0 {
+                        format!("  ·  被带走 {} 次，关了 {:.0} 天", s.detentions, s.days_detained)
+                    } else {
+                        String::new()
+                    };
                     text.0 = format!(
-                        "{}\n{}\n\n2031年{}  ·  撑了 {lasted}\n\n按 Enter 重新开始   或按 Esc 返回主菜单",
+                        "{}\n{}\n\n2031年{}  ·  撑了 {lasted}{taken}\n\n按 Enter 重新开始   或按 Esc 返回主菜单",
                         s.death_zh,
                         s.death_en,
                         sim::clock::label(s.hour)

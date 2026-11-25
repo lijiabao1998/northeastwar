@@ -46,6 +46,8 @@ const SCENARIO_NAMES: [&str; 4] = [
 #[derive(Clone, Copy, Debug)]
 enum MenuAction {
     StartGame,
+    Continue,
+    SaveGame,
     CycleScenario,
     OpenControls,
     CloseControls,
@@ -58,6 +60,31 @@ enum MenuAction {
 
 #[derive(Resource, Default)]
 struct MenuActionQueue(Vec<MenuAction>);
+
+/// The start menu's "continue" button.
+#[derive(Component)]
+struct ContinueLabel;
+
+/// The pause menu's "save" button.
+#[derive(Component)]
+struct SaveLabel;
+
+/// What the save buttons say, refreshed when a save is written, read or lost.
+#[derive(Resource)]
+struct SaveInfo {
+    cont: String,
+    save: String,
+}
+
+impl SaveInfo {
+    fn read() -> Self {
+        let cont = match sim::save::latest().and_then(|s| sim::save::read(s).ok()) {
+            Some(w) => format!("继续上次的进度（{}  第{}天）", sim::clock::label(w.hour), sim::clock::day_index(w.hour) + 1),
+            None => "继续上次的进度（没有存档）".into(),
+        };
+        Self { cont, save: "保存进度".into() }
+    }
+}
 
 #[derive(Component)]
 struct StartMenuRoot;
@@ -117,8 +144,10 @@ pub fn install(app: &mut App, enable: bool, start_open: bool) {
         .init_resource::<MenuActionQueue>();
 
     if enable {
-        app.add_systems(Startup, setup_menus.after(crate::play::setup_play))
-            .add_systems(Update, drive_menus.before(crate::play::step_play));
+        app.insert_resource(SaveInfo::read())
+            .add_systems(Startup, setup_menus.after(crate::play::setup_play))
+            .add_systems(Update, drive_menus.before(crate::play::step_play))
+            .add_systems(Update, save_labels.after(drive_menus));
     }
 }
 
@@ -464,7 +493,7 @@ fn setup_menus(
                 ));
                 card.spawn((
                     Text::new(
-                        "你不是军人，只是刚从店里下班、离家几条街的普通市民。\n17:36 俄军将跨过冰封的黑龙江，19:30 全城停电，21:00 停止供暖。\n备好棉衣饮食与绷带撑到天亮 07:00，或集结民兵修筑工事抗击入侵。",
+                        "你不是军人，只是刚从店里下班、离家几条街的普通市民。\n17:36 俄军将跨过冰封的黑龙江，19:30 全城停电，21:00 停止供暖。\n先撑过这一夜；天亮以后，在占领下一天一天、一月一月地活下去。",
                     ),
                     TextFont {
                         font: font.clone().into(),
@@ -480,6 +509,7 @@ fn setup_menus(
                 ));
 
                 spawn_menu_btn::<NoMarker>(card, &font, "开始生存", BTN_PRIMARY, MenuAction::StartGame, false, None);
+                spawn_menu_btn(card, &font, "继续上次的进度", BTN_SECONDARY, MenuAction::Continue, false, Some(ContinueLabel));
                 spawn_menu_btn(
                     card,
                     &font,
@@ -597,8 +627,8 @@ fn setup_menus(
                             &font,
                             "【生存、搜刮与室内】",
                             &[
-                                ("E", "推门进屋、开关门、搜柜、拆顶门或救邻"),
-                                ("J", "在屋里躺下睡觉，时间快转；有动静会醒，再按 J 起来"),
+                                ("E", "推门、搜柜、救邻；在家里柜子旁藏起或取出武器和电台"),
+                                ("J", "在屋里：困了就睡；不困就照作息过日子（吃喝、添火、夜里睡），有事会停，再按 J 停"),
                                 ("Space / Ctrl", "在室内楼梯口上楼 / 下楼"),
                                 ("Q", "用绷带止血；没在流血又生病时吃药"),
                                 ("Z  /  X", "食用干粮 / 饮水补充体力"),
@@ -743,6 +773,7 @@ fn setup_menus(
                 ));
 
                 spawn_menu_btn::<NoMarker>(card, &font, "继续游戏  [Esc]", BTN_PRIMARY, MenuAction::ResumeGame, false, None);
+                spawn_menu_btn(card, &font, "保存进度", BTN_SECONDARY, MenuAction::SaveGame, false, Some(SaveLabel));
                 spawn_menu_btn::<NoMarker>(card, &font, "操作与按键说明", BTN_SECONDARY, MenuAction::OpenControls, false, None);
                 spawn_menu_btn(card, &font, "音效：开启", BTN_SECONDARY, MenuAction::ToggleMute, false, Some(MuteLabel));
                 spawn_menu_btn::<NoMarker>(card, &font, "重新开始本局", BTN_SECONDARY, MenuAction::RestartGame, false, None);
@@ -764,6 +795,63 @@ fn cols_footer_btn(card: &mut ChildSpawnerCommands, font: &Handle<Font>) {
     .with_children(|wrap| {
         spawn_menu_btn::<NoMarker>(wrap, font, "返回菜单  [Esc]", BTN_PRIMARY, MenuAction::CloseControls, true, None);
     });
+}
+
+/// Keep the save buttons' words up to date.
+fn save_labels(
+    info: Res<SaveInfo>,
+    mut cont: Query<&mut Text, (With<ContinueLabel>, Without<SaveLabel>)>,
+    mut save: Query<&mut Text, (With<SaveLabel>, Without<ContinueLabel>)>,
+) {
+    if !info.is_changed() {
+        return;
+    }
+    for mut t in &mut cont {
+        t.0 = info.cont.clone();
+    }
+    for mut t in &mut save {
+        t.0 = info.save.clone();
+    }
+}
+
+/// Put a saved world in play: the sim, the clock, the player's figure. The
+/// interiors' rooms are drawn again from what was saved.
+fn load_world_and_player(
+    commands: &mut Commands,
+    mut world: sim::survival::WorldSim,
+    play: &mut PlayState,
+    clock: &mut Clock,
+    atlas: &FigureAtlas,
+    player: &mut Single<(&mut Player, &mut Transform, &mut Mesh3d)>,
+    soot_q: &Query<Entity, With<SootMark>>,
+) {
+    for intr in &mut world.interiors {
+        intr.revision = intr.revision.wrapping_add(1);
+    }
+    play.sim = world;
+    clock.hour = play.sim.hour;
+    clock.blackout = play.sim.blackout;
+    clock.fog = play.sim.fog_density;
+    clock.speed = 1.0;
+    play.paused = false;
+    play.preview_barricade = false;
+    play.cursor_world = None;
+    for e in soot_q {
+        commands.entity(e).despawn();
+    }
+    let (who, tf, pmesh) = &mut **player;
+    who.at = play.sim.player_at;
+    tf.translation = Vec3::new(who.at.x, 0.0, -who.at.y);
+    tf.rotation = Quat::from_rotation_y(play.sim.player_facing + std::f32::consts::FRAC_PI_2);
+    let variant = u8::from(play.sim.body.coat_bonus > 0.0) | (u8::from(play.sim.inv.has_rifle) << 1);
+    if let Some(h) = atlas.meshes.get(&AtlasKey {
+        role: sim::figure::Role::Civilian,
+        variant,
+        anim: AnimState::Idle,
+        frame: 0,
+    }) {
+        pmesh.0 = h.clone();
+    }
 }
 
 fn reset_world_and_player(
@@ -807,11 +895,12 @@ fn drive_menus(
     mut queue: ResMut<MenuActionQueue>,
     mut play: Option<ResMut<PlayState>>,
     mut map: Option<ResMut<TacticalMap>>,
-    (heihe, atlas, mut clock, mut audio_state): (
+    (heihe, atlas, mut clock, mut audio_state, mut save_info): (
         Res<crate::Heihe>,
         Option<Res<FigureAtlas>>,
         ResMut<Clock>,
         ResMut<AudioState>,
+        ResMut<SaveInfo>,
     ),
     mut player: Single<(&mut Player, &mut Transform, &mut Mesh3d)>,
     soot_q: Query<Entity, With<SootMark>>,
@@ -868,6 +957,29 @@ fn drive_menus(
                 }
                 *screen = MenuScreen::Playing;
             }
+            MenuAction::Continue => {
+                let loaded = sim::save::latest().and_then(|s| sim::save::read(s).ok());
+                if let (Some(world), Some(p), Some(atl)) = (loaded, play.as_deref_mut(), atlas.as_deref()) {
+                    load_world_and_player(&mut commands, world, p, &mut clock, atl, &mut player, &soot_q);
+                    p.started = true;
+                    p.click_cooldown = 0.24;
+                    if let Some(m) = map.as_deref_mut() {
+                        m.open = false;
+                    }
+                    *screen = MenuScreen::Playing;
+                } else {
+                    *save_info = SaveInfo::read();
+                }
+            }
+            MenuAction::SaveGame => {
+                if let Some(p) = play.as_deref() {
+                    save_info.save = match sim::save::write(&p.sim, "manual") {
+                        Ok(_) => format!("已保存（{}）", sim::clock::label(p.sim.hour)),
+                        Err(e) => format!("没能保存：{e}"),
+                    };
+                    save_info.cont = SaveInfo::read().cont;
+                }
+            }
             MenuAction::CycleScenario => {
                 scenario.0 = (scenario.0 + 1) % SCENARIO_NAMES.len();
                 if let (Some(p), Some(atl)) = (play.as_deref_mut(), atlas.as_deref()) {
@@ -910,6 +1022,7 @@ fn drive_menus(
                 audio_state.muted = !audio_state.muted;
             }
             MenuAction::ReturnToStart => {
+                *save_info = SaveInfo::read();
                 if let (Some(p), Some(atl)) = (play.as_deref_mut(), atlas.as_deref()) {
                     reset_world_and_player(&mut commands, scenario.0, &heihe, p, &mut clock, atl, &mut player, &soot_q);
                     p.started = false;

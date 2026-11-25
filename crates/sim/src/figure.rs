@@ -19,7 +19,7 @@ pub enum Role {
     RussianSoldier,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum AnimState {
     Idle,
     Walk,

@@ -1,7 +1,9 @@
 //! What the game draws for Heihe, counted: meshes, triangles, lights and boards.
 //! For reading frame times against (northeast --bench).
 //!
-//! cargo run -p sim --bin scene_report
+//! cargo run -p sim --bin scene_report [day]
+//!
+//! With a day (counted from 17 January), the town as drawn in that day's season.
 
 fn main() {
     let (city, pal) = match sim::load_heihe() {
@@ -10,6 +12,14 @@ fn main() {
             eprintln!("Heihe would not load: {why}");
             std::process::exit(1);
         }
+    };
+    let pal = match std::env::args().nth(1).and_then(|d| d.parse::<f32>().ok()) {
+        Some(day) => {
+            let season = sim::look::Season::at(24.0 * day + 12.0);
+            println!("{} ({:?})", sim::clock::label(24.0 * day + 12.0), season);
+            pal.seasonal(&season)
+        }
+        None => pal,
     };
     let scene = sim::scene::build(&city, &pal);
     let tris = |s: &sim::soup::Soup| s.triangles();

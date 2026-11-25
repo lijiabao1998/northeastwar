@@ -73,10 +73,10 @@ cargo run --release -p sim --bin days_bot -- 3 4
 - `--hour` starts at a given hour.
 - `--shots` saves a set of views of the town from a hidden window, and writes the frame time at each to `frame_times.txt`.
 - `--bench` times the drawing at some of those views with one setting changed at a time, by frame, main thread, render thread and GPU pass, and writes `bench.txt`.
-- `--combat-shots`, `--menu-shots` and `--interior-shots` take staged pictures of the fighting, the menus and the rooms.
+- `--combat-shots`, `--menu-shots` and `--interior-shots` take staged pictures of the fighting, the menus and the rooms. `--interior-shots` also takes the town in April, May, July (sun and rain), October and November.
 - `days_bot` plays the safest plan for the night on into the days with several seeds, and reports how each run ends.
 
-Time the release build: the dev build keeps Bevy's and wgpu's debug checks on. The settings that trade looks for speed are environment variables, listed in `crates/game/src/graphics.rs`; what each costs is in `docs/rust-r3-receipt.md`. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from.
+Time the release build: the dev build keeps Bevy's and wgpu's debug checks on. The settings that trade looks for speed are environment variables, listed in `crates/game/src/graphics.rs`; what each costs is in `docs/rust-r3-receipt.md`. The colours of the city are in `data/heihe/look.json`, each with the photograph it was read from; the colours without snow (grass, leaves, open water, roofs) came from summer and autumn photographs (`docs/research/seasons-look.md`). `cargo run -p sim --release --bin scene_report -- <day>` counts what is drawn on a given day of the year.
 
 The buildings are OpenStreetMap's, filled in from CMAB (see `CREDITS.md`). To cut the CMAB layer again:
 1. Download `heilongjiang.zip` from figshare 27992417 into `data/raw/cmab-v7/`.

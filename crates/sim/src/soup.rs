@@ -50,6 +50,9 @@ impl Soup {
     }
 
     pub fn quad_uv(&mut self, corners: [[f32; 3]; 4], normal: [f32; 3], colour: Rgb, uv: [[f32; 2]; 4]) {
+        if colour.is_none() {
+            return;
+        }
         let base = self.pos.len() as u32;
         let c = linear(colour);
         for i in 0..4 {
@@ -62,6 +65,9 @@ impl Soup {
     }
 
     pub fn tri(&mut self, corners: [[f32; 3]; 3], normal: [f32; 3], colour: Rgb) {
+        if colour.is_none() {
+            return;
+        }
         let base = self.pos.len() as u32;
         let c = linear(colour);
         for corner in corners {
@@ -75,6 +81,9 @@ impl Soup {
 
     /// A flat polygon at one height, facing up. `ring` is counter-clockwise on the map.
     pub fn flat(&mut self, ring: &[P2], up: f32, colour: Rgb) {
+        if colour.is_none() {
+            return;
+        }
         let base = self.pos.len() as u32;
         let c = linear(colour);
         for p in ring {
@@ -90,6 +99,9 @@ impl Soup {
 
     /// A strip of ground along a line: a road, a pavement, a painted stripe.
     pub fn ribbon(&mut self, line: &[P2], width: f32, up: f32, colour: Rgb) {
+        if colour.is_none() {
+            return;
+        }
         if line.len() < 2 {
             return;
         }
@@ -122,6 +134,9 @@ impl Soup {
     /// An upright box standing on the map at `at`, turned by `yaw` radians
     /// (counter-clockwise on the map, 0 = long side along east).
     pub fn boxed(&mut self, at: P2, base_up: f32, size: [f32; 3], yaw: f32, colour: Rgb) {
+        if colour.is_none() {
+            return;
+        }
         let (sx, sy, sz) = (size[0] * 0.5, size[1], size[2] * 0.5);
         let ax = P2::new(yaw.cos(), yaw.sin());
         let ay = P2::new(-yaw.sin(), yaw.cos());
@@ -147,6 +162,9 @@ impl Soup {
 
     /// `cone`, with its first corner at `start` radians (counter-clockwise from east).
     pub fn cone_turned(&mut self, centre: P2, base_up: f32, radius: f32, height: f32, sides: usize, start: f32, colour: Rgb) {
+        if colour.is_none() {
+            return;
+        }
         let tip = world(centre, base_up + height);
         for i in 0..sides {
             let a0 = start + i as f32 / sides as f32 * std::f32::consts::TAU;
@@ -168,6 +186,9 @@ impl Soup {
 
     /// A square-section bar from 3D world point `a` to `b`, `thick` metres across.
     pub fn beam(&mut self, a: [f32; 3], b: [f32; 3], thick: f32, colour: Rgb) {
+        if colour.is_none() {
+            return;
+        }
         let delta = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
         let len = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
         if len < 1.0e-4 || thick <= 0.0 {

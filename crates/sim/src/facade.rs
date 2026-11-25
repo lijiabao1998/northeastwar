@@ -298,10 +298,15 @@ pub fn build(b: &Building, dress: Dress, pal: &Palette) -> Built {
     }
 
     // Roof, under snow, and the inner face of the parapet.
+    // The roof: under snow in winter, the roof itself when the snow has gone, one of
+    // a few by building (Palette::seasonal).
+    let keys: &[&str] = if dress.kind == Kind::FarBank { &["far_roof_top", "far_roof_top_2"] } else { &["roof_top", "roof_top_2", "roof_top_3"] };
+    let key = keys[((hash01(b.id, 7000) * keys.len() as f32) as usize).min(keys.len() - 1)];
+    let roof = pal.get_or(key, pal.get_or("roof_top", pal.get("snow")));
     if dress.kind == Kind::FarBank {
-        out.solid.flat(ring, top, pal.get("snow"));
+        out.solid.flat(ring, top, roof);
     } else {
-        out.solid.flat(ring, top, pal.get("snow"));
+        out.solid.flat(ring, top, roof);
         for i in 0..n {
             let a = ring[i];
             let c = ring[(i + 1) % n];

@@ -39,6 +39,8 @@ pub struct Clock {
     pub running: bool,
     pub blackout: bool,
     pub fog: f32,
+    /// Cloud over the sun: 1 in rain, 0 otherwise.
+    pub overcast: f32,
 }
 
 #[derive(Component)]
@@ -70,11 +72,35 @@ struct Cut {
     part: Part,
     hidden: bool,
     peeled: bool,
+    /// The building's own mesh, and the same shape in plain white that is drawn as
+    /// glass while it hides you (made the first time it does). Glass tinted by the
+    /// building's own colours turned dark once the roofs lost their snow.
+    own_mesh: Option<Handle<Mesh>>,
+    glass_mesh: Option<Handle<Mesh>>,
 }
 
 /// The speck that keeps the cut-away's shader built (see setup).
 #[derive(Component)]
 struct Speck;
+
+/// A piece of the town drawn from the season's palette: thrown away and drawn again
+/// when the season turns (see season_town).
+#[derive(Component)]
+struct TownMesh;
+
+/// The materials the town is drawn with, kept to draw it again.
+#[derive(Resource)]
+struct TownMaterials {
+    matte: Handle<StandardMaterial>,
+    snowy: Handle<StandardMaterial>,
+    glass: Handle<StandardMaterial>,
+    window_glow: Handle<StandardMaterial>,
+    lamp_glow: Handle<StandardMaterial>,
+}
+
+/// The season the town on screen is drawn in.
+#[derive(Resource)]
+pub struct SeasonShown(pub sim::look::Season);
 
 /// The materials buildings are drawn with, for --bench to draw them merged.
 #[derive(Resource)]
@@ -96,13 +122,14 @@ fn cut_away(
     cutaway: Option<Res<Cutaway>>,
     play: Option<Res<play::PlayState>>,
     player: Single<&Player>,
-    mut parts: Query<(&mut Cut, &mut MeshMaterial3d<StandardMaterial>, &mut Visibility)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut parts: Query<(&mut Cut, &mut MeshMaterial3d<StandardMaterial>, &mut Mesh3d, &mut Visibility)>,
 ) {
     let Some(cutaway) = cutaway else { return };
     let peel_bid = play
         .as_deref()
         .and_then(|p| p.sim.cutaway_interior.and_then(|i| p.sim.interiors.get(i)).map(|it| it.building_id));
-    for (mut cut, mut material, mut visibility) in &mut parts {
+    for (mut cut, mut material, mut mesh, mut visibility) in &mut parts {
         let hide = cut.occluder.hides(player.at, &cutaway.view, 2.5);
         let peel = peel_bid == Some(cut.building_id);
         if hide == cut.hidden && peel == cut.peeled {
@@ -116,6 +143,23 @@ fn cut_away(
             match cut.part {
                 Part::Solid => {
                     *visibility = Visibility::Inherited;
+                    if hide && cut.glass_mesh.is_none() {
+                        let white = meshes.get(&mesh.0).map(|m| {
+                            let mut w = m.clone();
+                            if let Some(bevy::mesh::VertexAttributeValues::Float32x4(c)) = w.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
+                                c.iter_mut().for_each(|v| *v = [1.0, 1.0, 1.0, 1.0]);
+                            }
+                            w
+                        });
+                        if let Some(w) = white {
+                            cut.own_mesh = Some(mesh.0.clone());
+                            cut.glass_mesh = Some(meshes.add(w));
+                        }
+                    }
+                    let shape = if hide { &cut.glass_mesh } else { &cut.own_mesh };
+                    if let Some(h) = shape {
+                        mesh.0 = h.clone();
+                    }
                     material.0 = if hide { cutaway.ghost.clone() } else { cutaway.solid.clone() };
                 }
                 Part::Window => {
@@ -189,10 +233,10 @@ fn main() {
     )
     .insert_resource(Heihe { city, palette, ground })
     .insert_resource(graphics::Graphics::from_env())
-    .insert_resource(Clock { hour, speed: 1.0, running: interactive && arg("--hour").is_none(), blackout: false, fog: 0.0 })
+    .insert_resource(Clock { hour, speed: 1.0, running: interactive && arg("--hour").is_none(), blackout: false, fog: 0.0, overcast: 0.0 })
     .insert_resource(ClearColor(Color::srgb(0.62, 0.70, 0.80)))
     .add_systems(Startup, (setup, sky::setup))
-    .add_systems(Update, (zoom, follow, tick, sky::apply, sky::follow_zoom.after(zoom), hud, cut_away));
+    .add_systems(Update, (zoom, follow, tick, sky::apply, sky::follow_zoom.after(zoom), hud, cut_away, season_town));
     if unattended {
         app.add_systems(Update, walk);
         // A hidden window may count as unfocused, which would hold it to 60 updates a second.
@@ -224,8 +268,10 @@ pub fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     assets: Res<AssetServer>,
+    clock: Res<Clock>,
 ) {
-    let scene = sim::scene::build(&heihe.city, &heihe.palette);
+    let season = sim::look::Season::at(clock.hour);
+    let scene = sim::scene::build(&heihe.city, &heihe.palette.seasonal(&season));
 
     let matte = materials.add(StandardMaterial { perceptual_roughness: 0.92, reflectance: 0.18, ..default() });
     let snowy = materials.add(StandardMaterial { perceptual_roughness: 0.82, reflectance: 0.3, ..default() });
@@ -241,9 +287,6 @@ pub fn setup(
     });
     let lamp_glow = materials.add(StandardMaterial { perceptual_roughness: 0.5, emissive_exposure_weight: 1.0, ..default() });
 
-    commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.ground))), MeshMaterial3d(snowy)));
-    commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.buildings))), MeshMaterial3d(matte.clone())));
-    // The Chinese bank, one building at a time, so the one in front of you can be cut away.
     let ghost = materials.add(StandardMaterial {
         base_color: Color::srgba(1.0, 1.0, 1.0, 0.16),
         alpha_mode: AlphaMode::Blend,
@@ -252,29 +295,16 @@ pub fn setup(
         ..default()
     });
     let view = sim::cutaway::View::from_offset(EYE_OFFSET.to_array());
-    for block in &scene.blocks {
-        // The same occluder the sim's tests check.
-        let occluder = std::sync::Arc::new(sim::cutaway::Occluder::of_block(block, &view));
-        commands.spawn((
-            Mesh3d(meshes.add(to_mesh(&block.solid))),
-            MeshMaterial3d(matte.clone()),
-            Cut { occluder: occluder.clone(), building_id: block.id, part: Part::Solid, hidden: false, peeled: false },
-        ));
-        if block.glass.triangles() > 0 {
-            commands.spawn((
-                Mesh3d(meshes.add(to_mesh(&block.glass))),
-                MeshMaterial3d(glass.clone()),
-                Cut { occluder: occluder.clone(), building_id: block.id, part: Part::Window, hidden: false, peeled: false },
-            ));
-        }
-        if block.lit.triangles() > 0 {
-            commands.spawn((
-                Mesh3d(meshes.add(to_mesh(&block.lit))),
-                MeshMaterial3d(window_glow.clone()),
-                Cut { occluder, building_id: block.id, part: Part::Window, hidden: false, peeled: false },
-            ));
-        }
-    }
+    let town = TownMaterials {
+        matte: matte.clone(),
+        snowy,
+        glass: glass.clone(),
+        window_glow: window_glow.clone(),
+        lamp_glow: lamp_glow.clone(),
+    };
+    spawn_town(&mut commands, &scene, &season, &mut meshes, &town);
+    commands.insert_resource(town);
+    commands.insert_resource(SeasonShown(season));
     // A speck of the cut-away material that is always on screen, so its shader is built at the
     // start. Otherwise the first time a building is cut away the whole frame comes out empty.
     // Made by to_mesh like every building, so it has the same vertex layout and the
@@ -283,18 +313,6 @@ pub fn setup(
     dot.boxed(P2::new(0.0, 0.0), 0.0, [0.02, 0.02, 0.02], 0.0, sim::look::Rgb { r: 1.0, g: 1.0, b: 1.0 });
     let speck = commands.spawn((Mesh3d(meshes.add(to_mesh(&dot))), MeshMaterial3d(ghost.clone()), Transform::from_xyz(0.0, 0.01, 0.0), Speck)).id();
     commands.insert_resource(Cutaway { view, solid: matte.clone(), ghost });
-    for chunk in scene.props.chunks(120.0) {
-        commands.spawn((Mesh3d(meshes.add(to_mesh(&chunk))), MeshMaterial3d(matte.clone())));
-    }
-    if scene.glass.triangles() > 0 {
-        commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.glass))), MeshMaterial3d(glass.clone())));
-    }
-    if scene.lit.triangles() > 0 {
-        commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lit))), MeshMaterial3d(window_glow.clone())));
-    }
-    for chunk in scene.lamp_glow.chunks(120.0) {
-        commands.spawn((Mesh3d(meshes.add(to_mesh(&chunk))), MeshMaterial3d(lamp_glow.clone())));
-    }
     commands.insert_resource(Mats { matte: matte.clone(), glass: glass.clone(), glow: window_glow.clone() });
     commands.insert_resource(sky::GlowMaterials { lamps: lamp_glow, windows: window_glow.clone() });
 
@@ -373,6 +391,83 @@ pub fn setup(
         TextShadow::default(),
         Node { position_type: PositionType::Absolute, bottom: Val::Px(10.0), left: Val::Px(16.0), ..default() },
     ));
+}
+
+/// The town's meshes: the ground, the far bank, the Chinese bank one building at a
+/// time (so the one in front of you can be cut away), the street furniture, the
+/// windows and the lamp heads. The lamps' lights and the signboards stand where they
+/// stand whatever the season, so they are not here.
+fn spawn_town(commands: &mut Commands, scene: &sim::scene::Scene, season: &sim::look::Season, meshes: &mut Assets<Mesh>, m: &TownMaterials) {
+    // Snow is a little glossier than earth and grass.
+    let ground = if season.snow == sim::look::SnowCover::None { m.matte.clone() } else { m.snowy.clone() };
+    commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.ground))), MeshMaterial3d(ground), TownMesh));
+    commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.buildings))), MeshMaterial3d(m.matte.clone()), TownMesh));
+    let view = sim::cutaway::View::from_offset(EYE_OFFSET.to_array());
+    for block in &scene.blocks {
+        // The same occluder the sim's tests check.
+        let occluder = std::sync::Arc::new(sim::cutaway::Occluder::of_block(block, &view));
+        commands.spawn((
+            Mesh3d(meshes.add(to_mesh(&block.solid))),
+            MeshMaterial3d(m.matte.clone()),
+            Cut { occluder: occluder.clone(), building_id: block.id, part: Part::Solid, hidden: false, peeled: false, own_mesh: None, glass_mesh: None },
+            TownMesh,
+        ));
+        if block.glass.triangles() > 0 {
+            commands.spawn((
+                Mesh3d(meshes.add(to_mesh(&block.glass))),
+                MeshMaterial3d(m.glass.clone()),
+                Cut { occluder: occluder.clone(), building_id: block.id, part: Part::Window, hidden: false, peeled: false, own_mesh: None, glass_mesh: None },
+                TownMesh,
+            ));
+        }
+        if block.lit.triangles() > 0 {
+            commands.spawn((
+                Mesh3d(meshes.add(to_mesh(&block.lit))),
+                MeshMaterial3d(m.window_glow.clone()),
+                Cut { occluder, building_id: block.id, part: Part::Window, hidden: false, peeled: false, own_mesh: None, glass_mesh: None },
+                TownMesh,
+            ));
+        }
+    }
+    for chunk in scene.props.chunks(120.0) {
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&chunk))), MeshMaterial3d(m.matte.clone()), TownMesh));
+    }
+    if scene.glass.triangles() > 0 {
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.glass))), MeshMaterial3d(m.glass.clone()), TownMesh));
+    }
+    if scene.lit.triangles() > 0 {
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&scene.lit))), MeshMaterial3d(m.window_glow.clone()), TownMesh));
+    }
+    for chunk in scene.lamp_glow.chunks(120.0) {
+        commands.spawn((Mesh3d(meshes.add(to_mesh(&chunk))), MeshMaterial3d(m.lamp_glow.clone()), TownMesh));
+    }
+}
+
+/// When the season turns (the snow goes or comes, the river opens or freezes, the
+/// leaves come out or turn or fall), the town is drawn again in the new season's
+/// colours. That is a handful of times a year.
+fn season_town(
+    mut commands: Commands,
+    clock: Res<Clock>,
+    heihe: Res<Heihe>,
+    town: Option<Res<TownMaterials>>,
+    mut shown: Option<ResMut<SeasonShown>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    old: Query<Entity, With<TownMesh>>,
+) {
+    let (Some(town), Some(shown)) = (town, shown.as_deref_mut()) else { return };
+    let season = sim::look::Season::at(clock.hour);
+    if season == shown.0 {
+        return;
+    }
+    let t0 = std::time::Instant::now();
+    for e in &old {
+        commands.entity(e).despawn();
+    }
+    let scene = sim::scene::build(&heihe.city, &heihe.palette.seasonal(&season));
+    spawn_town(&mut commands, &scene, &season, &mut meshes, &town);
+    info!("the town drawn again for {:?} in {:?}", season, t0.elapsed());
+    shown.0 = season;
 }
 
 fn walk(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, heihe: Res<Heihe>, mut player: Single<(&mut Player, &mut Transform)>) {

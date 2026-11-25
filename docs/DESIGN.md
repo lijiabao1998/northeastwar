@@ -12,10 +12,16 @@ Set by the owner on 25 November 2026:
 
 So the invasion night is the opening, not the whole game. After it come days, weeks and months under occupation, and the occupation behaves the way Russian occupation has behaved in Ukraine since 2022 (see "Long-term survival" below).
 
+And later the same day:
+
+> 我想的是甚至能以1個月 甚至是 4年為標準
+
+So a run is built to last from a month up to four years, about as long as the war in Ukraine has run (from February 2022). That changes how time works (below): no one can play four years at the speed of the first night.
+
 ## Two rules everything else follows
 
 1. **You are not a soldier.** You have no weapon unless the game hands you one. Being seen is the danger, not being out-shot. A run ends when you die, and it starts again at 16:00.
-2. **No brochure numbers.** Each Russian weapon, vehicle, drone and habit behaves the way open reporting says it did in Ukraine. The numbers live in one table, `data/russia/forces.json`. Each carries a `src` (which source) and a `basis`: `reported` (the source gives the figure), `derived` (worked out from reported figures) or `play` (the source gives the shape, the number was chosen so the game can be played). The findings and links are in `docs/research/ukraine-performance.md`. The occupation and civilian life follow the same rule: living (weather, rooms, fuel, water, food, illness) is in `data/living.json` from `docs/research/living.md`, and the occupation's numbers will go in `data/occupation.json` from `docs/research/occupation.md`.
+2. **No brochure numbers.** Each Russian weapon, vehicle, drone and habit behaves the way open reporting says it did in Ukraine. The numbers live in one table, `data/russia/forces.json`. Each carries a `src` (which source) and a `basis`: `reported` (the source gives the figure), `derived` (worked out from reported figures) or `play` (the source gives the shape, the number was chosen so the game can be played). The findings and links are in `docs/research/ukraine-performance.md`. The occupation and civilian life follow the same rule: living (weather, rooms, fuel, water, food, illness) is in `data/living.json` from `docs/research/living.md`, and the occupation's are in `data/occupation.json` from `docs/research/occupation.md`.
 
 ## Time
 
@@ -40,7 +46,12 @@ The research behind this section is `docs/research/occupation.md`: about two hun
 
 - The clock does not stop at 07:00. Hours run on from 16:00 on 17 January (hour 16) through the days; `hour % 24` is the time of day and `hour / 24` the day. Light, weather and cold follow the time of day and the season: January's −24 °C nights, the thaw, and the river ice breaking up in late April, which ends crossing on foot.
 - Awake, the clock runs 15 times faster than play, as now. Sleeping in a place you have made safe runs it much faster, and anything that comes to the door wakes you.
-- Saving is part of the game, not a convenience: a run lasts weeks.
+- A run lasts from a month to four years. At 15 times, a day awake is 96 minutes of play, a month about 48 hours, four years about 2,300. So days are lived two ways:
+  - The hours that matter (going out, a search at the door, a checkpoint, a night of shelling) are played in real time.
+  - Routine days pass at a glance. The player sets a routine (stay in, ration, fetch water at dawn, burn this much), and a day-level model runs it, stopping for anything that needs a decision: a knock, an order, a sound, a neighbour, the stores running low. Detention already passes time this way (L3).
+- That day-level model has to agree with the real-time one, so the bots check it against the tick-by-tick sim over the same days.
+- Saving is part of the game, not a convenience.
+- Over years, the seasons matter as much as the occupation. The river opens and freezes. Summer is green, light and hot, and the city has to be drawn that way too, not only under snow. Prices and papers change month by month, and the war itself moves: fronts, offensives, an annexation or a liberation.
 
 ### Phases
 
@@ -66,9 +77,17 @@ The invasion night (17 January 16:00 to 18 January 07:00) is what the game has n
 
 Each step ends with tests in `crates/sim` and with a bot that plays it many times, as `out/read/bot` does for the night now.
 
+Order revised on 25 November, after the owner set one month to four years as the standard. Save and load and the passing of days come before more content, because no other step can be played or tested over months without them. The steps below keep their names; this is the order to do them in:
+
+1. L1's second half: save and load, game states, on-screen text out of the world state. Save and load done on 25 November (`docs/rust-l1b-receipt.md`).
+2. **Days that pass at a glance:** routines, the day-level model and what stops it, checked against the real-time sim. Done on 25 November (`crates/sim/src/routine.rs`, same receipt); choosing a routine and going out as part of one are still to come.
+3. **The seasons:** the thaw and the river, spring, summer, autumn and the next winter, in the rules and on screen. Done on 25 November (`docs/rust-seasons-receipt.md`): the river's ice, snow and rain in the rules; the town redrawn in each season's colours, read from photographs (`docs/research/seasons-look.md`). Summer clothing and heat, wet roads and grey water under cloud are still to come.
+4. L3's second part, L4, then L5 stretched from months to years.
+5. L6, endings, and the war's own course over four years, from new research on long occupations (Crimea and Donbas since 2014, Melitopol since 2022).
+
 1. **L1, the days.** The clock past 07:00, day and season, sleep, a seeded random generator, game states in the client, on-screen text out of the world state, save and load. The first four were done on 25 November (`docs/rust-l1-receipt.md`); the last three are next.
 2. **L2, living.** Water, food, fuel and cold over days; illness; the home as the place that keeps you alive; shops that empty. Done on 25 November (`docs/rust-l2-receipt.md`), with its numbers in `data/living.json` from `docs/research/living.md`.
-3. **L3, the occupation's first weeks.** The sweep, the order sheet and curfew, searches in waves, the phone, checkpoints and filtration, detention.
+3. **L3, the occupation's first weeks.** The sweep, the order sheet and curfew, searches in waves, the phone, checkpoints and filtration, detention. First part done on 25 November (`docs/rust-l3a-receipt.md`, numbers in `data/occupation.json`): the end of the assault, the sweep, searches, hiding, detention, curfew, suspicion and visits. Checkpoints, filtration, the phone and neighbourhood waves are next.
 4. **L4, people and money.** Neighbours, informers, aid, cash and prices, the market.
 5. **L5, months.** Papers and the passport ladder, the network cut, school, the referendum, conscription, resistance and reprisals, the thaw.
 6. **L6, endings.**

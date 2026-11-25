@@ -15,7 +15,7 @@ use crate::walk::Ground;
 /// Vector from world center toward the orthographic SE camera (+east, -north).
 const CAM_DIR: P2 = P2::new(0.70710678, -0.70710678);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InteriorKind {
     PlayerHome,
     NeighbourHome,
@@ -75,7 +75,7 @@ impl InteriorKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RoomZone {
     FrontHall,
     BackRoom,
@@ -83,7 +83,7 @@ pub enum RoomZone {
 }
 
 /// Room-local axis-aligned box in `(u, v)` space.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LocalBox {
     pub cx: f32,
     pub cy: f32,
@@ -169,7 +169,7 @@ impl LocalBox {
 pub const FLOOR_H: f32 = 3.1;
 
 /// Physical door archetype determining visuals and opening/curtain behavior.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DoorStyle {
     CottonCurtain,
     ShopGlass,
@@ -177,7 +177,7 @@ pub enum DoorStyle {
     WoodFlat,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RoomDoor {
     pub at: P2,
     pub outside: P2,
@@ -198,13 +198,13 @@ pub struct RoomDoor {
     pub has_curtain: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SlabCell {
     pub hp: f32,
     pub intact: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FloorState {
     pub slabs: [[SlabCell; 3]; 2],
     pub front_wall_hp: f32,
@@ -225,7 +225,7 @@ impl FloorState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RoomWindow {
     pub at: P2,
     pub u_a: f32,
@@ -237,28 +237,32 @@ pub struct RoomWindow {
     pub boarded: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RoomLoot {
     pub id: u32,
     pub at: P2,
-    pub label: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub label: crate::save::StaticText,
     pub kind: ShopKind,
     pub in_backroom: bool,
     pub searched: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RoomNpc {
     pub id: u32,
     pub at: P2,
     pub facing: f32,
-    pub label: &'static str,
-    pub line_calm: &'static str,
-    pub line_war: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub label: crate::save::StaticText,
+    #[serde(with = "crate::save::static_str")]
+    pub line_calm: crate::save::StaticText,
+    #[serde(with = "crate::save::static_str")]
+    pub line_war: crate::save::StaticText,
     pub coat: Rgb,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct HomeStash {
     pub food: u32,
     pub water: u32,
@@ -269,7 +273,7 @@ pub struct HomeStash {
     pub coal: u32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Interior {
     pub id: usize,
     pub building_id: i64,
@@ -303,6 +307,8 @@ pub struct Interior {
     pub room_temp_c: f32,
     /// Pieces of furniture left that can be broken up for the stove.
     pub furniture: u32,
+    /// What is hidden behind the cupboard here.
+    pub hidden: crate::occupation::Contraband,
     pub curtains_closed: bool,
     pub discovered: bool,
     pub breach_alert: f32,
@@ -2120,6 +2126,7 @@ fn assemble_interior(
                 + l.num("fuel", "furniture_per_upper_floor") * (num_floors as f32 - 1.0).max(0.0);
             pieces.round() as u32
         },
+        hidden: Default::default(),
         curtains_closed: matches!(kind, InteriorKind::PlayerHome | InteriorKind::NeighbourHome),
         discovered: kind == InteriorKind::PlayerHome,
         breach_alert: 0.0,
