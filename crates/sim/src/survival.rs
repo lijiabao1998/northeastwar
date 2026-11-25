@@ -669,6 +669,7 @@ pub enum Weather {
     Clear,
     Flurries,
     RiverFog,
+    Rain,
 }
 
 impl Weather {
@@ -677,6 +678,7 @@ impl Weather {
             Self::Clear => "晴冷",
             Self::Flurries => "飘雪",
             Self::RiverFog => "江面大雾（无人机致盲）",
+            Self::Rain => "下雨",
         }
     }
 }
@@ -706,12 +708,15 @@ pub fn weather_at(seed: u64, hour: f32) -> (Weather, f32) {
     let r = hash01(block ^ (seed as i64), 0x57EA);
     let t = clock::time_of_day(hour);
     let living = crate::living::get();
-    // Snow falls in about half the blocks of a day with snow, and only below freezing.
-    let snow_p = living.snow_share(hour) * 0.5;
+    // Rain or snow falls in about half the blocks of a day that has it: snow below
+    // freezing, rain above.
+    let precip_p = living.precip_share(hour) * 0.5;
     let freezing = living.outdoor_c(seed, hour) < 0.5;
     if r < 0.06 && !(10.0..20.0).contains(&t) {
         (Weather::RiverFog, 0.92)
-    } else if freezing && r < 0.06 + snow_p {
+    } else if !freezing && r < 0.06 + precip_p {
+        (Weather::Rain, 0.12)
+    } else if freezing && r < 0.06 + precip_p {
         (Weather::Flurries, 0.25 + 0.1 * hash01(block ^ (seed as i64), 0x57EB))
     } else {
         (Weather::Clear, 0.0)
@@ -1180,6 +1185,12 @@ pub struct WorldSim {
     /// Days are passing at a glance (crate::routine); the client shows it.
     #[serde(default)]
     pub passing: bool,
+    /// When it last rained (hour): rain caught in pots is water for a while.
+    #[serde(default)]
+    pub last_rain_hour: f32,
+    /// The Heilongjiang is open water (between the break-up and the freeze-up).
+    #[serde(default)]
+    pub river_open: bool,
     /// A loud noise you made (furniture broken up): how far it carries, for how long.
     pub noise_m: f32,
     pub noise_t: f32,
@@ -1403,6 +1414,8 @@ impl WorldSim {
             mornings: 0,
             sleeping: false,
             passing: false,
+            last_rain_hour: -1000.0,
+            river_open: false,
             noise_m: 0.0,
             noise_t: 0.0,
             slept_hours: 0.0,
@@ -1638,6 +1651,15 @@ impl WorldSim {
     /// sheet, the sweep and the visits. Shared by real time and by days that pass
     /// at a glance.
     pub(crate) fn step_calendar(&mut self, out: &mut TickOutput) {
+        let open = self.ice_cm() <= 0.0;
+        if open != self.river_open {
+            self.river_open = open;
+            if open {
+                self.say("黑龙江开河了。冰排顺着江水往下漂，江面再也走不过去了。", "The Heilongjiang has broken up. Ice floes drift downstream; the river can no longer be crossed on foot.");
+            } else {
+                self.say("黑龙江封冻了。冰还薄，走上去会裂。", "The Heilongjiang has frozen over. The ice is still thin and will not hold you yet.");
+            }
+        }
         let mornings = if self.hour >= DAWN_HOUR { 1 + ((self.hour - DAWN_HOUR) / 24.0).floor() as u32 } else { 0 };
         while self.mornings < mornings {
             self.mornings += 1;
@@ -2192,9 +2214,15 @@ impl WorldSim {
         }
     }
 
-    /// Melt a pot of snow on the stove in interior `i` and drink it.
+    /// Melt a pot of snow (or boil rain caught in pots) on the stove in interior
+    /// `i` and drink it. With no snow lying and no rain lately, there is nothing to
+    /// melt: water has to be fetched.
     pub(crate) fn melt_snow(&mut self, i: usize) -> bool {
         if self.interiors[i].stove_fuel_s < self.melt_fuel_s() {
+            return false;
+        }
+        if !self.water_to_melt() {
+            self.say("外面没有雪，也好久没下雨了：没东西可烧开喝。得去江边或水站打水。", "No snow outside and no rain lately: nothing to boil. Water has to be fetched.");
             return false;
         }
         let living = crate::living::get();
@@ -2203,6 +2231,17 @@ impl WorldSim {
         self.body.thirst = (self.body.thirst + living.num("fuel", "melt_litres") * per_l).min(100.0);
         self.say("在煤炉上融化清洁积雪煮成热水，喝下去润喉解渴！", "Melted snow over coal stove for drinking water!");
         true
+    }
+
+    /// Snow lying outside, or rain in the last two days caught in pots.
+    pub fn water_to_melt(&self) -> bool {
+        let l = crate::living::get();
+        l.snow_depth_cm(self.hour) >= 0.5 || self.hour - self.last_rain_hour < l.num("fuel", "rain_water_h")
+    }
+
+    /// The river as it is now: open water, thin ice, or ice that holds.
+    pub fn ice_cm(&self) -> f32 {
+        crate::living::get().ice_cm(self.hour)
     }
 
     /// Stove time one pot of melted snow costs (play seconds).
@@ -2380,9 +2419,13 @@ impl WorldSim {
             Some(Weather::Clear) => (Weather::Clear, 0.0),
             Some(Weather::Flurries) => (Weather::Flurries, 0.35),
             Some(Weather::RiverFog) => (Weather::RiverFog, 0.92),
+            Some(Weather::Rain) => (Weather::Rain, 0.12),
             None => weather_at(self.seed, self.hour),
         };
         self.weather = target_w;
+        if target_w == Weather::Rain {
+            self.last_rain_hour = self.hour;
+        }
         if self.weather_override.is_some() {
             self.fog_density = target_fog;
         } else {
@@ -2409,7 +2452,14 @@ impl WorldSim {
             let speed = base_speed * self.body.move_scale;
             let to = self.player_at.add(dir.mul(speed * dt));
             let cur_floor = if self.active_interior.is_some() { self.player_floor } else { 0 };
-            let next_pos = ground.step_with_interiors_on_floor(&self.interiors, self.player_at, to, 0.35, cur_floor, false);
+            let mut next_pos = ground.step_with_interiors_on_floor(&self.interiors, self.player_at, to, 0.35, cur_floor, false);
+            // From the break-up to the freeze-up the river is open water.
+            if cur_floor == 0 && !ground.on_ice(self.player_at) && ground.on_ice(next_pos) && self.ice_cm() < 1.0 {
+                next_pos = self.player_at;
+                if self.subtitle_ttl <= 0.0 {
+                    self.say("江面开河了，没有冰可以走。", "The river is open water: there is no ice to walk on.");
+                }
+            }
             if cur_floor == 0 && self.player_vault_t <= 0.0 && next_pos.dist(self.player_at) > 0.01 {
                 if self.barricades.iter().any(|b| {
                     !b.shoved
@@ -2447,6 +2497,19 @@ impl WorldSim {
         let indoors = self.active_interior.is_some();
         let sheltered = city.near_heat(self.player_at) || indoors;
         let on_ice = !indoors && ground.on_ice(self.player_at);
+        // Thin ice (the freeze-up, the thaw) may give way under you.
+        if on_ice {
+            let l = crate::living::get();
+            let ice = self.ice_cm();
+            let safe = l.num("river", "walk_safe_cm");
+            if ice < safe {
+                let p = l.num("river", "fall_through_p_per_s") * (1.0 - ice / safe) * dt;
+                if self.next_rand(0x1CE0) < p {
+                    self.kill_player("冰裂开了，你掉进了黑龙江。", "The ice gave way, and the Heilongjiang took you.");
+                    return out;
+                }
+            }
+        }
         let near_barrel = self.near_fire();
         self.body.warm_room = self.active_interior.is_some_and(|i| self.interiors[i].room_temp_c >= 10.0);
 
@@ -2542,6 +2605,10 @@ impl WorldSim {
     }
 
     fn push_track(&mut self, at: P2, dir: P2, by_player: bool, is_vehicle: bool) {
+        // Footprints need snow on the ground.
+        if crate::living::get().snow_depth_cm(self.hour) < 0.5 {
+            return;
+        }
         if self.tracks.len() >= 240 {
             let drop_n = self.tracks.len() - 239;
             self.tracks.drain(0..drop_n);
@@ -9469,5 +9536,151 @@ mod tests {
         let p = planned as f32 / n as f32;
         assert!(p > 0.15 && p < 0.45, "a visit on about one morning in three: {p}");
         assert!(taken as f32 > planned as f32 * 0.5, "listed and at home: taken {taken} of {planned}");
+    }
+
+    /// A point on the bank, facing the river, at the spawn's x.
+    fn at_the_bank(city: &City) -> P2 {
+        let x = city.spawn.x;
+        P2::new(x, city.bank_y(x) - 4.0)
+    }
+
+    #[test]
+    fn the_open_river_cannot_be_walked_on() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let walk_north = |hour: f32| -> bool {
+            let mut sim = occupied(&city, 1);
+            sim.hour = hour;
+            sim.player_at = at_the_bank(&city);
+            for _ in 0..60 {
+                sim.squads.clear();
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput { wish_move: P2::new(0.0, 1.0), ..Default::default() }, 0.1);
+            }
+            ground.on_ice(sim.player_at)
+        };
+        assert!(walk_north(24.0 * 15.0 + 12.0), "in February you walk out onto the ice");
+        assert!(!walk_north(24.0 * 170.0 + 12.0), "in July the river is water");
+    }
+
+    #[test]
+    fn thin_ice_gives_way() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let on_ice_for_a_minute = |hour: f32, seed: u64| -> bool {
+            let mut sim = occupied(&city, seed);
+            sim.hour = hour;
+            let bank = at_the_bank(&city);
+            sim.player_at = P2::new(bank.x, bank.y + 12.0);
+            assert!(ground.on_ice(sim.player_at));
+            for _ in 0..240 {
+                sim.squads.clear();
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput::default(), 0.25);
+                if sim.dead {
+                    return true;
+                }
+            }
+            false
+        };
+        // 25 April: the ice is down to a few centimetres.
+        let late_april = 24.0 * 98.0 + 12.0;
+        assert!(crate::living::get().ice_cm(late_april) < 6.0);
+        let fell = (0..20).filter(|s| on_ice_for_a_minute(late_april, *s)).count();
+        assert!(fell >= 8, "a minute on rotten ice: {fell} of 20 fell through");
+        let february = 24.0 * 20.0 + 12.0;
+        assert_eq!((0..5).filter(|s| on_ice_for_a_minute(february, *s)).count(), 0, "February's ice holds");
+    }
+
+    #[test]
+    fn summer_leaves_no_footprints_and_no_snow_to_melt() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let tracks_after_a_walk = |hour: f32| -> usize {
+            let mut sim = occupied(&city, 2);
+            sim.hour = hour;
+            sim.tracks.clear();
+            sim.player_at = at_the_bank(&city);
+            for _ in 0..40 {
+                sim.squads.clear();
+                sim.spawn_wait = 1.0e6;
+                sim.tick(&city, &ground, &forces, &SimInput { wish_move: P2::new(1.0, 0.0), ..Default::default() }, 0.1);
+            }
+            sim.tracks.len()
+        };
+        assert!(tracks_after_a_walk(24.0 * 3.0 + 12.0) > 0, "January snow keeps your footprints");
+        assert_eq!(tracks_after_a_walk(24.0 * 170.0 + 12.0), 0, "July has no snow to print");
+
+        let mut sim = occupied(&city, 2);
+        let home = sim.home_index().unwrap();
+        sim.interiors[home].stove_fuel_s = 1.0e4;
+        sim.hour = 24.0 * 170.0 + 12.0;
+        sim.last_rain_hour = -1000.0;
+        assert!(!sim.melt_snow(home), "no snow and no rain: nothing to boil");
+        sim.last_rain_hour = sim.hour - 5.0;
+        assert!(sim.melt_snow(home), "rain caught in pots this morning");
+
+        let blocks = |day: f32| -> Vec<Weather> { (0..400).map(|b| weather_at(9, 24.0 * day + b as f32 * 1.5)).map(|w| w.0).collect() };
+        let jan = blocks(5.0);
+        let jul = blocks(170.0);
+        assert!(!jan.contains(&Weather::Rain));
+        assert!(jul.contains(&Weather::Rain) && !jul.contains(&Weather::Flurries), "summer rains");
+    }
+
+    /// A whole year by the routine, at a glance, from the morning after the first
+    /// night: the river opens and freezes, summer needs no stove.
+    #[test]
+    fn a_year_at_a_glance() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let forces = load_forces();
+        let ground = Ground::new_with_interiors(&city, &WorldSim::new(&city).interiors);
+        let mut sim = occupied(&city, 4);
+        let home = sim.home_index().unwrap();
+        sim.hour = DAWN_HOUR + 1.0;
+        sim.player_at = sim.interiors[home].stove_at.unwrap();
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+        assert_eq!(sim.active_interior, Some(home));
+        // Enough for a year even after a search takes half of what you carry.
+        sim.inv.food = 2000;
+        sim.inv.water = 1500;
+        sim.inv.coal = 600;
+        sim.inv.medicine = 50;
+        let r = crate::routine::Routine::default();
+        let t0 = std::time::Instant::now();
+        let end = sim.hour + 24.0 * 365.0;
+        let (mut opened, mut froze, mut was_open) = (false, false, sim.river_open);
+        let mut july_room = f32::MIN;
+        let mut stops = std::collections::BTreeMap::new();
+        while sim.hour < end && !sim.dead {
+            sim.player_at = sim.interiors[home].stove_at.unwrap();
+            sim.tick(&city, &ground, &forces, &SimInput::default(), 0.05);
+            let p = sim.pass_time(&city, &ground, &forces, &r, 24.0);
+            *stops.entry(format!("{:?}", p.stop)).or_insert(0) += 1;
+            if sim.river_open && !was_open {
+                opened = true;
+            }
+            if !sim.river_open && was_open {
+                froze = true;
+            }
+            was_open = sim.river_open;
+            if clock::date_of(sim.hour).0 == 7 {
+                july_room = july_room.max(sim.interiors[home].room_temp_c);
+            }
+            if p.hours == 0.0 && p.stop != crate::routine::Stop::Dead {
+                // Not safe here this instant: step on in real time and try again.
+                for _ in 0..40 {
+                    sim.squads.clear();
+                    sim.tick(&city, &ground, &forces, &SimInput { clock_running: true, ..Default::default() }, 0.25);
+                }
+            }
+        }
+        eprintln!("a year at a glance: {:?}, ended {} dead={} ({}), in {:?}", stops, clock::label(sim.hour), sim.dead, sim.death_en, t0.elapsed());
+        assert!(opened && froze, "the river opened and froze again");
+        assert!(july_room > 15.0, "summer warms the flat without a fire: {july_room}");
+        assert!(sim.dead || sim.hour >= end - 24.0);
+        assert!(t0.elapsed().as_secs() < 120, "a year at a glance takes {:?}", t0.elapsed());
     }
 }

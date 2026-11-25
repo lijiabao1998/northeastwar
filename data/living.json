@@ -13,6 +13,12 @@
     "snow_days": [10.4, 7.3, 7.4, 4.6, 0.4, 0.0, 0.0, 0.0, 0.2, 4.9, 9.7, 11.2],
     "snow_days_src": "living.md 1a, as mean_max_c",
     "snow_days_basis": "reported",
+    "precip_days": [7.4, 4.6, 4.9, 6.6, 10.9, 12.8, 14.3, 14.1, 11.0, 7.7, 7.3, 7.9],
+    "precip_days_src": "living.md 1a: days with precipitation, Heihe (Aihui) station, CMA normals 1991-2020",
+    "precip_days_basis": "reported",
+    "snow_depth_cm": [12.0, 10.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 4.0, 8.0],
+    "snow_depth_cm_src": "living.md 1b: mean snow depth by month, Blagoveshchensk across the river (Pogoda i klimat, from Roshydromet station data)",
+    "snow_depth_cm_basis": "reported",
     "min_hour": 6.5,
     "min_hour_src": "living.md 1e: January's coldest reading falls 05:00-08:00 Beijing time on 15 of 24 days (Blagoveshchensk 3-hourly observations)",
     "min_hour_basis": "derived",
@@ -27,12 +33,15 @@
     "departure_sd_c_basis": "derived"
   },
   "river": {
-    "breakup_doy": 116,
-    "breakup_doy_src": "living.md 2: ice drift starts 26 April on average (18 April - 10 May); not used before L5",
-    "breakup_doy_basis": "reported",
-    "freeze_doy": 322,
-    "freeze_doy_src": "living.md 2: Chinese normal 18 November; not used before L5",
-    "freeze_doy_basis": "derived"
+    "ice_cm_by_day": [[17, 55], [31, 65], [46, 80], [90, 103], [116, 0], [322, 0], [361, 50]],
+    "ice_cm_by_day_src": "living.md 2. Day of the year, ice thickness in cm, read in a loop. 17 Jan 55 (mean of 50, 51 and 60 measured in mid-January); the end of March about 103 (the norm behind '15 cm above norm' in 2024); break-up, the start of ice drift, 26 April on average (hydromet centre); freeze-up 18 November (the Chinese normal); late December about 50 (40 to 83 measured). 31 January and 15 February are read between, and the thinning through April is a straight line: neither has a source",
+    "ice_cm_by_day_basis": "derived",
+    "walk_safe_cm": 10.0,
+    "walk_safe_cm_src": "no source in the research: the usual rule of thumb that ice under about 10 cm will not hold a person",
+    "walk_safe_cm_basis": "play",
+    "fall_through_p_per_s": 0.03,
+    "fall_through_p_per_s_src": "no source: the chance a second of breaking through, on ice that has nearly gone; less as it thickens towards the safe thickness",
+    "fall_through_p_per_s_basis": "play"
   },
   "building": {
     "central_heat_c": 18.0,
@@ -93,7 +102,10 @@
     "melt_litres_basis": "play",
     "melt_fuel_h": 0.63,
     "melt_fuel_h_src": "occupation.md: about 0.79 MJ to melt and boil a litre from -20 C snow; 2 L at 50% stove efficiency is 3.2 MJ, 0.63 h at 1.4 kW",
-    "melt_fuel_h_basis": "derived"
+    "melt_fuel_h_basis": "derived",
+    "rain_water_h": 48.0,
+    "rain_water_h_src": "no source: rain caught in pots and buckets lasts about two days",
+    "rain_water_h_basis": "play"
   },
   "body": {
     "water_loss_l_per_day": 1.3,

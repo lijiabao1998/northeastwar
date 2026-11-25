@@ -171,6 +171,9 @@ impl WorldSim {
                 self.weather = w;
                 self.fog_density = fog;
             }
+            if w == crate::survival::Weather::Rain {
+                self.last_rain_hour = self.hour;
+            }
 
             self.step_calendar(&mut out);
             if self.dead {

@@ -2380,7 +2380,7 @@ pub fn sync_fx(
             commands.entity(e).despawn();
         }
     }
-    let show_snow = play.as_deref().is_some_and(|p| p.started && p.sim.weather != Weather::Clear);
+    let show_snow = play.as_deref().is_some_and(|p| p.started && !matches!(p.sim.weather, Weather::Clear | Weather::Rain));
     let paused = play.as_deref().is_some_and(|p| p.paused);
     let px = player.at.x;
     let pz = -player.at.y;
@@ -2474,6 +2474,7 @@ pub fn sync_hud(
                     Weather::Clear => "晴冷",
                     Weather::Flurries => "小雪飘扬",
                     Weather::RiverFog => "江雾弥漫",
+                    Weather::Rain => "下雨",
                 };
                 let curfew = if s.curfew_now() { "  ·  宵禁中" } else { "" };
                 if let Some(i_idx) = s.active_interior {
