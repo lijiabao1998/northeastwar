@@ -7,7 +7,7 @@ use crate::geom::{dist_to_polyline, hash01};
 use serde_json::Value;
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Rgb {
     pub r: f32,
     pub g: f32,

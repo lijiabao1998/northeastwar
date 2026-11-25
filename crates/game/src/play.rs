@@ -234,7 +234,7 @@ pub fn install(app: &mut App, interactive: bool, combat_shots: bool) {
 
     if interactive {
         app.add_systems(Update, step_play.after(crate::tick).before(crate::follow))
-            .add_systems(Update, (sync_actors, sync_fx, sync_hud).after(step_play));
+            .add_systems(Update, (sync_actors, sync_fx, sync_hud, autosave).after(step_play));
     } else if combat_shots {
         app.add_systems(Update, (sync_actors, sync_fx, sync_hud));
     }
@@ -1037,6 +1037,34 @@ pub fn spawn_fx(
             Transform::from_xyz(e.at.x, 0.02, -e.at.y),
             SootMark,
         ));
+    }
+}
+
+/// Save the run by itself every morning; when you die, its saves go with you
+/// (one life, docs/DESIGN.md rule 1).
+fn autosave(play: Option<Res<PlayState>>, mut last_morning: Local<Option<u32>>, mut buried: Local<bool>) {
+    let Some(p) = play else { return };
+    if !p.started {
+        *last_morning = None;
+        return;
+    }
+    if p.sim.dead {
+        if !*buried {
+            *buried = true;
+            sim::save::delete_all();
+        }
+        return;
+    }
+    *buried = false;
+    match *last_morning {
+        Some(m) if p.sim.mornings > m => {
+            if let Err(e) = sim::save::write(&p.sim, "auto") {
+                eprintln!("autosave: {e}");
+            }
+            *last_morning = Some(p.sim.mornings);
+        }
+        Some(m) if p.sim.mornings == m => {}
+        _ => *last_morning = Some(p.sim.mornings),
     }
 }
 

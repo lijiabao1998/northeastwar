@@ -144,6 +144,13 @@ fn main() {
                 ill_max = ill_max.max(sim.body.illness);
             }
             let ms = t0.elapsed().as_secs_f32() * 1000.0 / (sim.hour - h0).max(0.01);
+            // DAYS_BOT_SAVE=1 keeps the last run as the game's autosave, to try loading it.
+            if std::env::var("DAYS_BOT_SAVE").is_ok_and(|v| v == "1") && !sim.dead {
+                match sim::save::write(&sim, "auto") {
+                    Ok(p) => eprintln!("saved {}", p.display()),
+                    Err(e) => eprintln!("{e}"),
+                }
+            }
             let result = if sim.dead { format!("died: {}", sim.death_en) } else { "alive".into() };
             let woke_s: Vec<String> = woke.iter().map(|(k, v)| format!("{k} {v}")).collect();
             println!(

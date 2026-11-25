@@ -78,7 +78,7 @@ impl Occupation {
 }
 
 /// Who the player is, as far as the occupation is concerned.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Profile {
     pub male: bool,
     pub age: u8,
@@ -93,7 +93,7 @@ impl Default for Profile {
 
 /// What a search is looking for: weapons and communication devices
 /// (docs/research/occupation.md, 1.1 and 1.2).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Contraband {
     pub primaries: u8,
     pub ammo: u32,

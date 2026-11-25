@@ -7,7 +7,7 @@ use serde_json::Value;
 /// The war clock runs this many times faster than play.
 pub const TIME_SCALE: f32 = 15.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Light {
     Day,
     Dusk,
@@ -29,7 +29,7 @@ impl Light {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Gait {
     Still,
     Walk,

@@ -13,7 +13,7 @@ use crate::geom::{hash01, nearest_on_segment, P2};
 use crate::interior::{build_interiors, DoorStyle, Interior, InteriorKind, RoomZone, FLOOR_H};
 use crate::look::Rgb;
 use crate::walk::Ground;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 pub const START_HOUR: f32 = 16.0;
 pub const CROSSING_HOUR: f32 = 17.0 + 36.0 / 60.0;
@@ -71,7 +71,7 @@ pub const fn hm(hours: u32, minutes: u32) -> f32 {
     hours as f32 + minutes as f32 / 60.0
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ShopKind {
     Pharmacy,
     Hotel,
@@ -114,7 +114,7 @@ pub fn shop_kind(zh: &str, ru: &str) -> ShopKind {
     ShopKind::Shop
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RolledLoot {
     pub food: u32,
     pub water: u32,
@@ -194,7 +194,7 @@ const EMPTY_LOOT: RolledLoot = RolledLoot {
     medicine: 0,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Body {
     pub hp: f32,
     pub temp: f32,
@@ -429,7 +429,7 @@ impl Body {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Inventory {
     pub food: u32,
     pub water: u32,
@@ -547,7 +547,7 @@ impl Inventory {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Door {
     pub at: P2,
     pub name: String,
@@ -555,7 +555,7 @@ pub struct Door {
     pub searched: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CacheKind {
     StreetScrap,
     ResistanceCell,
@@ -565,17 +565,18 @@ pub enum CacheKind {
     SmugglerCache,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SupplyCache {
     pub id: u32,
     pub at: P2,
     pub kind: CacheKind,
     pub unlock_hour: f32,
-    pub title: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub title: crate::save::StaticText,
     pub collected: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SquadState {
     Patrol,
     Check,
@@ -585,7 +586,7 @@ pub enum SquadState {
     Search,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Soldier {
     pub id: u32,
     pub at: P2,
@@ -601,7 +602,7 @@ pub struct Soldier {
     pub grenade_cd: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Squad {
     pub id: u32,
     pub state: SquadState,
@@ -663,7 +664,7 @@ pub fn light_at(city: &City, hour: f32, blackout: bool, revealed: bool, p: P2, f
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Weather {
     Clear,
     Flurries,
@@ -718,7 +719,7 @@ pub fn weather_at(seed: u64, hour: f32) -> (Weather, f32) {
 }
 
 /// Who is searching you.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Inspect {
     Sweep,
     Patrol,
@@ -726,7 +727,7 @@ pub enum Inspect {
 }
 
 /// Why you woke up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WakeReason {
     Rested,
     ByHand,
@@ -753,7 +754,7 @@ impl WakeReason {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SnowTrack {
     pub id: u32,
     pub at: P2,
@@ -763,14 +764,14 @@ pub struct SnowTrack {
     pub is_vehicle: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Crater {
     pub id: u32,
     pub at: P2,
     pub radius: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct VehicleWreck {
     pub id: u32,
     pub kind: VehicleKind,
@@ -780,7 +781,7 @@ pub struct VehicleWreck {
     pub smoke_ttl: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SmokeCloud {
     pub id: u32,
     pub at: P2,
@@ -789,7 +790,7 @@ pub struct SmokeCloud {
     pub dark: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ActiveGrenade {
     pub id: u32,
     pub from: P2,
@@ -802,7 +803,7 @@ pub struct ActiveGrenade {
     pub friendly: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BloodMark {
     pub id: u32,
     pub at: P2,
@@ -810,7 +811,7 @@ pub struct BloodMark {
     pub age: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ReconDrone {
     pub active: bool,
     pub at: P2,
@@ -874,7 +875,7 @@ impl ReconDrone {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MortarMission {
     pub target: P2,
     pub fuse: f32,
@@ -904,7 +905,7 @@ pub fn blast_harm(forces: &Forces, distance: f32, under_roof: bool) -> f32 {
     harm
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FpvDrone {
     pub origin: P2,
     pub at: P2,
@@ -915,14 +916,14 @@ pub struct FpvDrone {
     pub jammed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PendingFpv {
     pub target: P2,
     pub eta: f32,
     pub fibre_optic: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LancetDrone {
     pub origin: P2,
     pub at: P2,
@@ -932,7 +933,7 @@ pub struct LancetDrone {
     pub hit_tank_id: Option<u32>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FriendlyFpv {
     pub origin: P2,
     pub at: P2,
@@ -940,7 +941,7 @@ pub struct FriendlyFpv {
     pub target: P2,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TankUnit {
     pub id: u32,
     pub kind: VehicleKind,
@@ -961,17 +962,18 @@ pub struct TankUnit {
     pub stuck_t: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum MilitiaOrder {
     Follow,
     Hold(P2),
     Garrison(P2),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MilitiaMember {
     pub id: u32,
-    pub name: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub name: crate::save::StaticText,
     pub at: P2,
     pub floor: u8,
     pub facing: f32,
@@ -989,7 +991,7 @@ pub struct MilitiaMember {
     pub rescue_progress: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BarricadeKind {
     Sandbag,
     IronGate,
@@ -1042,7 +1044,7 @@ impl BarricadeKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Barricade {
     pub at: P2,
     pub kind: BarricadeKind,
@@ -1051,7 +1053,7 @@ pub struct Barricade {
     pub hp: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Pedestrian {
     pub id: u32,
     pub at: P2,
@@ -1067,7 +1069,7 @@ pub struct Pedestrian {
     pub speed: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct LootDrop {
     pub at: P2,
     pub ammo: u32,
@@ -1077,17 +1079,18 @@ pub struct LootDrop {
     pub taken: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Sms {
     pub sender: String,
     pub zh: String,
     pub en: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RadioCallout {
     pub unit: String,
-    pub code_en: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub code_en: crate::save::StaticText,
     pub text_zh: String,
     pub ttl: f32,
     pub urgent: bool,
@@ -1158,7 +1161,7 @@ pub struct SimInput {
     pub toggle_sleep: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct WorldSim {
     pub hour: f32,
     pub hours_alive: f32,
@@ -1199,8 +1202,10 @@ pub struct WorldSim {
     /// What you find when you next come home, if they came while you were out.
     home_note: Option<(String, String)>,
     pub dead: bool,
-    pub death_zh: &'static str,
-    pub death_en: &'static str,
+    #[serde(with = "crate::save::static_str")]
+    pub death_zh: crate::save::StaticText,
+    #[serde(with = "crate::save::static_str")]
+    pub death_en: crate::save::StaticText,
 
     pub player_at: P2,
     pub player_facing: f32,
@@ -1230,7 +1235,7 @@ pub struct WorldSim {
     pub smoke_clouds: Vec<SmokeCloud>,
     pub grenades: Vec<ActiveGrenade>,
     pub blood_marks: Vec<BloodMark>,
-    pub visited: HashSet<(i32, i32)>,
+    pub visited: BTreeSet<(i32, i32)>,
     pub drone: ReconDrone,
     pub mortars: Vec<MortarMission>,
     pub pending_fpvs: Vec<PendingFpv>,
@@ -1378,7 +1383,7 @@ impl WorldSim {
         }
 
         let interiors = build_interiors(city);
-        let mut visited = HashSet::new();
+        let mut visited = BTreeSet::new();
         visited.insert(((city.spawn.x / 20.0).floor() as i32, (city.spawn.y / 20.0).floor() as i32));
 
         Self {
