@@ -303,6 +303,8 @@ pub struct Interior {
     pub room_temp_c: f32,
     /// Pieces of furniture left that can be broken up for the stove.
     pub furniture: u32,
+    /// What is hidden behind the cupboard here.
+    pub hidden: crate::occupation::Contraband,
     pub curtains_closed: bool,
     pub discovered: bool,
     pub breach_alert: f32,
@@ -2120,6 +2122,7 @@ fn assemble_interior(
                 + l.num("fuel", "furniture_per_upper_floor") * (num_floors as f32 - 1.0).max(0.0);
             pieces.round() as u32
         },
+        hidden: Default::default(),
         curtains_closed: matches!(kind, InteriorKind::PlayerHome | InteriorKind::NeighbourHome),
         discovered: kind == InteriorKind::PlayerHome,
         breach_alert: 0.0,

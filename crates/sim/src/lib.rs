@@ -13,6 +13,7 @@ pub mod geom;
 pub mod interior;
 pub mod living;
 pub mod look;
+pub mod occupation;
 pub mod scene;
 pub mod soup;
 pub mod survival;

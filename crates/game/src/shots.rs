@@ -878,13 +878,14 @@ struct InteriorPlan {
     frames: u32,
 }
 
-const INTERIOR_NAMES: [&str; 6] = [
+const INTERIOR_NAMES: [&str; 7] = [
     "01_shop_interior_lit",
     "02_blackout_ambush_indoor",
     "03_player_home_stove",
     "04_day2_noon_street",
     "05_basement_asleep",
     "06_march_five_pm",
+    "07_curfew_order",
 ];
 
 fn retarget_interior(mut commands: Commands, seed: Option<Res<InteriorPlanSeed>>) {
@@ -1113,6 +1114,32 @@ fn configure_interior_scene(
             clock.blackout = true;
             clock.fog = sim.fog_density;
             (pat, 1.55, Vec::new())
+        }
+        6 => {
+            // 07: the evening of 18 January: the order sheet is up and the curfew on.
+            let home = sim.interiors.iter().position(|it| it.kind == InteriorKind::PlayerHome).unwrap_or(0);
+            let pat = sim.interiors[home].front_door.outside;
+            let still = sim::survival::SimInput { clock_running: true, ..Default::default() };
+            sim.hour = sim::survival::DAWN_HOUR + 0.001;
+            sim.tick(&heihe.city, &heihe.ground, forces, &still, 0.05);
+            sim.hour = 24.0 + hm(12, 1);
+            sim.player_at = pat;
+            sim.tick(&heihe.city, &heihe.ground, forces, &still, 0.05);
+            sim.hour = 24.0 + hm(20, 10);
+            sim.blackout = true;
+            sim.weather_override = Some(Weather::Clear);
+            sim.weather = Weather::Clear;
+            sim.fog_density = 0.0;
+            sim.player_at = pat;
+            sim.player_anim = AnimState::Idle;
+            sim.squads.clear();
+            sim.subtitle_ttl = 0.0;
+
+            clock.hour = sim.hour;
+            clock.speed = 1.0;
+            clock.blackout = true;
+            clock.fog = 0.0;
+            (pat, 1.0, Vec::new())
         }
         3 | 5 => {
             // 04: noon on 18 January, the morning after; 06: 17:00 on 3 March, the

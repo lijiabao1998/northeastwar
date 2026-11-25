@@ -2407,6 +2407,7 @@ pub fn sync_hud(
                     Weather::Flurries => "小雪飘扬",
                     Weather::RiverFog => "江雾弥漫",
                 };
+                let curfew = if s.curfew_now() { "  ·  宵禁中" } else { "" };
                 if let Some(i_idx) = s.active_interior {
                     let intr = &s.interiors[i_idx];
                     let env_tag = if intr.stove_fuel_s > 0.0 {
@@ -2426,7 +2427,7 @@ pub fn sync_hud(
                     let cur_tag = if intr.curtains_closed { " · [窗帘合]" } else { "" };
                     let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
                     text.0 = format!(
-                        "体温 {:.1}°C  ·  {wx_tag}\n{}{floor_tag}  {:+.1}°C ({env_tag}{cur_tag}{fl_tag})",
+                        "体温 {:.1}°C  ·  {wx_tag}{curfew}\n{}{floor_tag}  {:+.1}°C ({env_tag}{cur_tag}{fl_tag})",
                         s.body.temp, intr.name, intr.room_temp_c
                     );
                 } else {
@@ -2442,7 +2443,7 @@ pub fn sync_hud(
                         "街头"
                     };
                     let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
-                    text.0 = format!("体温 {:.1}°C  ·  {wx_tag}\n室外 {:+.0}°C ({state_tag}{fl_tag})", s.body.temp, s.outdoor_c());
+                    text.0 = format!("体温 {:.1}°C  ·  {wx_tag}{curfew}\n室外 {:+.0}°C ({state_tag}{fl_tag})", s.body.temp, s.outdoor_c());
                 }
                 color.0 = if s.body.temp < 34.4 {
                     Color::srgb(0.55, 0.80, 1.0)
@@ -2571,8 +2572,13 @@ pub fn sync_hud(
                     let h = s.hours_alive as u32;
                     let m = ((s.hours_alive - h as f32) * 60.0) as u32;
                     let lasted = if h >= 24 { format!("{} 天 {} 小时", h / 24, h % 24) } else { format!("{h} 小时 {m} 分") };
+                    let taken = if s.detentions > 0 {
+                        format!("  ·  被带走 {} 次，关了 {:.0} 天", s.detentions, s.days_detained)
+                    } else {
+                        String::new()
+                    };
                     text.0 = format!(
-                        "{}\n{}\n\n2031年{}  ·  撑了 {lasted}\n\n按 Enter 重新开始   或按 Esc 返回主菜单",
+                        "{}\n{}\n\n2031年{}  ·  撑了 {lasted}{taken}\n\n按 Enter 重新开始   或按 Esc 返回主菜单",
                         s.death_zh,
                         s.death_en,
                         sim::clock::label(s.hour)

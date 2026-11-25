@@ -15,7 +15,7 @@ So the invasion night is the opening, not the whole game. After it come days, we
 ## Two rules everything else follows
 
 1. **You are not a soldier.** You have no weapon unless the game hands you one. Being seen is the danger, not being out-shot. A run ends when you die, and it starts again at 16:00.
-2. **No brochure numbers.** Each Russian weapon, vehicle, drone and habit behaves the way open reporting says it did in Ukraine. The numbers live in one table, `data/russia/forces.json`. Each carries a `src` (which source) and a `basis`: `reported` (the source gives the figure), `derived` (worked out from reported figures) or `play` (the source gives the shape, the number was chosen so the game can be played). The findings and links are in `docs/research/ukraine-performance.md`. The occupation and civilian life follow the same rule: living (weather, rooms, fuel, water, food, illness) is in `data/living.json` from `docs/research/living.md`, and the occupation's numbers will go in `data/occupation.json` from `docs/research/occupation.md`.
+2. **No brochure numbers.** Each Russian weapon, vehicle, drone and habit behaves the way open reporting says it did in Ukraine. The numbers live in one table, `data/russia/forces.json`. Each carries a `src` (which source) and a `basis`: `reported` (the source gives the figure), `derived` (worked out from reported figures) or `play` (the source gives the shape, the number was chosen so the game can be played). The findings and links are in `docs/research/ukraine-performance.md`. The occupation and civilian life follow the same rule: living (weather, rooms, fuel, water, food, illness) is in `data/living.json` from `docs/research/living.md`, and the occupation's are in `data/occupation.json` from `docs/research/occupation.md`.
 
 ## Time
 
@@ -68,7 +68,7 @@ Each step ends with tests in `crates/sim` and with a bot that plays it many time
 
 1. **L1, the days.** The clock past 07:00, day and season, sleep, a seeded random generator, game states in the client, on-screen text out of the world state, save and load. The first four were done on 25 November (`docs/rust-l1-receipt.md`); the last three are next.
 2. **L2, living.** Water, food, fuel and cold over days; illness; the home as the place that keeps you alive; shops that empty. Done on 25 November (`docs/rust-l2-receipt.md`), with its numbers in `data/living.json` from `docs/research/living.md`.
-3. **L3, the occupation's first weeks.** The sweep, the order sheet and curfew, searches in waves, the phone, checkpoints and filtration, detention.
+3. **L3, the occupation's first weeks.** The sweep, the order sheet and curfew, searches in waves, the phone, checkpoints and filtration, detention. First part done on 25 November (`docs/rust-l3a-receipt.md`, numbers in `data/occupation.json`): the end of the assault, the sweep, searches, hiding, detention, curfew, suspicion and visits. Checkpoints, filtration, the phone and neighbourhood waves are next.
 4. **L4, people and money.** Neighbours, informers, aid, cash and prices, the market.
 5. **L5, months.** Papers and the passport ladder, the network cut, school, the referendum, conscription, resistance and reprisals, the thaw.
 6. **L6, endings.**
