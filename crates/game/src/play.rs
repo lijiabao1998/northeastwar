@@ -9,8 +9,11 @@ use crate::{
     to_mesh, Clock, Eye, Heihe, Mats, Player,
 };
 use bevy::{
+    asset::RenderAssetUsages,
+    mesh::Indices,
     picking::prelude::{Pickable, PointerButton, PointerClick, PointerOut, PointerOver},
     prelude::*,
+    render::render_resource::PrimitiveTopology,
     window::PrimaryWindow,
 };
 use sim::{
@@ -31,6 +34,7 @@ const PASS_HOURS_PER_SECOND: f32 = 12.0;
 pub enum SpeedAction {
     Set(f32),
     TogglePause,
+    ToggleFlashlight,
 }
 
 #[derive(Resource, Default)]
@@ -60,6 +64,7 @@ pub struct PlayState {
     pub cursor_world: Option<P2>,
     pub preview_barricade: bool,
     pub click_cooldown: f32,
+    pub flashlight_yaw: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -100,6 +105,8 @@ pub struct FigureAtlas {
     pub fibre_mesh: Handle<Mesh>,
     pub grenade_mesh: Handle<Mesh>,
     pub blood_mesh: Handle<Mesh>,
+    pub flashlight_beam_mesh: Handle<Mesh>,
+    pub flashlight_bulb_mesh: Handle<Mesh>,
     pub fire_mat: Handle<StandardMaterial>,
     pub ember_mat: Handle<StandardMaterial>,
     pub wreck_charred_mat: Handle<StandardMaterial>,
@@ -114,6 +121,9 @@ pub struct FigureAtlas {
     pub white_ring_mat: Handle<StandardMaterial>,
     pub danger_ring_mat: Handle<StandardMaterial>,
     pub blood_mat: Handle<StandardMaterial>,
+    pub flashlight_beam_mat: Handle<StandardMaterial>,
+    pub flashlight_halo_mat: Handle<StandardMaterial>,
+    pub flashlight_bulb_mat: Handle<StandardMaterial>,
     pub fibre_mat: Handle<StandardMaterial>,
     pub laser_mat: Handle<StandardMaterial>,
     pub pla_laser_mat: Handle<StandardMaterial>,
@@ -135,7 +145,11 @@ pub enum IndoorLightKind {
     Room,
     Stove,
     Flashlight,
+    FlashlightBounce,
 }
+
+#[derive(Component)]
+pub struct FlashlightSpot;
 
 pub struct InteriorVisualSet {
     pub static_solid: Entity,
@@ -188,6 +202,9 @@ pub struct ActorPools {
     danger_rings: HashMap<u32, Entity>,
     grenades: HashMap<u32, Entity>,
     blood_marks: HashMap<u32, Entity>,
+    flashlight_beam: Option<Entity>,
+    flashlight_halo: Option<Entity>,
+    flashlight_bulb: Option<Entity>,
 }
 
 #[derive(Component)]
@@ -209,6 +226,9 @@ pub struct SootMark;
 
 #[derive(Component)]
 pub struct PauseBtnText;
+
+#[derive(Component)]
+pub struct FlashlightBtnText;
 
 #[derive(Component)]
 pub enum HudRole {
@@ -249,6 +269,51 @@ fn build_prop_soup(size: [f32; 3], col: Rgb) -> Soup {
     let mut s = Soup::default();
     s.boxed(P2::default(), 0.0, size, 0.0, col);
     s
+}
+
+/// Smooth 12-sided, 4-ring tapered cone extending along `-Z` (`0` -> `-1`) with per-vertex RGBA
+/// attenuation so `AlphaMode::Add` creates a feathered volumetric light cone with no hard edges.
+fn build_flashlight_beam_mesh() -> Mesh {
+    const SIDES: usize = 12;
+    const RINGS: [(f32, f32, [f32; 4]); 4] = [
+        (0.0, 0.09, [1.0, 1.0, 1.0, 1.0]),
+        (-0.35, 0.38, [0.42, 0.45, 0.48, 0.45]),
+        (-0.70, 0.70, [0.12, 0.14, 0.16, 0.15]),
+        (-1.0, 1.0, [0.0, 0.0, 0.0, 0.0]),
+    ];
+    let mut pos: Vec<[f32; 3]> = Vec::with_capacity(SIDES * RINGS.len());
+    let mut nor: Vec<[f32; 3]> = Vec::with_capacity(SIDES * RINGS.len());
+    let mut uv: Vec<[f32; 2]> = Vec::with_capacity(SIDES * RINGS.len());
+    let mut col: Vec<[f32; 4]> = Vec::with_capacity(SIDES * RINGS.len());
+    let mut idx: Vec<u32> = Vec::with_capacity(SIDES * (RINGS.len() - 1) * 6);
+
+    for (ri, &(z, radius, rgba)) in RINGS.iter().enumerate() {
+        let v = ri as f32 / (RINGS.len() - 1) as f32;
+        for si in 0..SIDES {
+            let a = si as f32 * std::f32::consts::TAU / SIDES as f32;
+            let (sa, ca) = (a.sin(), a.cos());
+            pos.push([ca * radius, sa * radius, z]);
+            nor.push([ca, sa, 0.25]);
+            uv.push([si as f32 / SIDES as f32, v]);
+            col.push(rgba);
+        }
+    }
+    for ri in 0..(RINGS.len() - 1) {
+        let base0 = (ri * SIDES) as u32;
+        let base1 = ((ri + 1) * SIDES) as u32;
+        for si in 0..SIDES {
+            let s0 = si as u32;
+            let s1 = ((si + 1) % SIDES) as u32;
+            idx.extend_from_slice(&[base0 + s0, base0 + s1, base1 + s1]);
+            idx.extend_from_slice(&[base0 + s0, base1 + s1, base1 + s0]);
+        }
+    }
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+        .with_inserted_indices(Indices::U32(idx))
 }
 
 fn build_ring_soup() -> Soup {
@@ -660,6 +725,29 @@ pub fn setup_play(
         perceptual_roughness: 0.72,
         ..default()
     });
+    let flashlight_beam_mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.32, 0.38, 0.46, 1.0),
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        cull_mode: None,
+        fog_enabled: false,
+        ..default()
+    });
+    let flashlight_halo_mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.16, 0.20, 0.26, 1.0),
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        cull_mode: None,
+        fog_enabled: false,
+        ..default()
+    });
+    let flashlight_bulb_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.96, 0.98, 1.0),
+        emissive: LinearRgba::new(14.0, 16.0, 18.0, 1.0),
+        unlit: true,
+        fog_enabled: false,
+        ..default()
+    });
     let fibre_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.86, 0.96, 1.0),
         emissive: LinearRgba::new(2.2, 2.8, 3.2, 1.0),
@@ -722,6 +810,8 @@ pub fn setup_play(
         fibre_mesh: meshes.add(to_mesh(&build_prop_soup([0.04, 0.04, 1.0], Rgb { r: 0.88, g: 0.96, b: 1.0 }))),
         grenade_mesh: meshes.add(to_mesh(&build_prop_soup([0.16, 0.22, 0.16], Rgb { r: 0.22, g: 0.30, b: 0.16 }))),
         blood_mesh: meshes.add(to_mesh(&build_prop_soup([0.52, 0.025, 0.68], Rgb { r: 0.58, g: 0.04, b: 0.05 }))),
+        flashlight_beam_mesh: meshes.add(build_flashlight_beam_mesh()),
+        flashlight_bulb_mesh: meshes.add(to_mesh(&build_prop_soup([0.16, 0.16, 0.16], Rgb { r: 1.0, g: 1.0, b: 1.0 }))),
         fire_mat,
         ember_mat,
         wreck_charred_mat,
@@ -736,6 +826,9 @@ pub fn setup_play(
         white_ring_mat,
         danger_ring_mat,
         blood_mat,
+        flashlight_beam_mat,
+        flashlight_halo_mat,
+        flashlight_bulb_mat,
         fibre_mat,
         laser_mat,
         pla_laser_mat,
@@ -803,13 +896,34 @@ pub fn setup_play(
             IndoorLightKind::Stove,
         ));
         commands.spawn((
-            PointLight { color: Color::srgb(0.90, 0.95, 1.0), intensity: 48_000.0, range: 13.5, shadow_maps_enabled: false, ..default() },
+            PointLight { color: Color::srgb(0.90, 0.95, 1.0), intensity: 55_000.0, range: 14.0, shadow_maps_enabled: false, ..default() },
             Transform::default(),
             Visibility::Hidden,
             IndoorLightKind::Flashlight,
         ));
+        commands.spawn((
+            PointLight { color: Color::srgb(0.84, 0.92, 1.0), intensity: 120_000.0, range: 22.0, shadow_maps_enabled: false, ..default() },
+            Transform::default(),
+            Visibility::Hidden,
+            IndoorLightKind::FlashlightBounce,
+        ));
+        commands.spawn((
+            SpotLight {
+                color: Color::srgb(0.95, 0.98, 1.0),
+                intensity: 650_000.0,
+                range: 30.0,
+                inner_angle: 0.22,
+                outer_angle: 0.44,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::default(),
+            Visibility::Hidden,
+            FlashlightSpot,
+        ));
     }
 
+    let init_yaw = sim.player_facing;
     commands.insert_resource(atlas);
     commands.insert_resource(PlayState {
         sim,
@@ -819,6 +933,7 @@ pub fn setup_play(
         cursor_world: None,
         preview_barricade: false,
         click_cooldown: 0.0,
+        flashlight_yaw: init_yaw,
     });
 }
 
@@ -828,7 +943,6 @@ fn spawn_speed_btn(
     label: &str,
     action: SpeedAction,
     btn_speed: f32,
-    is_pause: bool,
 ) {
     let normal_border = Color::srgba(0.45, 0.62, 0.80, 0.38);
     let hover_border = Color::srgba(0.92, 0.96, 1.0, 0.90);
@@ -873,8 +987,14 @@ fn spawn_speed_btn(
             TextColor(Color::WHITE),
             Pickable::IGNORE,
         ));
-        if is_pause {
-            t.insert(PauseBtnText);
+        match action {
+            SpeedAction::TogglePause => {
+                t.insert(PauseBtnText);
+            }
+            SpeedAction::ToggleFlashlight => {
+                t.insert(FlashlightBtnText);
+            }
+            SpeedAction::Set(_) => {}
         }
     });
 }
@@ -896,11 +1016,12 @@ fn spawn_hud(commands: &mut Commands, font: Handle<Font>) {
             SpeedBarRoot,
         ))
         .with_children(|bar| {
-            spawn_speed_btn(bar, &font, "蓝方 BLUE | 暂停 P", SpeedAction::TogglePause, -1.0, true);
+            spawn_speed_btn(bar, &font, "蓝方 BLUE | 暂停 P", SpeedAction::TogglePause, -1.0);
             for spd in SPEED_LEVELS {
                 let lbl = format!("{}x", spd as u32);
-                spawn_speed_btn(bar, &font, &lbl, SpeedAction::Set(spd), spd, false);
+                spawn_speed_btn(bar, &font, &lbl, SpeedAction::Set(spd), spd);
             }
+            spawn_speed_btn(bar, &font, "手电 L: 关", SpeedAction::ToggleFlashlight, -2.0);
         });
     commands.spawn((
         Text::new(""),
@@ -1113,6 +1234,11 @@ pub fn step_play(
                 play.paused = !play.paused;
                 play.click_cooldown = 0.24;
             }
+            SpeedAction::ToggleFlashlight => {
+                play.sim.flashlight_on = !play.sim.flashlight_on;
+                clock.flashlight_on = play.sim.flashlight_on;
+                play.click_cooldown = 0.24;
+            }
         }
     }
 
@@ -1129,6 +1255,7 @@ pub fn step_play(
         );
         p_mut.paused = false;
         p_mut.preview_barricade = false;
+        p_mut.flashlight_yaw = p_mut.sim.player_facing;
         eye_q.0.cam_pan = P2::default();
         player.0.at = p_mut.sim.player_at;
         player.1.translation = Vec3::new(p_mut.sim.player_at.x, 0.0, -p_mut.sim.player_at.y);
@@ -1200,6 +1327,12 @@ pub fn step_play(
 
     let aim = mouse_ground(eye_q.1, eye_q.2, &window);
     play.cursor_world = aim;
+    if let Some(c) = aim {
+        let d = c.sub(play.sim.player_at);
+        if d.len() > 0.35 {
+            play.flashlight_yaw = d.y.atan2(d.x);
+        }
+    }
 
     let selected = if map_open {
         None
@@ -1232,12 +1365,16 @@ pub fn step_play(
 
     let over_speed_bar = window
         .cursor_position()
-        .is_some_and(|p| p.x >= 20.0 && p.x <= 425.0 && p.y >= 68.0 && p.y <= 106.0);
+        .is_some_and(|p| p.x >= 20.0 && p.x <= 555.0 && p.y >= 68.0 && p.y <= 106.0);
     let allow_mouse = !map_open && play.click_cooldown <= 0.0 && speed_q.hovered == 0 && !over_speed_bar;
     let map_militia_cmd = map.as_mut().and_then(|m| m.pending_militia_order.take());
     let frame_dt = time.delta_secs().clamp(0.0, 0.1);
 
     if play.paused && !play.sim.dead {
+        if !map_open && keys.just_pressed(KeyCode::KeyL) {
+            play.sim.flashlight_on = !play.sim.flashlight_on;
+        }
+        clock.flashlight_on = play.sim.flashlight_on;
         if wish.len() > 0.05 {
             let next_pan = eye_q.0.cam_pan.add(wish.norm().mul(28.0 * frame_dt));
             eye_q.0.cam_pan = P2::new(next_pan.x.clamp(-90.0, 90.0), next_pan.y.clamp(-90.0, 90.0));
@@ -1339,7 +1476,12 @@ pub fn step_play(
         clock.blackout = state.sim.blackout;
         clock.fog = state.sim.fog_density;
         clock.overcast = overcast(state.sim.weather);
+        clock.flashlight_on = state.sim.flashlight_on;
         return;
+    }
+
+    if play.sim.flashlight_on && wish.len() < 0.05 && !play.sim.sleeping && !play.sim.dead && !map_open {
+        play.sim.player_facing = play.flashlight_yaw;
     }
 
     let was_danger = play.sim.challenged
@@ -1416,6 +1558,7 @@ pub fn step_play(
     clock.blackout = play.sim.blackout;
     clock.fog = play.sim.fog_density;
     clock.overcast = overcast(play.sim.weather);
+    clock.flashlight_on = play.sim.flashlight_on;
 
     if fx.footstep {
         audio_q.footstep = Some(input.sprinting);
@@ -1513,7 +1656,7 @@ fn vault_hop_y(vault_t: f32) -> f32 {
 fn upsert_pooled(
     commands: &mut Commands,
     map: &mut HashMap<u32, Entity>,
-    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>)>,
+    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
     key: u32,
     mesh_h: Handle<Mesh>,
     mat_h: &Handle<StandardMaterial>,
@@ -1557,7 +1700,7 @@ fn prune_pool(commands: &mut Commands, map: &mut HashMap<u32, Entity>, seen: &Ha
 fn upsert_slot(
     commands: &mut Commands,
     slot: &mut Option<Entity>,
-    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>)>,
+    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
     mesh_h: Handle<Mesh>,
     mat_h: &Handle<StandardMaterial>,
     active_tf: Option<Transform>,
@@ -1616,9 +1759,14 @@ pub fn sync_actors(
     mut pools: ResMut<ActorPools>,
     mut interiors_vis: Option<ResMut<InteriorVisuals>>,
     mut peds: Query<(&PedActor, &mut Transform, &mut Visibility, &mut Mesh3d)>,
-    mut pool_q: Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>)>,
-    mut intr_vis_q: Query<&mut Visibility, (With<InteriorPart>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>)>,
-    mut lights_q: Query<(&mut Transform, &mut Visibility, &IndoorLightKind), (Without<PooledActor>, Without<PedActor>, Without<InteriorPart>)>,
+    mut pool_q: Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    mut intr_vis_q: Query<&mut Visibility, (With<InteriorPart>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    (mut lights_q, mut spot_q, mut materials, mut last_beam_fog): (
+        Query<(&mut Transform, &mut PointLight, &mut Visibility, &IndoorLightKind), (Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<FlashlightSpot>)>,
+        Query<(&mut Transform, &mut SpotLight, &mut Visibility), (With<FlashlightSpot>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>)>,
+        ResMut<Assets<StandardMaterial>>,
+        Local<Option<f32>>,
+    ),
 ) {
     for (pa, mut tf, mut vis, mut mesh) in &mut peds {
         let Some(ped) = play.sim.pedestrians.get(pa.idx) else { continue };
@@ -1779,7 +1927,7 @@ pub fn sync_actors(
                 }
             }
         }
-        let set_v = |q: &mut Query<&mut Visibility, (With<InteriorPart>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>)>, e: Entity, show: bool| {
+        let set_v = |q: &mut Query<&mut Visibility, (With<InteriorPart>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>, Without<FlashlightSpot>)>, e: Entity, show: bool| {
             if let Ok(mut v) = q.get_mut(e) {
                 let target = if show { Visibility::Inherited } else { Visibility::Hidden };
                 if *v != target {
@@ -1862,10 +2010,16 @@ pub fn sync_actors(
     prune_pool(&mut commands, &mut pools.room_loots, &seen_loots);
     upsert_slot(&mut commands, &mut pools.stair_ring, &mut pool_q, atlas.ring_mesh.clone(), &atlas.ring_mat, stair_tf);
 
-    // Update 3 pooled indoor/flashlight point lights aligned with active floor.
+    // Update pooled indoor, directional spotlight & fog-reactive flashlight beams aligned with active floor.
     let active_intr = play.sim.cutaway_interior.and_then(|i| play.sim.interiors.get(i));
     let light_base_y = active_intr_floor as f32 * FLOOR_H;
-    for (mut tf, mut vis, kind) in &mut lights_q {
+    let fl_base_y = light_base_y + vault_hop_y(play.sim.player_vault_t);
+    let fl_on = play.sim.flashlight_on && !play.sim.dead && !play.sim.sleeping;
+    let (bright_mul, range_mul) = play.sim.flashlight_illumination_scale();
+    let fog = play.sim.fog_density.clamp(0.0, 1.0);
+    let beam_yaw = if play.cursor_world.is_some() { play.flashlight_yaw } else { play.sim.player_facing };
+    let fwd = P2::new(beam_yaw.cos(), beam_yaw.sin());
+    for (mut tf, mut pl, mut vis, kind) in &mut lights_q {
         match kind {
             IndoorLightKind::Room => {
                 if let Some(intr) = active_intr.filter(|it| !play.sim.blackout && play.sim.hour < sim::survival::BLACKOUT_HOUR && it.kind != sim::interior::InteriorKind::BasementShelter) {
@@ -1889,9 +2043,22 @@ pub fn sync_actors(
                 }
             }
             IndoorLightKind::Flashlight => {
-                if play.sim.flashlight_on {
-                    let ahead = play.sim.player_at.add(P2::new(play.sim.player_facing.cos() * 2.1, play.sim.player_facing.sin() * 2.1));
-                    tf.translation = Vec3::new(ahead.x, light_base_y + 1.45, -ahead.y);
+                if fl_on {
+                    let ahead = play.sim.player_at.add(fwd.mul(2.4 + 2.6 * fog));
+                    tf.translation = Vec3::new(ahead.x, fl_base_y + 1.55 + 0.45 * fog, -ahead.y);
+                    pl.intensity = 55_000.0 * bright_mul + 220_000.0 * fog;
+                    pl.range = 14.0 * range_mul + 12.0 * fog;
+                    *vis = Visibility::Inherited;
+                } else {
+                    *vis = Visibility::Hidden;
+                }
+            }
+            IndoorLightKind::FlashlightBounce => {
+                if fl_on && fog >= 0.08 && play.sim.active_interior.is_none() {
+                    let ahead = play.sim.player_at.add(fwd.mul(6.8 + 4.5 * fog));
+                    tf.translation = Vec3::new(ahead.x, fl_base_y + 1.9, -ahead.y);
+                    pl.intensity = 320_000.0 * fog;
+                    pl.range = 22.0 + 16.0 * fog;
                     *vis = Visibility::Inherited;
                 } else {
                     *vis = Visibility::Hidden;
@@ -1899,6 +2066,51 @@ pub fn sync_actors(
             }
         }
     }
+
+    let fl_origin = Vec3::new(play.sim.player_at.x + fwd.x * 0.45, fl_base_y + 1.38, -(play.sim.player_at.y + fwd.y * 0.45));
+    let fl_aim = Vec3::new(play.sim.player_at.x + fwd.x * 13.0, fl_base_y + 0.15, -(play.sim.player_at.y + fwd.y * 13.0));
+    for (mut tf, mut sp, mut vis) in &mut spot_q {
+        if fl_on {
+            *tf = Transform::from_translation(fl_origin).looking_at(fl_aim, Vec3::Y);
+            sp.intensity = 650_000.0 * bright_mul;
+            sp.range = 30.0 * range_mul;
+            sp.inner_angle = 0.22 + 0.12 * fog;
+            sp.outer_angle = 0.44 + 0.18 * fog;
+            *vis = Visibility::Inherited;
+        } else {
+            *vis = Visibility::Hidden;
+        }
+    }
+
+    if last_beam_fog.is_none_or(|prev| (fog - prev).abs() > 0.02) {
+        *last_beam_fog = Some(fog);
+        if let Some(mut bm) = materials.get_mut(&atlas.flashlight_beam_mat) {
+            bm.base_color = Color::srgba(0.28 + 0.40 * fog, 0.34 + 0.44 * fog, 0.42 + 0.46 * fog, 1.0);
+        }
+        if let Some(mut hm) = materials.get_mut(&atlas.flashlight_halo_mat) {
+            hm.base_color = Color::srgba(0.22 * fog, 0.28 * fog, 0.36 * fog, 1.0);
+        }
+    }
+
+    let (beam_tf, halo_tf, bulb_tf) = if fl_on {
+        let base_rot = Transform::from_translation(fl_origin).looking_at(fl_aim, Vec3::Y);
+        let beam_len = 11.5 * range_mul;
+        let beam_r = 2.4 + 2.6 * fog;
+        let beam = base_rot.with_scale(Vec3::new(beam_r, beam_r, beam_len));
+        let halo = if fog >= 0.08 {
+            let halo_len = 13.5 + 11.5 * fog;
+            let halo_r = 4.6 + 4.4 * fog;
+            Some(base_rot.with_scale(Vec3::new(halo_r, halo_r, halo_len)))
+        } else {
+            None
+        };
+        (Some(beam), halo, Some(Transform::from_translation(fl_origin)))
+    } else {
+        (None, None, None)
+    };
+    upsert_slot(&mut commands, &mut pools.flashlight_beam, &mut pool_q, atlas.flashlight_beam_mesh.clone(), &atlas.flashlight_beam_mat, beam_tf);
+    upsert_slot(&mut commands, &mut pools.flashlight_halo, &mut pool_q, atlas.flashlight_beam_mesh.clone(), &atlas.flashlight_halo_mat, halo_tf);
+    upsert_slot(&mut commands, &mut pools.flashlight_bulb, &mut pool_q, atlas.flashlight_bulb_mesh.clone(), &atlas.flashlight_bulb_mat, bulb_tf);
 
     // Live hinged doors & cotton curtains within 48m of player (capped to closest 48 doors).
     let mut near_doors: Vec<(f32, u32, &sim::interior::RoomDoor)> = Vec::new();
@@ -2429,7 +2641,8 @@ pub fn sync_hud(
     mut q: Query<(&HudRole, &mut Text, &mut TextColor, &mut Visibility)>,
     mut speed_bar_q: Query<&mut Visibility, (With<SpeedBarRoot>, Without<HudRole>)>,
     mut speed_btns: Query<(&SpeedBtn, &mut BackgroundColor)>,
-    mut pause_txt: Query<&mut Text, (With<PauseBtnText>, Without<HudRole>)>,
+    mut pause_txt: Query<&mut Text, (With<PauseBtnText>, Without<HudRole>, Without<FlashlightBtnText>)>,
+    mut fl_txt: Query<&mut Text, (With<FlashlightBtnText>, Without<HudRole>, Without<PauseBtnText>)>,
 ) {
     let s = &play.sim;
     let active = play.started && *menu == MenuScreen::Playing;
@@ -2439,7 +2652,13 @@ pub fn sync_hud(
     }
     if show_speed {
         for (btn, mut bg) in &mut speed_btns {
-            if btn.0 < 0.0 {
+            if (btn.0 + 2.0).abs() < 0.01 {
+                bg.0 = if s.flashlight_on {
+                    Color::srgba(0.24, 0.50, 0.78, 0.94)
+                } else {
+                    Color::srgba(0.05, 0.08, 0.13, 0.82)
+                };
+            } else if btn.0 < 0.0 {
                 bg.0 = if play.paused {
                     Color::srgba(0.72, 0.24, 0.16, 0.94)
                 } else {
@@ -2459,6 +2678,9 @@ pub fn sync_hud(
             } else {
                 "蓝方 BLUE | 暂停 P".into()
             };
+        }
+        for mut ft in &mut fl_txt {
+            ft.0 = if s.flashlight_on { "手电 L: 开" } else { "手电 L: 关" }.into();
         }
     }
     for (role, mut text, mut color, mut vis) in &mut q {
@@ -2493,6 +2715,11 @@ pub fn sync_hud(
                     Weather::Rain => "下雨",
                 };
                 let curfew = if s.curfew_now() { "  ·  宵禁中" } else { "" };
+                let fl_tag = if s.flashlight_on {
+                    if s.fog_density >= 0.25 { " · [手电·雾中增亮]" } else { " · [手电]" }
+                } else {
+                    ""
+                };
                 if let Some(i_idx) = s.active_interior {
                     let intr = &s.interiors[i_idx];
                     let env_tag = if intr.stove_fuel_s > 0.0 {
@@ -2510,7 +2737,6 @@ pub fn sync_hud(
                         String::new()
                     };
                     let cur_tag = if intr.curtains_closed { " · [窗帘合]" } else { "" };
-                    let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
                     text.0 = format!(
                         "体温 {:.1}°C  ·  {wx_tag}{curfew}\n{}{floor_tag}  {:+.1}°C ({env_tag}{cur_tag}{fl_tag})",
                         s.body.temp, intr.name, intr.room_temp_c
@@ -2527,7 +2753,6 @@ pub fn sync_hud(
                     } else {
                         "街头"
                     };
-                    let fl_tag = if s.flashlight_on { " · [手电]" } else { "" };
                     text.0 = format!("体温 {:.1}°C  ·  {wx_tag}{curfew}\n室外 {:+.0}°C ({state_tag}{fl_tag})", s.body.temp, s.outdoor_c());
                 }
                 color.0 = if s.body.temp < 34.4 {

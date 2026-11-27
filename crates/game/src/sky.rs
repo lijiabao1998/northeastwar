@@ -102,13 +102,14 @@ pub fn apply(
     glow: Option<Res<GlowMaterials>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     (cutaway, gfx): (Option<Res<crate::Cutaway>>, Res<crate::graphics::Graphics>),
-    (mut last, mut lamps_were_on, mut blackout_was, mut ghost_state, mut last_fog, mut last_cloud): (
+    (mut last, mut lamps_were_on, mut blackout_was, mut ghost_state, mut last_fog, mut last_cloud, mut flashlight_was): (
         Local<f32>,
         Local<Option<bool>>,
         Local<Option<bool>>,
         Local<Option<u8>>,
         Local<f32>,
         Local<f32>,
+        Local<Option<bool>>,
     ),
 ) {
     let lamp_on = lamps_on(clock.hour) && !clock.blackout;
@@ -118,12 +119,14 @@ pub fn apply(
         && *blackout_was == Some(clock.blackout)
         && (clock.fog - *last_fog).abs() < 0.01
         && (clock.overcast - *last_cloud).abs() < 0.01
+        && *flashlight_was == Some(clock.flashlight_on)
     {
         return;
     }
     *last = clock.hour;
     *last_fog = clock.fog;
     *last_cloud = clock.overcast;
+    *flashlight_was = Some(clock.flashlight_on);
     let (elevation, azimuth) = sun(clock.hour);
     let dark = night(clock.hour);
     let (light, transform) = &mut *sun_light;
@@ -222,6 +225,10 @@ pub fn apply(
         fog_q.falloff = bevy::pbr::FogFalloff::Linear { start: 900.0, end: 1200.0 };
     } else {
         let dens = clock.fog.clamp(0.0, 1.0);
+        let fl = if clock.flashlight_on { 1.0f32 } else { 0.0 };
+        if fl > 0.0 {
+            exposure.ev100 -= 0.25 * dens * dark;
+        }
         // Scale fog luminance with ambient.brightness so day and blackout-night fog match sky exposure.
         let lum = ambient.brightness * 0.65;
         let r = 0.58 * (1.0 - dark) + 0.30 * dark;
@@ -229,8 +236,8 @@ pub fn apply(
         let b = 0.80 * (1.0 - dark) + 0.55 * dark;
         fog_q.color = Color::linear_rgba(r * lum, g * lum, b * lum, dens * 0.58);
         fog_q.falloff = bevy::pbr::FogFalloff::Linear {
-            start: 485.0 + (1.0 - dens) * 60.0,
-            end: 578.0 + (1.0 - dens) * 80.0,
+            start: 485.0 + (1.0 - dens) * 60.0 + 16.0 * dens * fl,
+            end: 578.0 + (1.0 - dens) * 80.0 + 26.0 * dens * fl,
         };
     }
 }

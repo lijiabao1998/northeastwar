@@ -1646,6 +1646,17 @@ impl WorldSim {
         light_at(city, self.hour, self.blackout, self.near_fire(), self.player_at, &self.fire_barrels)
     }
 
+    /// Returns `(brightness_scale, range_scale)` for the player's tactical flashlight.
+    /// In mist or river fog, suspended droplets scatter the beam, expanding both the
+    /// perceived luminous halo and foreground reach.
+    pub fn flashlight_illumination_scale(&self) -> (f32, f32) {
+        if !self.flashlight_on || self.dead || self.sleeping {
+            return (0.0, 0.0);
+        }
+        let fog = self.fog_density.clamp(0.0, 1.0);
+        (1.0 + 1.65 * fog, 1.0 + 0.65 * fog)
+    }
+
     /// What the calendar brings: each morning (the first ends the assault; each
     /// empties the shops a little more and may put a visit on), then the order
     /// sheet, the sweep and the visits. Shared by real time and by days that pass
@@ -2932,9 +2943,18 @@ impl WorldSim {
         if input.toggle_flashlight {
             self.flashlight_on = !self.flashlight_on;
             if self.flashlight_on {
-                self.say("开启手电筒：暗屋清晰可见，但没拉窗帘时易暴露。", "Flashlight ON.");
+                if self.active_interior.is_some() {
+                    self.say("开启手电筒：暗屋清晰可见，但没拉窗帘时易暴露。", "Flashlight ON indoors.");
+                } else if self.fog_density >= 0.35 {
+                    self.say(
+                        "开启强光手电：雾气漫反射扩大了照明亮度与范围，注意光束可能暴露位置。",
+                        "Flashlight ON: fog scatters and widens the beam!",
+                    );
+                } else {
+                    self.say("开启手电筒：照亮前方街道与雪地，但可能吸引远处俄军注意。", "Flashlight ON outdoors.");
+                }
             } else {
-                self.say("关掉手电筒：停电后黑屋极难被街上俄军发现。", "Flashlight OFF.");
+                self.say("关掉手电筒：重新隐入夜色与雾气中。", "Flashlight OFF.");
             }
         }
 
@@ -4123,8 +4143,9 @@ impl WorldSim {
                                 };
                                 let move_mul = if self.player_gait != Gait::Still { 0.65 } else { 1.0 };
                                 let dark_mul = if light == Light::NightDark && !self.flashlight_on { 0.65 } else { 1.0 };
+                                let fog_fl_mul = if self.flashlight_on && self.fog_density >= 0.35 && dist <= 26.0 { 1.12 } else { 1.0 };
                                 let cover_mul = if self.squads[gi].men[si].in_cover { 0.55 } else { 1.0 };
-                                let chance = (forces.hit_chance(dist) * w_mul * move_mul * dark_mul * cover_mul).clamp(0.05, 0.88);
+                                let chance = (forces.hit_chance(dist) * w_mul * move_mul * dark_mul * fog_fl_mul * cover_mul).clamp(0.05, 0.88);
                                 let roll = self.next_rand(17);
                                 let spread_roll = self.next_rand(18);
                                 if roll < chance {
@@ -5123,6 +5144,8 @@ impl WorldSim {
             } else {
                 0.70
             }
+        } else if self.flashlight_on && light == Light::NightDark {
+            if self.fog_density >= 0.5 { 1.18 } else { 1.28 }
         } else {
             1.0
         };
@@ -9682,5 +9705,100 @@ mod tests {
         assert!(july_room > 15.0, "summer warms the flat without a fire: {july_room}");
         assert!(sim.dead || sim.hour >= end - 24.0);
         assert!(t0.elapsed().as_secs() < 120, "a year at a glance takes {:?}", t0.elapsed());
+    }
+
+    #[test]
+    fn flashlight_expands_brightness_in_fog_and_affects_visibility() {
+        let (city, _) = crate::load_heihe().unwrap();
+        let mut sim = WorldSim::new(&city);
+        let ground = Ground::new_with_interiors(&city, &sim.interiors);
+        let forces = load_forces();
+
+        assert!(!sim.flashlight_on);
+        assert_eq!(sim.flashlight_illumination_scale(), (0.0, 0.0));
+
+        // Toggle flashlight on outdoors in clear air -> baseline (1.0, 1.0).
+        sim.weather_override = Some(Weather::Clear);
+        sim.fog_density = 0.0;
+        sim.tick(&city, &ground, &forces, &SimInput { toggle_flashlight: true, ..Default::default() }, 0.1);
+        assert!(sim.flashlight_on);
+        let (b_clear, r_clear) = sim.flashlight_illumination_scale();
+        assert!((b_clear - 1.0).abs() < 0.01 && (r_clear - 1.0).abs() < 0.01);
+
+        // Dense river fog must substantially expand brightness & reach via scattering.
+        sim.weather_override = Some(Weather::RiverFog);
+        sim.fog_density = 0.92;
+        let (b_fog, r_fog) = sim.flashlight_illumination_scale();
+        assert!(b_fog > 2.0, "fog should multiply flashlight brightness > 2.0x, got {b_fog}");
+        assert!(r_fog > 1.5, "fog should expand flashlight halo/range > 1.5x, got {r_fog}");
+
+        // Outdoor dark night: flashlight increases detection gain rate by patrol in range.
+        let (pa, pb) = sim
+            .patrol_roads
+            .iter()
+            .filter_map(|r| {
+                if r.len() < 2 { return None; }
+                let d = r[1].sub(r[0]);
+                if d.len() < 20.0 { return None; }
+                let dir = d.norm();
+                let a = r[0].add(dir.mul(2.0));
+                let b = r[0].add(dir.mul(14.0));
+                if ground.clear_line_with_interiors(&sim.interiors, a, b, false) { Some((a, b)) } else { None }
+            })
+            .next()
+            .expect("12m open road stretch");
+        let dir = pa.sub(pb).norm();
+        let make_patrol = |id: u32| Squad {
+            id,
+            state: SquadState::Patrol,
+            route_idx: 0,
+            wp_idx: 0,
+            wp_dir: 1,
+            men: vec![Soldier {
+                id: id + 1,
+                at: pb,
+                floor: 0,
+                facing: dir.y.atan2(dir.x),
+                hp: 40.0,
+                optics: false,
+                shot_cd: 0.0,
+                speed: 0.0,
+                phase: 0.0,
+                in_cover: false,
+                vault_t: 0.0,
+                grenade_cd: 0.0,
+            }],
+            meter: 0.0,
+            last_seen: pb,
+            lost_for: 0.0,
+            timer: 0.0,
+            ignore_for: 0.0,
+            held_at: pb,
+            shouted: false,
+            hostile: false,
+            stuck_t: 0.0,
+            last_lead_at: pb,
+        };
+
+        sim.hour = hm(21, 15);
+        sim.blackout = true;
+        sim.weather_override = Some(Weather::Clear);
+        sim.fog_density = 0.0;
+        sim.player_at = pa;
+        sim.flashlight_on = false;
+        sim.squads = vec![make_patrol(8800)];
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.25);
+        let meter_off = sim.squads[0].meter;
+
+        sim.flashlight_on = true;
+        sim.squads = vec![make_patrol(8810)];
+        sim.tick(&city, &ground, &forces, &SimInput::default(), 0.25);
+        let meter_on = sim.squads[0].meter;
+        assert!(meter_on > meter_off, "outdoor night flashlight must increase detection meter: on={meter_on}, off={meter_off}");
+
+        // Toggle off works cleanly.
+        sim.tick(&city, &ground, &forces, &SimInput { toggle_flashlight: true, ..Default::default() }, 0.1);
+        assert!(!sim.flashlight_on);
+        assert_eq!(sim.flashlight_illumination_scale(), (0.0, 0.0));
     }
 }
