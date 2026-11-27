@@ -259,6 +259,7 @@ pub fn apply_scenario(
     clock.speed = 1.0;
     clock.blackout = sim.blackout;
     clock.fog = sim.fog_density;
+    clock.flashlight_on = sim.flashlight_on;
 }
 
 fn spawn_menu_btn<M: Component>(
@@ -832,6 +833,7 @@ fn load_world_and_player(
     clock.hour = play.sim.hour;
     clock.blackout = play.sim.blackout;
     clock.fog = play.sim.fog_density;
+    clock.flashlight_on = play.sim.flashlight_on;
     clock.speed = 1.0;
     play.paused = false;
     play.preview_barricade = false;

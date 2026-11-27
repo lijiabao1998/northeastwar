@@ -498,6 +498,7 @@ fn configure_combat_scene(
             clock.speed = 1.0;
             clock.blackout = sim.blackout;
             clock.fog = sim.fog_density;
+            clock.flashlight_on = sim.flashlight_on;
             map.open = false;
             (c, 1.15, tracers, Vec::new(), cursor, true)
         }
@@ -510,12 +511,13 @@ fn configure_combat_scene(
             sim.weather = Weather::RiverFog;
             sim.fog_density = 0.92;
             sim.player_at = c;
-            sim.player_facing = 2.0;
+            sim.player_facing = 1.05;
+            sim.flashlight_on = true;
             sim.player_anim = AnimState::Idle;
             sim.body.sheltered = true;
             sim.body.heated = false;
             sim.body.temp = 35.1;
-            sim.objective_zh = "21:15全城停电停暖 · 江雾掩护下躲避光纤FPV无人机".into();
+            sim.objective_zh = "21:15全城停电停暖 · 江雾中开启强光手电躲避光纤FPV".into();
 
             let b_fire = step(c.add(P2::new(2.2, 1.8)));
             let b_bag = step(c.add(P2::new(-2.4, 2.2)));
@@ -549,6 +551,7 @@ fn configure_combat_scene(
             clock.speed = 1.0;
             clock.blackout = sim.blackout;
             clock.fog = sim.fog_density;
+            clock.flashlight_on = sim.flashlight_on;
             map.open = false;
             (c, 0.85, Vec::new(), Vec::new(), None, false)
         }
@@ -648,6 +651,7 @@ fn configure_combat_scene(
             clock.speed = 1.0;
             clock.blackout = sim.blackout;
             clock.fog = sim.fog_density;
+            clock.flashlight_on = sim.flashlight_on;
             map.open = true;
             map.set_view(c, 2.0);
             map.redraw_now(sim, &heihe.city, forces, images);
@@ -823,6 +827,7 @@ fn run_menu(
         set_zoom(proj, 1.0);
         clock.blackout = false;
         clock.fog = 0.0;
+        clock.flashlight_on = false;
         match plan.index {
             0 => {
                 clock.hour = sim::survival::START_HOUR;
@@ -954,6 +959,7 @@ fn configure_interior_scene(
             clock.hour = sim.hour;
             clock.blackout = false;
             clock.fog = 0.0;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.55, Vec::new())
         }
         1 => {
@@ -1075,6 +1081,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = sim.fog_density;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.15, tracers)
         }
         2 => {
@@ -1120,6 +1127,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = sim.fog_density;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.55, Vec::new())
         }
         7 => {
@@ -1167,6 +1175,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = 0.0;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.55, Vec::new())
         }
         6 => {
@@ -1193,6 +1202,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = 0.0;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.0, Vec::new())
         }
         3 | 5 => {
@@ -1219,6 +1229,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = 0.0;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.0, Vec::new())
         }
         8..=13 => {
@@ -1267,6 +1278,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = 0.0;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, zoom, Vec::new())
         }
         _ => {
@@ -1306,6 +1318,7 @@ fn configure_interior_scene(
             clock.speed = 1.0;
             clock.blackout = true;
             clock.fog = 0.0;
+            clock.flashlight_on = sim.flashlight_on;
             (pat, 1.55, Vec::new())
         }
     }

@@ -41,6 +41,7 @@ pub struct Clock {
     pub fog: f32,
     /// Cloud over the sun: 1 in rain, 0 otherwise.
     pub overcast: f32,
+    pub flashlight_on: bool,
 }
 
 #[derive(Component)]
@@ -233,7 +234,7 @@ fn main() {
     )
     .insert_resource(Heihe { city, palette, ground })
     .insert_resource(graphics::Graphics::from_env())
-    .insert_resource(Clock { hour, speed: 1.0, running: interactive && arg("--hour").is_none(), blackout: false, fog: 0.0, overcast: 0.0 })
+    .insert_resource(Clock { hour, speed: 1.0, running: interactive && arg("--hour").is_none(), blackout: false, fog: 0.0, overcast: 0.0, flashlight_on: false })
     .insert_resource(ClearColor(Color::srgb(0.62, 0.70, 0.80)))
     .add_systems(Startup, (setup, sky::setup))
     .add_systems(Update, (zoom, follow, tick, sky::apply, sky::follow_zoom.after(zoom), hud, cut_away, season_town));
