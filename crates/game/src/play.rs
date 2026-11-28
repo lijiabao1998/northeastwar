@@ -17,6 +17,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 use sim::{
+    arsenal::PrimaryWeapon,
     figure::{build_figure, build_lancet_soup, build_vehicle_hull, build_vehicle_turret, pose, AnimState, FigureOpts, HeldItem, Role},
     geom::P2,
     interior::{build_curtain_soup, build_door_leaf_soup, DoorStyle, FLOOR_H},
@@ -79,13 +80,21 @@ pub struct AtlasKey {
 pub struct FigureAtlas {
     pub meshes: HashMap<AtlasKey, Handle<Mesh>>,
     pub bar_meshes: [Handle<Mesh>; 8],
+    pub bar_scenes: [Option<Handle<WorldAsset>>; 8],
+    pub bar_scene_adjust: [(f32, f32); 8],
     pub cache_mesh: Handle<Mesh>,
+    pub cache_scene: Option<Handle<WorldAsset>>,
     pub drop_mesh: Handle<Mesh>,
+    pub drop_scene: Option<Handle<WorldAsset>>,
     pub drone_mesh: Handle<Mesh>,
+    pub drone_scene: Option<Handle<WorldAsset>>,
     pub lancet_mesh: Handle<Mesh>,
+    pub lancet_scene: Option<Handle<WorldAsset>>,
     pub friendly_fpv_mesh: Handle<Mesh>,
     pub tank_hull_meshes: [Handle<Mesh>; 17],
     pub tank_turret_meshes: [Handle<Mesh>; 17],
+    pub tank_scenes: [Option<Handle<WorldAsset>>; 17],
+    pub tank_scene_adjust: [(f32, f32); 17],
     pub door_meshes: [Handle<Mesh>; 4],
     pub curtain_closed_mesh: Handle<Mesh>,
     pub curtain_open_mesh: Handle<Mesh>,
@@ -136,6 +145,9 @@ pub struct PedActor {
 
 #[derive(Component)]
 pub struct PooledActor;
+
+#[derive(Component)]
+pub struct PooledScene;
 
 #[derive(Component)]
 pub struct InteriorPart;
@@ -537,6 +549,13 @@ fn cache_poses(
     }
 }
 
+fn load_hq_scene(assets_dir: &std::path::Path, assets: &AssetServer, rel: &str) -> Option<Handle<WorldAsset>> {
+    assets_dir
+        .join(rel)
+        .is_file()
+        .then(|| assets.load(GltfAssetLabel::Scene(0).from_asset(rel.to_string())))
+}
+
 pub fn setup_play(
     mut commands: Commands,
     heihe: Res<Heihe>,
@@ -767,6 +786,11 @@ pub fn setup_play(
         ..default()
     });
 
+    let assets_dir = sim::data_dir()
+        .parent()
+        .map(|p| p.join("assets"))
+        .unwrap_or_else(|| std::path::PathBuf::from("assets"));
+
     let atlas = FigureAtlas {
         meshes: map,
         bar_meshes: [
@@ -779,13 +803,64 @@ pub fn setup_play(
             meshes.add(to_mesh(&build_barricade_soup(BarricadeKind::TarpDugout))),
             meshes.add(to_mesh(&build_barricade_soup(BarricadeKind::BarbedWire))),
         ],
+        bar_scenes: [
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_sandbag.glb"),
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_iron_gate.glb"),
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_fire_barrel.glb"),
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_dead_car.glb"),
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_concrete.glb"),
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_trench.glb"),
+            load_hq_scene(&assets_dir, &assets, "models/colab_hq/bar_tarp_dugout.glb"),
+            None, // bar_barbed_wire.glb renders as a tall billboard/gate frame; keep procedural hedgehogs + wire
+        ],
+        bar_scene_adjust: [
+            (0.0, 0.82),
+            (-std::f32::consts::FRAC_PI_2, 1.0),
+            (0.0, 1.0),
+            (-std::f32::consts::FRAC_PI_2, 1.0),
+            (-std::f32::consts::FRAC_PI_2, 1.0),
+            (-std::f32::consts::FRAC_PI_2, 0.78),
+            (-std::f32::consts::FRAC_PI_2, 0.88),
+            (-std::f32::consts::FRAC_PI_2, 0.55),
+        ],
         cache_mesh: meshes.add(to_mesh(&build_prop_soup([0.9, 0.72, 0.65], Rgb { r: 0.18, g: 0.56, b: 0.28 }))),
+        cache_scene: load_hq_scene(&assets_dir, &assets, "models/colab_hq/supply_cache.glb"),
         drop_mesh: meshes.add(to_mesh(&build_prop_soup([0.55, 0.25, 0.42], Rgb { r: 0.34, g: 0.36, b: 0.22 }))),
+        drop_scene: load_hq_scene(&assets_dir, &assets, "models/colab_hq/loot_drop.glb"),
         drone_mesh: meshes.add(to_mesh(&build_drone_soup())),
+        drone_scene: load_hq_scene(&assets_dir, &assets, "models/colab_hq/air_drone_quad.glb"),
         lancet_mesh: meshes.add(to_mesh(&build_lancet_soup())),
+        lancet_scene: load_hq_scene(&assets_dir, &assets, "models/colab_hq/air_lancet.glb"),
         friendly_fpv_mesh: meshes.add(to_mesh(&build_friendly_fpv_soup())),
         tank_hull_meshes: std::array::from_fn(|i| meshes.add(to_mesh(&build_vehicle_hull(VehicleKind::ALL[i])))),
         tank_turret_meshes: std::array::from_fn(|i| meshes.add(to_mesh(&build_vehicle_turret(VehicleKind::ALL[i])))),
+        tank_scenes: std::array::from_fn(|i| {
+            let rel = match VehicleKind::ALL[i] {
+                VehicleKind::T72B3 | VehicleKind::T80Bvm | VehicleKind::T90M | VehicleKind::T62M => Some("models/colab_hq/veh_t90m.glb"),
+                // veh_tos1a.glb has pale untextured grey albedo and oversized X-aligned block geometry; keep procedural hull/turret
+                VehicleKind::Tos1A | VehicleKind::Bmpt => None,
+                VehicleKind::Pgz09 | VehicleKind::Zbd04A => Some("models/colab_hq/veh_zbd04a.glb"),
+                VehicleKind::Bmp3 | VehicleKind::Bmd4M => Some("models/colab_hq/veh_bmp3.glb"),
+                VehicleKind::Btr82A => Some("models/colab_hq/veh_btr82a.glb"),
+                VehicleKind::TigrM | VehicleKind::Csk181 => Some("models/colab_hq/veh_mengshi.glb"),
+                VehicleKind::Ztz99A | VehicleKind::Ztz96B | VehicleKind::Ztq15 => Some("models/colab_hq/veh_ztz99a.glb"),
+                VehicleKind::Zbl08 => Some("models/colab_hq/veh_zbl08.glb"),
+            };
+            rel.and_then(|r| load_hq_scene(&assets_dir, &assets, r))
+        }),
+        tank_scene_adjust: std::array::from_fn(|i| match VehicleKind::ALL[i] {
+            VehicleKind::Ztz99A | VehicleKind::Ztz96B => (0.0, 0.85),
+            VehicleKind::Ztq15 => (0.0, 0.78),
+            VehicleKind::T90M | VehicleKind::T80Bvm | VehicleKind::T72B3 => (0.0, 0.88),
+            VehicleKind::T62M => (0.0, 0.82),
+            VehicleKind::Pgz09 | VehicleKind::Zbd04A => (0.0, 0.62),
+            VehicleKind::Bmp3 | VehicleKind::Bmd4M => (0.0, 0.78),
+            VehicleKind::Btr82A => (0.0, 0.76),
+            VehicleKind::Zbl08 => (0.0, 0.68),
+            VehicleKind::TigrM => (0.0, 0.78),
+            VehicleKind::Csk181 => (0.0, 0.82),
+            _ => (0.0, 1.0),
+        }),
         door_meshes: [
             meshes.add(to_mesh(&build_door_leaf_soup(DoorStyle::WoodFlat, 1.4))),
             meshes.add(to_mesh(&build_door_leaf_soup(DoorStyle::ShopGlass, 1.4))),
@@ -1204,13 +1279,14 @@ pub fn step_play(
     mut clock: ResMut<Clock>,
     mut player: Single<(&mut Player, &mut Transform, &mut Mesh3d)>,
     soot_q: Query<Entity, With<SootMark>>,
-    (menu, mut audio_q, mut audio_state, mut speed_q, mut map, scenario): (
+    (menu, mut audio_q, mut audio_state, mut speed_q, mut map, scenario, mut last_audio): (
         Res<MenuScreen>,
         ResMut<AudioQueue>,
         ResMut<AudioState>,
         ResMut<SpeedActionQueue>,
         Option<ResMut<crate::map_ui::TacticalMap>>,
         Option<Res<crate::menu_ui::StartScenario>>,
+        Local<(bool, Option<(&'static str, String)>)>,
     ),
 ) {
     if *menu != MenuScreen::Playing || !play.started {
@@ -1240,6 +1316,10 @@ pub fn step_play(
                 play.click_cooldown = 0.24;
             }
         }
+    }
+    if play.sim.flashlight_on != last_audio.0 {
+        last_audio.0 = play.sim.flashlight_on;
+        audio_q.flashlight_click = true;
     }
 
     if play.sim.dead && keys.just_pressed(KeyCode::Enter) {
@@ -1374,6 +1454,10 @@ pub fn step_play(
         if !map_open && keys.just_pressed(KeyCode::KeyL) {
             play.sim.flashlight_on = !play.sim.flashlight_on;
         }
+        if play.sim.flashlight_on != last_audio.0 {
+            last_audio.0 = play.sim.flashlight_on;
+            audio_q.flashlight_click = true;
+        }
         clock.flashlight_on = play.sim.flashlight_on;
         if wish.len() > 0.05 {
             let next_pan = eye_q.0.cam_pan.add(wish.norm().mul(28.0 * frame_dt));
@@ -1387,6 +1471,13 @@ pub fn step_play(
         }
         if let Some(dest) = map_militia_cmd.or_else(|| if allow_mouse && mouse.just_pressed(MouseButton::Right) { aim } else { None }) {
             play.sim.issue_militia_order(dest);
+        }
+        let cur_radio = play.sim.radio_feed.as_ref().map(|r| (r.code_en, r.text_zh.clone()));
+        if cur_radio != last_audio.1 {
+            if let Some((code, _)) = &cur_radio {
+                audio_q.radio_code = Some(*code);
+            }
+            last_audio.1 = cur_radio;
         }
         return;
     } else {
@@ -1501,6 +1592,9 @@ pub fn step_play(
     };
     let sub_dt = (sim_dt / steps as f32).min(0.25);
 
+    let prev_at = play.sim.inv.total_at_ammo();
+    let prev_grenades = play.sim.grenades.len();
+    let prev_smoke = play.sim.smoke_clouds.len();
     let mut fx = sim::survival::TickOutput::default();
     {
         let state = &mut *play;
@@ -1569,6 +1663,9 @@ pub fn step_play(
     if fx.sms_arrived {
         audio_q.sms = true;
     }
+    if fx.shout_stoy {
+        audio_q.shout_stoy = true;
+    }
     if fx.door_action {
         audio_q.door_action = true;
     }
@@ -1584,23 +1681,58 @@ pub fn step_play(
     if fx.slab_collapse {
         audio_q.slab_collapse = true;
     }
+    if play.sim.flashlight_on != last_audio.0 {
+        last_audio.0 = play.sim.flashlight_on;
+        audio_q.flashlight_click = true;
+    }
+    if play.sim.inv.total_at_ammo() < prev_at {
+        audio_q.rpg_launch = true;
+    }
+    if play.sim.smoke_clouds.len() > prev_smoke && play.sim.smoke_clouds.last().is_some_and(|s| !s.dark) {
+        audio_q.smoke_hiss = true;
+    }
+    if play.sim.grenades.len() > prev_grenades && play.sim.grenades.last().is_some_and(|g| !g.friendly) {
+        audio_q.shout_grenade = true;
+    }
+    let cur_radio = play.sim.radio_feed.as_ref().map(|r| (r.code_en, r.text_zh.clone()));
+    if cur_radio != last_audio.1 {
+        if let Some((code, _)) = &cur_radio {
+            audio_q.radio_code = Some(*code);
+        }
+        last_audio.1 = cur_radio;
+    }
     if !fx.tracers.is_empty() {
-        audio_q.gunfire = audio_q.gunfire.saturating_add(fx.tracers.len() as u32);
+        if input.fire_at.is_some() && play.sim.inv.has_rifle {
+            match play.sim.inv.active_primary {
+                PrimaryWeapon::Saiga12 => audio_q.shotgun = true,
+                PrimaryWeapon::Pkm => audio_q.mg_burst = true,
+                _ => audio_q.gunfire = audio_q.gunfire.saturating_add(fx.tracers.len() as u32),
+            }
+        } else {
+            audio_q.gunfire = audio_q.gunfire.saturating_add(fx.tracers.len() as u32);
+        }
     }
     for e in &fx.explosions {
-        audio_q.explosions.push(e.at.dist(play.sim.player_at));
+        if e.radius <= 8.2 && !fx.tank_cannon && play.sim.grenades.len() < prev_grenades {
+            audio_q.grenade_boom = true;
+        } else {
+            audio_q.explosions.push(e.at.dist(play.sim.player_at));
+        }
     }
 
     audio_state.sheltered = play.sim.body.sheltered;
     audio_state.fog = play.sim.fog_density;
+    audio_state.raining = play.sim.weather == Weather::Rain;
     if let Some(i_idx) = play.sim.active_interior {
         let intr = &play.sim.interiors[i_idx];
         let broken = intr.has_unboarded_broken_window();
         audio_state.indoor_broken = broken;
         audio_state.indoor_sealed = !broken && intr.open_doors_count() == 0;
+        audio_state.near_stove = (intr.stove_fuel_s > 0.0 && play.sim.player_floor == 0) || play.sim.near_fire();
     } else {
         audio_state.indoor_broken = false;
         audio_state.indoor_sealed = false;
+        audio_state.near_stove = play.sim.near_fire();
     }
     let d_recon = if play.sim.drone.active {
         Some(play.sim.drone.at.dist(play.sim.player_at))
@@ -1656,7 +1788,7 @@ fn vault_hop_y(vault_t: f32) -> f32 {
 fn upsert_pooled(
     commands: &mut Commands,
     map: &mut HashMap<u32, Entity>,
-    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PooledScene>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
     key: u32,
     mesh_h: Handle<Mesh>,
     mat_h: &Handle<StandardMaterial>,
@@ -1686,6 +1818,34 @@ fn upsert_pooled(
     map.insert(key, e);
 }
 
+fn upsert_pooled_scene(
+    commands: &mut Commands,
+    map: &mut HashMap<u32, Entity>,
+    scene_pool_q: &mut Query<(&mut Transform, &mut Visibility), (With<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    key: u32,
+    scene_h: Handle<WorldAsset>,
+    tf: Transform,
+    seen: &mut HashSet<u32>,
+) {
+    seen.insert(key);
+    if let Some(&e) = map.get(&key) {
+        if let Ok((mut t, mut v)) = scene_pool_q.get_mut(e) {
+            *t = tf;
+            *v = Visibility::Inherited;
+            return;
+        }
+    }
+    let e = commands
+        .spawn((
+            WorldAssetRoot(scene_h),
+            tf,
+            Visibility::Inherited,
+            PooledScene,
+        ))
+        .id();
+    map.insert(key, e);
+}
+
 fn prune_pool(commands: &mut Commands, map: &mut HashMap<u32, Entity>, seen: &HashSet<u32>) {
     map.retain(|k, e| {
         if seen.contains(k) {
@@ -1700,7 +1860,7 @@ fn prune_pool(commands: &mut Commands, map: &mut HashMap<u32, Entity>, seen: &Ha
 fn upsert_slot(
     commands: &mut Commands,
     slot: &mut Option<Entity>,
-    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    pool_q: &mut Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PooledScene>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
     mesh_h: Handle<Mesh>,
     mat_h: &Handle<StandardMaterial>,
     active_tf: Option<Transform>,
@@ -1733,6 +1893,37 @@ fn upsert_slot(
     }
 }
 
+fn upsert_scene_slot(
+    commands: &mut Commands,
+    slot: &mut Option<Entity>,
+    scene_pool_q: &mut Query<(&mut Transform, &mut Visibility), (With<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    scene_h: Handle<WorldAsset>,
+    active_tf: Option<Transform>,
+) {
+    if let Some(tf) = active_tf {
+        if let Some(e) = *slot {
+            if let Ok((mut t, mut v)) = scene_pool_q.get_mut(e) {
+                *t = tf;
+                *v = Visibility::Inherited;
+                return;
+            }
+        }
+        let e = commands
+            .spawn((
+                WorldAssetRoot(scene_h),
+                tf,
+                Visibility::Inherited,
+                PooledScene,
+            ))
+            .id();
+        *slot = Some(e);
+    } else if let Some(e) = *slot {
+        if let Ok((_, mut v)) = scene_pool_q.get_mut(e) {
+            *v = Visibility::Hidden;
+        }
+    }
+}
+
 fn barricade_mesh_idx(kind: BarricadeKind) -> usize {
     match kind {
         BarricadeKind::Sandbag => 0,
@@ -1759,11 +1950,12 @@ pub fn sync_actors(
     mut pools: ResMut<ActorPools>,
     mut interiors_vis: Option<ResMut<InteriorVisuals>>,
     mut peds: Query<(&PedActor, &mut Transform, &mut Visibility, &mut Mesh3d)>,
-    mut pool_q: Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
-    mut intr_vis_q: Query<&mut Visibility, (With<InteriorPart>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
-    (mut lights_q, mut spot_q, mut materials, mut last_beam_fog): (
-        Query<(&mut Transform, &mut PointLight, &mut Visibility, &IndoorLightKind), (Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<FlashlightSpot>)>,
-        Query<(&mut Transform, &mut SpotLight, &mut Visibility), (With<FlashlightSpot>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>)>,
+    mut pool_q: Query<(&mut Transform, &mut Mesh3d, &mut Visibility), (With<PooledActor>, Without<PooledScene>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    mut intr_vis_q: Query<&mut Visibility, (With<InteriorPart>, Without<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
+    (mut lights_q, mut spot_q, mut scene_pool_q, mut materials, mut last_beam_fog): (
+        Query<(&mut Transform, &mut PointLight, &mut Visibility, &IndoorLightKind), (Without<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<FlashlightSpot>)>,
+        Query<(&mut Transform, &mut SpotLight, &mut Visibility), (With<FlashlightSpot>, Without<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>)>,
+        Query<(&mut Transform, &mut Visibility), (With<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<InteriorPart>, Without<IndoorLightKind>, Without<FlashlightSpot>)>,
         ResMut<Assets<StandardMaterial>>,
         Local<Option<f32>>,
     ),
@@ -1927,7 +2119,7 @@ pub fn sync_actors(
                 }
             }
         }
-        let set_v = |q: &mut Query<&mut Visibility, (With<InteriorPart>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>, Without<FlashlightSpot>)>, e: Entity, show: bool| {
+        let set_v = |q: &mut Query<&mut Visibility, (With<InteriorPart>, Without<PooledScene>, Without<PooledActor>, Without<PedActor>, Without<IndoorLightKind>, Without<FlashlightSpot>)>, e: Entity, show: bool| {
             if let Ok(mut v) = q.get_mut(e) {
                 let target = if show { Visibility::Inherited } else { Visibility::Hidden };
                 if *v != target {
@@ -2176,7 +2368,11 @@ pub fn sync_actors(
     for c in &play.sim.caches {
         if !c.collected && play.sim.hour >= c.unlock_hour {
             let tf = Transform::from_xyz(c.at.x, 0.0, -c.at.y);
-            upsert_pooled(&mut commands, &mut pools.caches, &mut pool_q, c.id, atlas.cache_mesh.clone(), &mats.matte, tf, &mut seen);
+            if let Some(scene_h) = &atlas.cache_scene {
+                upsert_pooled_scene(&mut commands, &mut pools.caches, &mut scene_pool_q, c.id, scene_h.clone(), tf, &mut seen);
+            } else {
+                upsert_pooled(&mut commands, &mut pools.caches, &mut pool_q, c.id, atlas.cache_mesh.clone(), &mats.matte, tf, &mut seen);
+            }
         }
     }
     prune_pool(&mut commands, &mut pools.caches, &seen);
@@ -2185,7 +2381,11 @@ pub fn sync_actors(
     for (di, d) in play.sim.drops.iter().enumerate() {
         if !d.taken {
             let tf = Transform::from_xyz(d.at.x, 0.0, -d.at.y);
-            upsert_pooled(&mut commands, &mut pools.drops, &mut pool_q, di as u32, atlas.drop_mesh.clone(), &mats.matte, tf, &mut seen);
+            if let Some(scene_h) = &atlas.drop_scene {
+                upsert_pooled_scene(&mut commands, &mut pools.drops, &mut scene_pool_q, di as u32, scene_h.clone(), tf, &mut seen);
+            } else {
+                upsert_pooled(&mut commands, &mut pools.drops, &mut pool_q, di as u32, atlas.drop_mesh.clone(), &mats.matte, tf, &mut seen);
+            }
         }
     }
     prune_pool(&mut commands, &mut pools.drops, &seen);
@@ -2320,8 +2520,15 @@ pub fn sync_actors(
             tf = tf.with_rotation(Quat::from_euler(EulerRot::XYZ, 0.4, b.yaw + std::f32::consts::FRAC_PI_2 + 0.6, 1.1));
         }
         let idx = barricade_mesh_idx(b.kind);
+        let (yaw_fix, sc) = atlas.bar_scene_adjust[idx];
+        let scene_tf = tf * Transform::from_rotation(Quat::from_rotation_y(yaw_fix)).with_scale(Vec3::splat(sc));
         if bi < pools.barricades.len() && pools.barricades[bi].1 == b.kind {
-            if let Ok((mut t, _, mut v)) = pool_q.get_mut(pools.barricades[bi].0) {
+            if atlas.bar_scenes[idx].is_some() {
+                if let Ok((mut t, mut v)) = scene_pool_q.get_mut(pools.barricades[bi].0) {
+                    *t = scene_tf;
+                    *v = Visibility::Inherited;
+                }
+            } else if let Ok((mut t, _, mut v)) = pool_q.get_mut(pools.barricades[bi].0) {
                 *t = tf;
                 *v = Visibility::Inherited;
             }
@@ -2330,7 +2537,30 @@ pub fn sync_actors(
         if bi < pools.barricades.len() {
             commands.entity(pools.barricades[bi].0).despawn();
         }
-        let e = if b.kind == BarricadeKind::FireBarrel {
+        let e = if let Some(scene_h) = &atlas.bar_scenes[idx] {
+            if b.kind == BarricadeKind::FireBarrel {
+                commands.spawn((
+                    WorldAssetRoot(scene_h.clone()),
+                    scene_tf,
+                    Visibility::Inherited,
+                    PointLight {
+                        color: Color::srgb(1.0, 0.45, 0.12),
+                        intensity: 48_000.0,
+                        range: 13.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    PooledScene,
+                )).id()
+            } else {
+                commands.spawn((
+                    WorldAssetRoot(scene_h.clone()),
+                    scene_tf,
+                    Visibility::Inherited,
+                    PooledScene,
+                )).id()
+            }
+        } else if b.kind == BarricadeKind::FireBarrel {
             commands.spawn((
                 Mesh3d(atlas.bar_meshes[idx].clone()),
                 MeshMaterial3d(mats.matte.clone()),
@@ -2362,12 +2592,20 @@ pub fn sync_actors(
     let drone_tf = play.sim.drone.active.then(|| {
         Transform::from_xyz(play.sim.drone.at.x, play.sim.drone.altitude, -play.sim.drone.at.y)
     });
-    upsert_slot(&mut commands, &mut pools.drone, &mut pool_q, atlas.drone_mesh.clone(), &mats.matte, drone_tf);
+    if let Some(sh) = &atlas.drone_scene {
+        upsert_scene_slot(&mut commands, &mut pools.drone, &mut scene_pool_q, sh.clone(), drone_tf);
+    } else {
+        upsert_slot(&mut commands, &mut pools.drone, &mut pool_q, atlas.drone_mesh.clone(), &mats.matte, drone_tf);
+    }
 
     let fpv_tf = play.sim.fpv.as_ref().map(|fpv| {
         Transform::from_xyz(fpv.at.x, fpv.height, -fpv.at.y)
     });
-    upsert_slot(&mut commands, &mut pools.fpv, &mut pool_q, atlas.drone_mesh.clone(), &mats.matte, fpv_tf);
+    if let Some(sh) = &atlas.drone_scene {
+        upsert_scene_slot(&mut commands, &mut pools.fpv, &mut scene_pool_q, sh.clone(), fpv_tf);
+    } else {
+        upsert_slot(&mut commands, &mut pools.fpv, &mut pool_q, atlas.drone_mesh.clone(), &mats.matte, fpv_tf);
+    }
 
     let fibre_tf = play.sim.fpv.as_ref().filter(|f| f.fibre_optic).map(|fpv| {
         let a = Vec3::new(fpv.at.x, fpv.height, -fpv.at.y);
@@ -2388,12 +2626,20 @@ pub fn sync_actors(
         Transform::from_xyz(lan.at.x, lan.height, -lan.at.y)
             .with_rotation(Quat::from_rotation_y(yaw + std::f32::consts::FRAC_PI_2))
     });
-    upsert_slot(&mut commands, &mut pools.lancet, &mut pool_q, atlas.lancet_mesh.clone(), &mats.matte, lancet_tf);
+    if let Some(sh) = &atlas.lancet_scene {
+        upsert_scene_slot(&mut commands, &mut pools.lancet, &mut scene_pool_q, sh.clone(), lancet_tf.map(|t| t * Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI))));
+    } else {
+        upsert_slot(&mut commands, &mut pools.lancet, &mut pool_q, atlas.lancet_mesh.clone(), &mats.matte, lancet_tf);
+    }
 
     let friendly_fpv_tf = play.sim.friendly_fpv.as_ref().map(|ffpv| {
         Transform::from_xyz(ffpv.at.x, ffpv.height, -ffpv.at.y)
     });
-    upsert_slot(&mut commands, &mut pools.friendly_fpv, &mut pool_q, atlas.friendly_fpv_mesh.clone(), &mats.matte, friendly_fpv_tf);
+    if let Some(sh) = &atlas.drone_scene {
+        upsert_scene_slot(&mut commands, &mut pools.friendly_fpv, &mut scene_pool_q, sh.clone(), friendly_fpv_tf);
+    } else {
+        upsert_slot(&mut commands, &mut pools.friendly_fpv, &mut pool_q, atlas.friendly_fpv_mesh.clone(), &mats.matte, friendly_fpv_tf);
+    }
 
     let mut seen_hulls = HashSet::new();
     let mut seen_turrets = HashSet::new();
@@ -2402,12 +2648,17 @@ pub fn sync_actors(
         let mi = t.kind.index();
         let hull_tf = Transform::from_xyz(t.at.x, 0.0, -t.at.y)
             .with_rotation(Quat::from_rotation_y(t.hull_yaw + std::f32::consts::FRAC_PI_2));
-        upsert_pooled(&mut commands, &mut pools.tank_hulls, &mut pool_q, t.id, atlas.tank_hull_meshes[mi].clone(), &mats.matte, hull_tf, &mut seen_hulls);
-
         let turret_y = t.kind.turret_mount_y();
-        let turret_tf = Transform::from_xyz(t.at.x, turret_y, -t.at.y)
-            .with_rotation(Quat::from_rotation_y(t.turret_yaw + std::f32::consts::FRAC_PI_2));
-        upsert_pooled(&mut commands, &mut pools.tank_turrets, &mut pool_q, t.id, atlas.tank_turret_meshes[mi].clone(), &mats.matte, turret_tf, &mut seen_turrets);
+        if let Some(scene_h) = &atlas.tank_scenes[mi] {
+            let (tyaw, tsc) = atlas.tank_scene_adjust[mi];
+            let scene_tf = hull_tf * Transform::from_rotation(Quat::from_rotation_y(tyaw)).with_scale(Vec3::splat(tsc));
+            upsert_pooled_scene(&mut commands, &mut pools.tank_hulls, &mut scene_pool_q, t.id, scene_h.clone(), scene_tf, &mut seen_hulls);
+        } else {
+            upsert_pooled(&mut commands, &mut pools.tank_hulls, &mut pool_q, t.id, atlas.tank_hull_meshes[mi].clone(), &mats.matte, hull_tf, &mut seen_hulls);
+            let turret_tf = Transform::from_xyz(t.at.x, turret_y, -t.at.y)
+                .with_rotation(Quat::from_rotation_y(t.turret_yaw + std::f32::consts::FRAC_PI_2));
+            upsert_pooled(&mut commands, &mut pools.tank_turrets, &mut pool_q, t.id, atlas.tank_turret_meshes[mi].clone(), &mats.matte, turret_tf, &mut seen_turrets);
+        }
 
         if let Some((tgt, tf_floor)) = t.locked_target {
             if t.lock_timer > 0.05 {

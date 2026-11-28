@@ -1,0 +1,92 @@
+## Mode: hide (20 seeds x 8 days)
+
+| shelter | seed | result | when | mornings | taken / days held / suspicion | slept h | woke by | coal / wood / furniture / food / water left | room min / max °C | body min °C | illness max | ms per game hour |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BasementShelter | 0 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 42.9 | Enemy@day 19, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.3 / 16.4 | 36.8 | 10 | 692 |
+| BasementShelter | 1 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 46.0 | Enemy@day 19, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.3 / 16.4 | 36.8 | 10 | 685 |
+| BasementShelter | 2 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.3 | Enemy@day 19, Enemy@n0 2, Noise(cannon)@n0 1 | 0 / 0 / 8 / 2 / 0 | 12.1 / 16.4 | 36.8 | 10 | 685 |
+| BasementShelter | 3 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.3 | Enemy@day 19, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.3 / 16.4 | 36.8 | 10 | 671 |
+| BasementShelter | 4 | alive | 2月4日 10:00 | 2 | 1 / 16 / 40 | 9.2 | Enemy@day 2, Enemy@n0 2, Noise(cannon)@n0 1, Noise(shout)@day 1 | 4 / 0 / 8 / 3 / 3 | 5.5 / 15.8 | 36.4 | 34 | 161 |
+| BasementShelter | 5 | alive | 1月25日 07:00 | 8 | 1 / 5 / 0 | 16.8 | Enemy@day 8, Enemy@n0 1, Noise(cannon)@n0 1, Noise(shout)@day 1 | 4 / 0 / 8 / 3 / 1 | 8.4 / 15.8 | 36.4 | 16 | 418 |
+| BasementShelter | 6 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.2 | Enemy@day 16, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 11.8 / 16.4 | 36.8 | 10 | 698 |
+| BasementShelter | 7 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.7 | Noise(cannon)@n0 1, Rested@day 8, Rested@n0 1 | 1 / 0 / 8 / 2 / 0 | 11.6 / 16.4 | 36.8 | 10 | 696 |
+| BasementShelter | 8 | alive | 2月2日 10:00 | 2 | 1 / 14 / 40 | 11.1 | Enemy@day 4, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 3 | 5.8 / 15.8 | 36.4 | 30 | 223 |
+| BasementShelter | 9 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.7 | Noise(cannon)@n0 1, Rested@day 8, Rested@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.2 / 16.4 | 36.8 | 10 | 671 |
+| BasementShelter | 10 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 44.0 | Enemy@day 20, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 11.8 / 16.4 | 36.8 | 10 | 698 |
+| BasementShelter | 11 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 42.9 | Enemy@day 38, Enemy@n0 2, Noise(cannon)@n0 1 | 0 / 0 / 8 / 2 / 0 | 12.1 / 16.4 | 36.8 | 10 | 691 |
+| BasementShelter | 12 | alive | 1月27日 10:00 | 3 | 1 / 7 / 40 | 15.7 | Enemy@day 5, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 2 | 7.5 / 15.8 | 36.4 | 17 | 452 |
+| BasementShelter | 13 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.7 | Noise(cannon)@n0 1, Rested@day 8, Rested@n0 1 | 1 / 0 / 8 / 2 / 0 | 11.7 / 16.4 | 36.8 | 10 | 676 |
+| BasementShelter | 14 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.3 | Enemy@day 19, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.2 / 16.4 | 36.8 | 10 | 686 |
+| BasementShelter | 15 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.3 | Enemy@day 16, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.3 / 16.4 | 36.8 | 10 | 697 |
+| BasementShelter | 16 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.2 | Enemy@day 18, Enemy@n0 2, Noise(cannon)@n0 1 | 1 / 0 / 8 / 2 / 0 | 11.4 / 16.4 | 36.8 | 11 | 703 |
+| BasementShelter | 17 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.9 | Noise(cannon)@n0 1, Noise(shout)@day 1, Rested@day 8, Rested@n0 1 | 1 / 0 / 8 / 2 / 0 | 12.4 / 16.4 | 36.8 | 10 | 674 |
+| BasementShelter | 18 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 43.3 | Enemy@day 20, Enemy@n0 2, Noise(cannon)@n0 1, Noise(shout)@day 1 | 1 / 0 / 8 / 2 / 0 | 11.6 / 16.4 | 36.8 | 10 | 685 |
+| BasementShelter | 19 | alive | 2月2日 10:00 | 1 | 1 / 15 / 10 | 5.7 | Noise(cannon)@n0 1, Rested@n0 1 | 4 / 0 / 8 / 3 / 4 | 5.7 / 15.8 | 36.4 | 31 | 63 |
+| PlayerHome | 0 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 65 / 1 / 0 | -10.4 / 9.0 | 35.8 | 38 | 688 |
+| PlayerHome | 1 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 65 / 1 / 0 | -12.3 / 9.0 | 35.8 | 38 | 697 |
+| PlayerHome | 2 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 42.9 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(shout)@day 1, Rested@day 7, Rested@n0 1 | 0 / 0 / 64 / 1 / 0 | -14.5 / 9.0 | 35.9 | 38 | 728 |
+| PlayerHome | 3 | alive | 2月18日 10:00 | 3 | 1 / 29 / 10 | 15.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 79 / 2 / 0 | -17.6 / 9.0 | 36.4 | 71 | 131 |
+| PlayerHome | 4 | alive | 1月25日 07:00 | 8 | 1 / 2 / 0 | 35.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 6, Rested@n0 1 | 0 / 0 / 70 / 2 / 0 | -11.9 / 9.0 | 35.8 | 34 | 327 |
+| PlayerHome | 5 | alive | 1月30日 10:00 | 2 | 1 / 11 / 40 | 10.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 82 / 2 / 1 | -15.3 / 9.0 | 36.4 | 31 | 250 |
+| PlayerHome | 6 | alive | 2月2日 10:00 | 3 | 1 / 13 / 40 | 15.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 79 / 2 / 0 | -20.9 / 9.0 | 36.4 | 39 | 273 |
+| PlayerHome | 7 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 65 / 1 / 0 | -14.3 / 9.0 | 35.7 | 39 | 729 |
+| PlayerHome | 8 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 46.4 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(shout)@day 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 64 / 1 / 0 | -15.5 / 9.0 | 35.6 | 39 | 738 |
+| PlayerHome | 9 | alive | 1月25日 07:00 | 8 | 1 / 2 / 40 | 33.2 | Enemy@day 19, Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 68 / 2 / 0 | -8.8 / 9.0 | 36.4 | 30 | 540 |
+| PlayerHome | 10 | alive | 1月25日 07:00 | 8 | 1 / 2 / 40 | 33.7 | Enemy@day 22, Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 69 / 2 / 0 | -11.8 / 9.0 | 36.3 | 30 | 538 |
+| PlayerHome | 11 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.4 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(shout)@day 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 65 / 1 / 0 | -9.7 / 9.0 | 36.1 | 37 | 727 |
+| PlayerHome | 12 | alive | 3月21日 10:00 | 1 | 1 / 62 / 40 | 6.4 | Noise(cannon+blast+shots)@n0 1, Noise(glass+cannon+blast+shots)@n0 1, Rested@day 1 | 1 / 0 / 85 / 2 / 2 | -11.8 / 7.7 | 36.4 | 90 | 14 |
+| PlayerHome | 13 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 65 / 1 / 0 | -13.0 / 9.0 | 35.8 | 38 | 726 |
+| PlayerHome | 14 | alive | 1月25日 07:00 | 8 | 1 / 2 / 10 | 37.1 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(glass+cannon+blast+shots)@n0 1, Rested@day 7 | 0 / 0 / 70 / 2 / 0 | -15.2 / 9.0 | 35.9 | 33 | 285 |
+| PlayerHome | 15 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 40.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 7, Rested@n0 1 | 0 / 0 / 65 / 1 / 0 | -16.8 / 9.0 | 35.4 | 40 | 733 |
+| PlayerHome | 16 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 46.1 | Enemy@n0 1, Noise(blast)@n0 1, Noise(cannon+blast+shots)@n0 2, Noise(glass+cannon+blast+shots)@n0 1, Noise(shots)@n0 1, Rested@day 9 | 0 / 0 / 65 / 1 / 0 | -13.0 / 9.0 | 35.7 | 40 | 741 |
+| PlayerHome | 17 | alive | 4月3日 10:00 | 3 | 1 / 73 / 40 | 15.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 79 / 2 / 0 | -9.7 / 9.0 | 36.4 | 90 | 55 |
+| PlayerHome | 18 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 45.3 | Enemy@n0 1, Noise(blast)@n0 1, Noise(cannon+blast+shots)@n0 4, Noise(glass+cannon+blast+shots)@n0 1, Noise(shots)@n0 1, Rested@day 8, Rested@n0 1 | 0 / 0 / 70 / 1 / 0 | -0.1 / 14.0 | 36.8 | 23 | 723 |
+| PlayerHome | 19 | alive | 1月25日 07:00 | 8 | 0 / 0 / 0 | 46.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(glass+cannon+blast+shots)@n0 1, Rested@day 9 | 0 / 0 / 69 / 1 / 0 | -5.2 / 14.0 | 36.8 | 23 | 719 |
+
+
+## Mode: keep (20 seeds x 8 days)
+
+| shelter | seed | result | when | mornings | taken / days held / suspicion | slept h | woke by | coal / wood / furniture / food / water left | room min / max °C | body min °C | illness max | ms per game hour |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BasementShelter | 0 | alive | 2月8日 10:00 | 3 | 1 / 19 / 40 | 17.2 | Enemy@day 6, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 2 | 5.3 / 15.8 | 36.4 | 41 | 190 |
+| BasementShelter | 1 | died: They found the gun on you and shot you where you stood. | 1月20日 12:12 | 3 | 0 / 0 / 30 | 15.8 | Enemy@day 5, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 2 | 13.6 / 15.8 | 36.8 | 4 | 1433 |
+| BasementShelter | 2 | alive | 1月25日 07:00 | 8 | 1 / 5 / 40 | 17.6 | Enemy@day 1, Enemy@n0 2, Noise(cannon)@n0 1, Rested@day 2 | 4 / 0 / 8 / 3 / 1 | 8.1 / 15.8 | 36.4 | 19 | 141 |
+| BasementShelter | 3 | alive | 2月19日 10:00 | 3 | 1 / 30 / 15 | 17.2 | Enemy@day 6, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 2 | 5.0 / 15.8 | 36.4 | 63 | 126 |
+| BasementShelter | 4 | alive | 2月4日 10:00 | 2 | 1 / 16 / 40 | 9.2 | Enemy@day 2, Enemy@n0 2, Noise(cannon)@n0 1, Noise(shout)@day 1 | 4 / 0 / 8 / 3 / 3 | 5.5 / 15.8 | 36.4 | 34 | 159 |
+| BasementShelter | 5 | died: They found the gun on you and shot you where you stood. | 1月19日 11:59 | 2 | 0 / 0 / 30 | 10.1 | Enemy@day 3, Enemy@n0 1, Noise(cannon)@n0 1, Noise(shout)@day 1 | 4 / 0 / 8 / 3 / 3 | 14.6 / 15.8 | 36.8 | 2 | 1610 |
+| BasementShelter | 6 | alive | 1月25日 07:00 | 8 | 1 / 2 / 40 | 36.0 | Enemy@day 4, Enemy@n0 2, Noise(cannon)@n0 1, Rested@day 5 | 2 / 0 / 8 / 3 / 0 | 9.5 / 16.3 | 36.4 | 15 | 509 |
+| BasementShelter | 7 | alive | 4月4日 10:00 | 2 | 1 / 75 / 15 | 10.7 | Noise(cannon)@n0 1, Rested@day 1, Rested@n0 1 | 4 / 0 / 8 / 3 / 3 | 5.0 / 15.8 | 36.4 | 90 | 35 |
+| BasementShelter | 8 | alive | 2月2日 10:00 | 2 | 1 / 14 / 40 | 11.2 | Enemy@day 4, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 3 | 5.8 / 15.8 | 36.4 | 30 | 217 |
+| BasementShelter | 9 | alive | 1月25日 07:00 | 8 | 1 / 2 / 40 | 35.7 | Noise(cannon)@n0 1, Rested@day 6, Rested@n0 1 | 3 / 0 / 8 / 3 / 0 | 9.6 / 16.3 | 36.4 | 14 | 591 |
+| BasementShelter | 10 | alive | 3月1日 10:00 | 2 | 1 / 41 / 15 | 10.2 | -@day 1, Enemy@day 4, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 3 | 5.0 / 15.8 | 36.4 | 84 | 79 |
+| BasementShelter | 11 | died: They found the gun on you and shot you where you stood. | 1月18日 10:43 | 1 | 0 / 0 / 30 | 4.6 | Enemy@day 1, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 4 | 15.6 / 15.8 | 36.8 | 1 | 877 |
+| BasementShelter | 12 | alive | 1月27日 10:00 | 3 | 1 / 7 / 40 | 15.7 | Enemy@day 5, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 2 | 7.5 / 15.8 | 36.4 | 17 | 449 |
+| BasementShelter | 13 | died: They took you, and you never came out of the place they held you. | 1月19日 09:38 | 2 | 1 / 0 / 30 | 10.7 | Noise(cannon)@n0 1, Rested@day 1, Rested@n0 1 | 4 / 0 / 8 / 3 / 3 | 14.7 / 15.8 | 36.8 | 2 | 1627 |
+| BasementShelter | 14 | alive | 1月25日 07:00 | 8 | 1 / 3 / 40 | 31.2 | Enemy@day 6, Enemy@n0 2, Noise(cannon)@n0 1, Rested@day 2 | 3 / 0 / 8 / 3 / 0 | 8.9 / 16.3 | 36.4 | 16 | 606 |
+| BasementShelter | 15 | alive | 1月25日 07:00 | 8 | 1 / 3 / 40 | 29.2 | Enemy@day 4, Enemy@n0 2, Noise(cannon)@n0 1, Rested@day 2 | 3 / 0 / 8 / 3 / 0 | 8.9 / 16.3 | 36.4 | 16 | 625 |
+| BasementShelter | 16 | alive | 2月8日 10:00 | 3 | 1 / 19 / 40 | 18.5 | Enemy@day 10, Enemy@n0 2, Noise(cannon)@n0 1 | 4 / 0 / 8 / 3 / 1 | 5.3 / 15.8 | 36.4 | 41 | 207 |
+| BasementShelter | 17 | alive | 4月15日 10:00 | 3 | 1 / 85 / 15 | 15.9 | Noise(cannon)@n0 1, Noise(shout)@day 1, Rested@day 2, Rested@n0 1 | 4 / 0 / 8 / 3 / 2 | 5.0 / 15.8 | 36.4 | 90 | 49 |
+| BasementShelter | 18 | died: They found the gun on you and shot you where you stood. | 1月19日 08:25 | 2 | 0 / 0 / 30 | 10.6 | Enemy@day 4, Enemy@n0 2, Noise(cannon)@n0 1, Noise(shout)@day 1 | 4 / 0 / 8 / 3 / 3 | 14.7 / 15.8 | 36.8 | 2 | 1624 |
+| BasementShelter | 19 | died: They found the gun on you and shot you where you stood. | 1月18日 13:36 | 1 | 0 / 0 / 30 | 5.7 | Noise(cannon)@n0 1, Rested@n0 1 | 4 / 0 / 8 / 3 / 4 | 15.5 / 15.8 | 36.8 | 1 | 1109 |
+| PlayerHome | 0 | alive | 5月7日 10:00 | 1 | 1 / 109 / 40 | 5.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@n0 1 | 0 / 0 / 85 / 2 / 2 | 7.4 / 11.3 | 36.4 | 90 | 12 |
+| PlayerHome | 1 | alive | 2月16日 10:00 | 3 | 1 / 27 / 40 | 15.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 79 / 2 / 0 | -16.7 / 9.0 | 36.4 | 67 | 140 |
+| PlayerHome | 2 | alive | 4月3日 10:00 | 3 | 1 / 73 / 40 | 17.9 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(shout)@day 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 78 / 2 / 0 | 0.4 / 9.0 | 36.4 | 90 | 59 |
+| PlayerHome | 3 | died: They took you, and you never came out of the place they held you. | 1月20日 09:10 | 3 | 1 / 0 / 30 | 15.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 79 / 2 / 0 | 6.1 / 9.0 | 36.5 | 13 | 1521 |
+| PlayerHome | 4 | alive | 3月8日 10:00 | 6 | 2 / 48 / 50 | 11.0 | Enemy@day 5, Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@n0 1 | 0 / 0 / 82 / 2 / 0 | -13.2 / 9.0 | 36.3 | 90 | 30 |
+| PlayerHome | 5 | alive | 4月14日 10:00 | 2 | 1 / 85 / 15 | 10.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 82 / 2 / 1 | 4.4 / 9.0 | 36.4 | 90 | 37 |
+| PlayerHome | 6 | alive | 3月25日 10:00 | 3 | 1 / 64 / 40 | 15.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 79 / 2 / 0 | -1.5 / 9.0 | 36.4 | 90 | 64 |
+| PlayerHome | 7 | alive | 2月2日 10:00 | 1 | 1 / 15 / 40 | 5.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@n0 1 | 0 / 0 / 84 / 2 / 2 | -20.9 / 9.0 | 36.4 | 33 | 79 |
+| PlayerHome | 8 | alive | 2月16日 10:00 | 7 | 2 / 26 / 50 | 22.3 | Enemy@day 5, Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(shout)@day 1, Rested@day 2, Rested@n0 1 | 0 / 0 / 75 / 2 / 0 | -22.9 / 9.0 | 36.3 | 70 | 139 |
+| PlayerHome | 9 | alive | 1月25日 07:00 | 8 | 2 / 4 / 50 | 22.0 | Enemy@day 11, Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 75 / 2 / 0 | -8.8 / 9.0 | 36.4 | 26 | 450 |
+| PlayerHome | 10 | alive | 1月28日 10:00 | 2 | 1 / 9 / 15 | 10.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 82 / 2 / 1 | -24.0 / 9.0 | 36.4 | 27 | 256 |
+| PlayerHome | 11 | alive | 3月22日 10:00 | 2 | 1 / 62 / 40 | 10.4 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(shout)@day 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 81 / 2 / 1 | -9.7 / 9.0 | 36.4 | 90 | 45 |
+| PlayerHome | 12 | alive | 2月5日 10:00 | 4 | 2 / 17 / 50 | 11.4 | Noise(cannon+blast+shots)@n0 1, Noise(glass+cannon+blast+shots)@n0 1, Rested@day 2 | 0 / 0 / 82 / 2 / 0 | -19.8 / 9.0 | 36.3 | 43 | 57 |
+| PlayerHome | 13 | alive | 4月25日 10:00 | 2 | 1 / 96 / 15 | 10.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 82 / 2 / 1 | -9.7 / 12.6 | 36.4 | 90 | 24 |
+| PlayerHome | 14 | died: They took you, and you never came out of the place they held you. | 1月18日 12:37 | 1 | 1 / 0 / 30 | 7.1 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(glass+cannon+blast+shots)@n0 1, Rested@day 1 | 0 / 0 / 85 / 2 / 2 | -9.4 / 9.0 | 36.6 | 4 | 1081 |
+| PlayerHome | 15 | alive | 1月29日 10:00 | 1 | 1 / 11 / 40 | 5.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@n0 1 | 0 / 0 / 85 / 2 / 2 | -19.0 / 8.9 | 36.4 | 24 | 39 |
+| PlayerHome | 16 | alive | 1月27日 10:00 | 2 | 1 / 8 / 40 | 11.1 | Enemy@n0 1, Noise(blast)@n0 1, Noise(cannon+blast+shots)@n0 2, Noise(glass+cannon+blast+shots)@n0 1, Noise(shots)@n0 1, Rested@day 2 | 0 / 0 / 82 / 2 / 1 | -18.8 / 9.0 | 36.2 | 27 | 232 |
+| PlayerHome | 17 | alive | 1月30日 10:00 | 7 | 2 / 9 / 20 | 21.9 | -@day 1, Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Rested@day 3, Rested@n0 1 | 0 / 0 / 76 / 2 / 0 | -11.4 / 9.0 | 36.3 | 35 | 216 |
+| PlayerHome | 18 | alive | 1月25日 07:00 | 8 | 1 / 3 / 40 | 27.4 | Enemy@day 16, Enemy@n0 1, Noise(blast)@n0 1, Noise(cannon+blast+shots)@n0 4, Noise(glass+cannon+blast+shots)@n0 1, Noise(shots)@n0 1, Rested@day 1, Rested@n0 1 | 0 / 0 / 75 / 2 / 0 | -8.5 / 14.0 | 36.4 | 19 | 297 |
+| PlayerHome | 19 | alive | 1月25日 07:00 | 8 | 1 / 2 / 15 | 36.2 | Enemy@n0 1, Noise(cannon+blast+shots)@n0 1, Noise(glass+cannon+blast+shots)@n0 1, Rested@day 7 | 0 / 0 / 72 / 2 / 0 | -7.5 / 14.0 | 36.4 | 20 | 388 |
+
+
