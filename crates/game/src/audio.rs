@@ -129,17 +129,40 @@ fn audio_dir() -> PathBuf {
 #[derive(Resource)]
 struct AudioBank {
     wind: Handle<PcmSound>,
+    rain: Handle<PcmSound>,
+    stove_crackle: Handle<PcmSound>,
     crunch: Handle<PcmSound>,
     drone: Handle<PcmSound>,
     whistle: Handle<PcmSound>,
     boom: Handle<PcmSound>,
+    grenade_boom: Handle<PcmSound>,
+    tank_cannon: Handle<PcmSound>,
+    rifle_shot: Handle<PcmSound>,
+    mg_burst: Handle<PcmSound>,
+    shotgun_blast: Handle<PcmSound>,
+    rpg_launch: Handle<PcmSound>,
+    smoke_hiss: Handle<PcmSound>,
+    flashlight_click: Handle<PcmSound>,
+    door_wood: Handle<PcmSound>,
+    door_thud: Handle<PcmSound>,
+    glass_break: Handle<PcmSound>,
+    slab_collapse: Handle<PcmSound>,
     phone: Handle<PcmSound>,
+    voice_ru_stoy: Handle<PcmSound>,
+    voice_ru_grenade: Handle<PcmSound>,
+    voice_radio_orders: Handle<PcmSound>,
+    voice_radio_mandown: Handle<PcmSound>,
+    voice_radio_cleared: Handle<PcmSound>,
+    voice_radio_rescued: Handle<PcmSound>,
+    voice_radio_contact: Handle<PcmSound>,
 }
 
 #[derive(Resource, Default)]
 pub struct AudioState {
     pub sheltered: bool,
     pub fog: f32,
+    pub raining: bool,
+    pub near_stove: bool,
     pub drone_dist: Option<f32>,
     pub muted: bool,
     pub menu_open: bool,
@@ -153,16 +176,31 @@ pub struct AudioQueue {
     pub whistle: bool,
     pub explosions: Vec<f32>,
     pub gunfire: u32,
+    pub shotgun: bool,
+    pub mg_burst: bool,
+    pub rpg_launch: bool,
+    pub grenade_boom: bool,
+    pub smoke_hiss: bool,
+    pub flashlight_click: bool,
     pub sms: bool,
     pub door_action: bool,
     pub door_thud: bool,
     pub glass_break: bool,
     pub tank_cannon: bool,
     pub slab_collapse: bool,
+    pub shout_stoy: bool,
+    pub shout_grenade: bool,
+    pub radio_code: Option<&'static str>,
 }
 
 #[derive(Component)]
 struct WindLoop;
+
+#[derive(Component)]
+struct RainLoop;
+
+#[derive(Component)]
+struct StoveLoop;
 
 #[derive(Component)]
 struct DroneLoop;
@@ -197,17 +235,48 @@ fn setup_audio(mut commands: Commands, mut sounds: ResMut<Assets<PcmSound>>) {
 
     let bank = AudioBank {
         wind: load("wind.wav"),
+        rain: load("rain.wav"),
+        stove_crackle: load("stove_crackle.wav"),
         crunch: load("crunch.wav"),
         drone: load("drone.wav"),
         whistle: load("whistle.wav"),
         boom: load("boom.wav"),
+        grenade_boom: load("grenade_boom.wav"),
+        tank_cannon: load("tank_cannon.wav"),
+        rifle_shot: load("rifle_shot.wav"),
+        mg_burst: load("mg_burst.wav"),
+        shotgun_blast: load("shotgun_blast.wav"),
+        rpg_launch: load("rpg_launch.wav"),
+        smoke_hiss: load("smoke_hiss.wav"),
+        flashlight_click: load("flashlight_click.wav"),
+        door_wood: load("door_wood.wav"),
+        door_thud: load("door_thud.wav"),
+        glass_break: load("glass_break.wav"),
+        slab_collapse: load("slab_collapse.wav"),
         phone: load("phone.wav"),
+        voice_ru_stoy: load("voice_ru_stoy.wav"),
+        voice_ru_grenade: load("voice_ru_grenade.wav"),
+        voice_radio_orders: load("voice_radio_orders.wav"),
+        voice_radio_mandown: load("voice_radio_mandown.wav"),
+        voice_radio_cleared: load("voice_radio_cleared.wav"),
+        voice_radio_rescued: load("voice_radio_rescued.wav"),
+        voice_radio_contact: load("voice_radio_contact.wav"),
     };
 
     commands.spawn((
         AudioPlayer(bank.wind.clone()),
         PlaybackSettings::LOOP.with_volume(Volume::Linear(0.22)),
         WindLoop,
+    ));
+    commands.spawn((
+        AudioPlayer(bank.rain.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+        RainLoop,
+    ));
+    commands.spawn((
+        AudioPlayer(bank.stove_crackle.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+        StoveLoop,
     ));
     commands.spawn((
         AudioPlayer(bank.drone.clone()),
@@ -220,10 +289,12 @@ fn setup_audio(mut commands: Commands, mut sounds: ResMut<Assets<PcmSound>>) {
 
 fn drive_loops(
     state: Res<AudioState>,
-    mut wind: Query<&mut AudioSink, (With<WindLoop>, Without<DroneLoop>)>,
-    mut drone: Query<&mut AudioSink, (With<DroneLoop>, Without<WindLoop>)>,
+    mut wind: Query<&mut AudioSink, (With<WindLoop>, Without<DroneLoop>, Without<RainLoop>, Without<StoveLoop>)>,
+    mut rain: Query<&mut AudioSink, (With<RainLoop>, Without<WindLoop>, Without<DroneLoop>, Without<StoveLoop>)>,
+    mut stove: Query<&mut AudioSink, (With<StoveLoop>, Without<WindLoop>, Without<RainLoop>, Without<DroneLoop>)>,
+    mut drone: Query<&mut AudioSink, (With<DroneLoop>, Without<WindLoop>, Without<RainLoop>, Without<StoveLoop>)>,
 ) {
-    let target_wind = if state.muted {
+    let target_wind = if state.muted || state.raining {
         0.0
     } else if state.menu_open {
         0.10
@@ -240,6 +311,28 @@ fn drive_loops(
         sink.set_volume(Volume::Linear(target_wind));
     }
 
+    let target_rain = if state.muted || state.menu_open || !state.raining {
+        0.0
+    } else if state.indoor_sealed {
+        0.06
+    } else if state.sheltered {
+        0.14
+    } else {
+        0.26
+    };
+    for mut sink in &mut rain {
+        sink.set_volume(Volume::Linear(target_rain));
+    }
+
+    let target_stove = if state.muted || state.menu_open || !state.near_stove {
+        0.0
+    } else {
+        0.22
+    };
+    for mut sink in &mut stove {
+        sink.set_volume(Volume::Linear(target_stove));
+    }
+
     let target_drone = if state.muted || state.menu_open {
         0.0
     } else {
@@ -253,6 +346,16 @@ fn drive_loops(
     }
 }
 
+fn play_sfx(commands: &mut Commands, clip: &Handle<PcmSound>, vol: f32, speed: f32) {
+    commands.spawn((
+        AudioPlayer(clip.clone()),
+        PlaybackSettings::DESPAWN
+            .with_volume(Volume::Linear(vol))
+            .with_speed(speed),
+    ));
+}
+
+#[allow(clippy::too_many_arguments)]
 fn flush_queue(
     mut commands: Commands,
     mut queue: ResMut<AudioQueue>,
@@ -261,18 +364,29 @@ fn flush_queue(
     time: Res<Time>,
     mut last_step: Local<f32>,
     mut last_shot: Local<f32>,
+    mut last_voice: Local<f32>,
+    mut last_stoy: Local<f32>,
 ) {
     let clear_q = |q: &mut AudioQueue| {
         q.footstep = None;
         q.whistle = false;
         q.explosions.clear();
         q.gunfire = 0;
+        q.shotgun = false;
+        q.mg_burst = false;
+        q.rpg_launch = false;
+        q.grenade_boom = false;
+        q.smoke_hiss = false;
+        q.flashlight_click = false;
         q.sms = false;
         q.door_action = false;
         q.door_thud = false;
         q.glass_break = false;
         q.tank_cannon = false;
         q.slab_collapse = false;
+        q.shout_stoy = false;
+        q.shout_grenade = false;
+        q.radio_code = None;
     };
     let Some(bank) = bank else {
         clear_q(&mut queue);
@@ -290,106 +404,125 @@ fn flush_queue(
         if now - *last_step >= min_gap {
             *last_step = now;
             let vol = if sprinting { 0.28 } else { 0.17 };
-            let speed = if sprinting { 1.15 } else { 0.96 };
-            commands.spawn((
-                AudioPlayer(bank.crunch.clone()),
-                PlaybackSettings::DESPAWN
-                    .with_volume(Volume::Linear(vol))
-                    .with_speed(speed),
-            ));
+            let speed = if sprinting { 1.14 } else { 0.96 };
+            play_sfx(&mut commands, &bank.crunch, vol, speed);
         }
     }
 
     if queue.whistle {
         queue.whistle = false;
-        commands.spawn((
-            AudioPlayer(bank.whistle.clone()),
-            PlaybackSettings::DESPAWN.with_volume(Volume::Linear(0.45)),
-        ));
+        play_sfx(&mut commands, &bank.whistle, 0.46, 1.0);
+    }
+
+    if queue.grenade_boom {
+        queue.grenade_boom = false;
+        play_sfx(&mut commands, &bank.grenade_boom, 0.72, 1.0);
     }
 
     for dist in queue.explosions.drain(..) {
         let vol = (1.0 - dist / 180.0).clamp(0.14, 0.85);
-        commands.spawn((
-            AudioPlayer(bank.boom.clone()),
-            PlaybackSettings::DESPAWN.with_volume(Volume::Linear(vol)),
-        ));
+        play_sfx(&mut commands, &bank.boom, vol, 1.0);
     }
 
-    if queue.gunfire > 0 {
+    if queue.shotgun {
+        queue.shotgun = false;
+        queue.gunfire = 0;
+        if now - *last_shot >= 0.14 {
+            *last_shot = now;
+            play_sfx(&mut commands, &bank.shotgun_blast, 0.56, 1.0);
+        }
+    } else if queue.mg_burst {
+        queue.mg_burst = false;
+        queue.gunfire = 0;
+        if now - *last_shot >= 0.18 {
+            *last_shot = now;
+            play_sfx(&mut commands, &bank.mg_burst, 0.46, 1.0);
+        }
+    } else if queue.gunfire > 0 {
+        let multi = queue.gunfire >= 3;
         queue.gunfire = 0;
         if now - *last_shot >= 0.09 {
             *last_shot = now;
-            commands.spawn((
-                AudioPlayer(bank.boom.clone()),
-                PlaybackSettings::DESPAWN
-                    .with_volume(Volume::Linear(0.18))
-                    .with_speed(2.4),
-            ));
+            if multi {
+                play_sfx(&mut commands, &bank.mg_burst, 0.42, 1.05);
+            } else {
+                play_sfx(&mut commands, &bank.rifle_shot, 0.42, 1.0);
+            }
         }
+    }
+
+    if queue.rpg_launch {
+        queue.rpg_launch = false;
+        play_sfx(&mut commands, &bank.rpg_launch, 0.65, 1.0);
+    }
+
+    if queue.smoke_hiss {
+        queue.smoke_hiss = false;
+        play_sfx(&mut commands, &bank.smoke_hiss, 0.48, 1.0);
+    }
+
+    if queue.flashlight_click {
+        queue.flashlight_click = false;
+        play_sfx(&mut commands, &bank.flashlight_click, 0.42, 1.0);
     }
 
     if queue.sms {
         queue.sms = false;
-        commands.spawn((
-            AudioPlayer(bank.phone.clone()),
-            PlaybackSettings::DESPAWN.with_volume(Volume::Linear(0.50)),
-        ));
+        play_sfx(&mut commands, &bank.phone, 0.50, 1.0);
     }
 
     if queue.door_action {
         queue.door_action = false;
-        commands.spawn((
-            AudioPlayer(bank.crunch.clone()),
-            PlaybackSettings::DESPAWN
-                .with_volume(Volume::Linear(0.22))
-                .with_speed(0.75),
-        ));
+        play_sfx(&mut commands, &bank.door_wood, 0.46, 1.0);
     }
 
     if queue.door_thud {
         queue.door_thud = false;
-        commands.spawn((
-            AudioPlayer(bank.boom.clone()),
-            PlaybackSettings::DESPAWN
-                .with_volume(Volume::Linear(0.36))
-                .with_speed(0.70),
-        ));
+        play_sfx(&mut commands, &bank.door_thud, 0.55, 1.0);
     }
 
     if queue.glass_break {
         queue.glass_break = false;
-        commands.spawn((
-            AudioPlayer(bank.crunch.clone()),
-            PlaybackSettings::DESPAWN
-                .with_volume(Volume::Linear(0.46))
-                .with_speed(2.25),
-        ));
+        play_sfx(&mut commands, &bank.glass_break, 0.54, 1.0);
     }
 
     if queue.tank_cannon {
         queue.tank_cannon = false;
-        commands.spawn((
-            AudioPlayer(bank.boom.clone()),
-            PlaybackSettings::DESPAWN
-                .with_volume(Volume::Linear(0.92))
-                .with_speed(0.58),
-        ));
+        play_sfx(&mut commands, &bank.tank_cannon, 0.88, 1.0);
     }
 
     if queue.slab_collapse {
         queue.slab_collapse = false;
-        commands.spawn((
-            AudioPlayer(bank.boom.clone()),
-            PlaybackSettings::DESPAWN
-                .with_volume(Volume::Linear(0.75))
-                .with_speed(0.45),
-        ));
-        commands.spawn((
-            AudioPlayer(bank.crunch.clone()),
-            PlaybackSettings::DESPAWN
-                .with_volume(Volume::Linear(0.60))
-                .with_speed(0.65),
-        ));
+        play_sfx(&mut commands, &bank.slab_collapse, 0.78, 1.0);
+    }
+
+    if queue.shout_stoy {
+        queue.shout_stoy = false;
+        if now - *last_stoy >= 3.5 {
+            *last_stoy = now;
+            play_sfx(&mut commands, &bank.voice_ru_stoy, 0.68, 1.0);
+        }
+    }
+
+    if queue.shout_grenade {
+        queue.shout_grenade = false;
+        if now - *last_stoy >= 2.2 {
+            *last_stoy = now;
+            play_sfx(&mut commands, &bank.voice_ru_grenade, 0.72, 1.0);
+        }
+    }
+
+    if let Some(code) = queue.radio_code.take() {
+        if now - *last_voice >= 2.4 {
+            *last_voice = now;
+            let clip = match code {
+                "MAN DOWN" | "INCOMING GRENADE" => &bank.voice_radio_mandown,
+                "TAKING CASUALTIES" => &bank.voice_radio_contact,
+                "SECTOR CLEARED" => &bank.voice_radio_cleared,
+                "TEAMMATE RESCUED" => &bank.voice_radio_rescued,
+                _ => &bank.voice_radio_orders,
+            };
+            play_sfx(&mut commands, clip, 0.62, 1.0);
+        }
     }
 }
